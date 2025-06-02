@@ -1,14 +1,17 @@
 #include "NardiGame.h"
 
 
-Game::Game(int rseed = 1) : player_sign(1), arbiter(this), seed(rseed) {} 
+Game::Game(int rseed) : player_sign(1),  seed(rseed),  arbiter(this) 
+{
+    std::srand(seed);
+} 
 // player sign will actually have it be random 50/50, need to handle dice and other objects
 
 void Game::RollDice() // FIXME handle doubles
 {
-    std::srand(seed);
     dice[0] = (rand() % 6) + 1;
     dice[1] = (rand() % 6) + 1;
+    std::cout << "Player " << player_sign << ", you rolled " << dice[0] << " " << dice[1] << std::endl;
 }
 
 void Game::UseDice(int idx)
@@ -43,45 +46,44 @@ void Game::MakeMove(int start_row, int start_col, int end_row, int end_col)
 {
     board[start_row][start_col] -= player_sign;
     board[end_row][end_col] += player_sign;
+
+    DisplayBoard();
 }
 
 void Game::DisplayBoard() const // animate this later with some graphic library
 {
-    if (player_sign > 0){
-        for(int i = 1; i <= 12; ++i)
+    if (player_sign > 0)    // white to play
+    {
+        for(int r = 0; r < 2; ++r)
         {
-            std::cout << board[1][12-i] << "\t";
-        }
-
-        std::cout << "\n\n";
-
-        for(int i = 1; i <= 12; ++i)
-        {
-            std::cout << board[0][12 - i] << "\t";
-        }
-
-    }
-    else{
-        for(int i = 0; i < 12; ++i)
-        {
-            std::cout << board[0][i] << "\t";
-        }
-        std::cout << "\n\n";
-        for(int i = 0; i < 12; ++i)
-        {
-            std::cout << board[1][i] << "\t";
+            for(int c = 0; c < 12; ++c){
+                std::cout << board[r][c] << "\t";
+            }
+            std::cout << "\n\n";
         }
     }
+    else
+    {
+        for(int r = 1; r >= 0; --r)
+        {
+            for(int c = 11; c >= 0; --c)
+            {
+                std::cout << board[r][c] << "\t";
+            }
+            std::cout << "\n\n";
+        }
+    }
+    std::cout << "\n\n";
 }
 
-void Game::PlayGame()
+void Game::PlayGame() // undo feature, especially for start coord
 {
+    DisplayBoard();
     int sr, sc, er, ec;
     std::string dummy;
     while(true)
     {
         std::cout << "Press \'enter\' to roll dice, or q to quit\n";
-        std::cin.ignore(10000, '\n');
         std::getline(std::cin, dummy);
         if(dummy == "q")
             break;
@@ -109,6 +111,7 @@ void Game::PlayGame()
         }
 
         player_sign = - player_sign;
+        std::cin.ignore(10000, '\n');
     }
 
 }
@@ -148,11 +151,18 @@ bool Game::Arbiter::LegalMove(int start_row, int start_col, int end_row, int end
         std::cout << "Cannot move onto enemy pieces\n";
         return false;
     }
-    else if(start_row == end_row && start_col >= end_col)
+    else if(start_row == end_row && start_row == 0 && start_col <= end_col)
     {
         std::cout << "No backwards moves, please enter valid coordinates\n ";
+        return false;
+    }
+    else if(start_row == end_row && start_row == 1 && start_col >= end_col)
+    {
+        std::cout << "No backwards moves, please enter valid coordinates\n ";
+        return false;
     }
     else if (BadRowChange(start_row, end_row)){
+        std::cout << "End of board reached, please enter valid coordinates \n";
         return false;
     }
     else
@@ -181,7 +191,10 @@ bool Game::Arbiter::LegalMove(int start_row, int start_col, int end_row, int end
             return LegalMove_2d(start_row, start_col, g->dice[0],  g->dice[1]);
         }
         else
+        {
+            std::cout << "Invalid end, cannot reach this slot with current dice roll\n";
             return false; // impossible to move there with current dice roll
+        }
     }
 }
 
@@ -210,6 +223,8 @@ bool Game::Arbiter::LegalMove_2d(int sr, int sc, int d1, int d2) const
         return LegalMove(dest2[0], dest2[1], dest3[0], dest3[1]); // last available way to reach final destination
     }
     
+    std::cout << "Path obstructed by enemy pieces, unable to move to this end coordinate \n";
+    return false;
 }
 
 bool Game::Arbiter::BadRowChange(int sr, int er) const
@@ -217,5 +232,5 @@ bool Game::Arbiter::BadRowChange(int sr, int er) const
     if(sr == er)
         return false;
     else
-        return !(er = sr + g->player_sign); // only ok when white goes from row 0 to 1 or black from 1 to 0
+        return !(er == sr + g->player_sign); // only ok when white goes from row 0 to 1 or black from 1 to 0
 }

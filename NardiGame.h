@@ -5,8 +5,7 @@
 /*
 Will need to capture game states and later allow undo move feature
 
-Add game play function and write test cases
-
+Check for only one piece from the "head" per turn (with the exceptions on move 1)
 
 */
 
@@ -18,12 +17,12 @@ class Game{
         
         void PlayGame();
 
-        void DisplayBoard() const;
+        void DisplayBoard() const;  // will move to private later
 
         void UseDice(int idx); // should be private but I want arbiter to access it
 
     private:
-        int board[2][12] = {{-15, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}, {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 15}};
+        int board[2][12] = { {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 15}, {-15, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}};
         int player_sign;
         int dice[2];
         void RollDice(); // set both dice to random integer 1 to 6, important to force this to happen each turn.
