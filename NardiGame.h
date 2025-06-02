@@ -1,4 +1,5 @@
 #include<iostream>
+#include<array>
 
 /*
 Will need to capture game states and later allow undo move feature
@@ -23,7 +24,7 @@ class Game{
         int dice[2];
         void RollDice(); // set both dice to random integer 1 to 6, important to force this to happen each turn
 
-        int CalculateFinalCoords(int sr, int sc, int d) const;
+        std::array<int, 2> CalculateFinalCoords(int sr, int sc, int d) const;
 
         class Arbiter
         {

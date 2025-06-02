@@ -4,20 +4,20 @@
 Game::Game() : player_sign(1), arbiter(this) {} 
 // player sign will actually have it be random 50/50, need to handle dice and other objects
 
-int Game::CalculateFinalCoords(int sr, int sc, int d) const
+std::array<int, 2> Game::CalculateFinalCoords(int sr, int sc, int d) const
 {
 
     int dir = 2*sr - 1; // to keep clockwise movement
     int j = d*dir; 
     if (j < 12 && j >= 0)
-        return sr*12 + j;
+        return {sr, j};
     else if (j >= 12){
         j = 12 - (j - 11);
-        return (sc - 1)*12 + j;
+        return {(sc - 1), j};
     }
     else{
         j = -j;
-        return (sc + 1)*12 + j;
+        return {(sc + 1), j};
     }
 }
 
@@ -102,7 +102,7 @@ bool Game::Arbiter::LegalMove(int start_row, int start_col, int end_row, int end
         
         if(d == g->dice[0] || d == g->dice[1])
             return true;
-        else if (d == ( g->dice[0] + g->dice[1]))
+        else if (d == ( g->dice[0] + g->dice[1]))   // later account for doubles
         {
             return LegalMove_2d(start_row, start_col, g->dice[0],  g->dice[1]);
         }
@@ -115,30 +115,23 @@ bool Game::Arbiter::LegalMove(int start_row, int start_col, int end_row, int end
 
 bool Game::Arbiter::LegalMove_2d(int sr, int sc, int d1, int d2) const
 {
-    int dest1 = g->CalculateFinalCoords(sr, sc, d1);
-    int er1 = dest1 / 12;
-    int ec1 = dest1 % 12;
+    auto dest1 = g->CalculateFinalCoords(sr, sc, d1);
 
-    if(LegalMove(sr, sc, er1, ec1)) // can move by first d
+    if(LegalMove(sr, sc, dest1[0], dest1[1])) // can move by first d
     {
-        int dest2 = g->CalculateFinalCoords(er1, ec1, d2);
-        int er2 = dest2 / 12;
-        int ec2 = dest2 % 12;
+        auto dest2 = g->CalculateFinalCoords(dest1[0], dest1[1], d2);
 
-        if(LegalMove(er1, ec1, er2, ec2))   // can move from resulting spot by second d
+        if(LegalMove(dest1[0], dest1[1], dest2[0], dest2[1]))   // can move from resulting spot by second d
             return true;
     }
 
-    int dest2 = g->CalculateFinalCoords(sr, sc, d2);
-    int er2 = dest2 / 12;
-    int ec2 = dest2 % 12;
-    if(LegalMove(sr, sc, er2, ec2)) // can move second amount first
-    {
-        int dest3 = g->CalculateFinalCoords(er2, ec2, d1);
-        int er3 = dest3 / 12;
-        int ec3 = dest3 % 12;
+    auto dest2 = g->CalculateFinalCoords(sr, sc, d2);
 
-        return LegalMove(er2, ec2, er3, ec3); // can reach final destination
+    if(LegalMove(sr, sc, dest2[0], dest2[1])) // can move second amount first
+    {
+        auto dest3 = g->CalculateFinalCoords(dest2[0], dest2[1], d1);
+
+        return LegalMove(dest2[0], dest2[1], dest3[0], dest3[1]); // last available way to reach final destination
     }
     
 }
