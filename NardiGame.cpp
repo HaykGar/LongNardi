@@ -1,7 +1,8 @@
 #include "NardiGame.h"
 
 
-Game::Game() : player_sign(1), arbiter(this) {} // will actually have it be random 50/50
+Game::Game() : player_sign(1), arbiter(this) {} 
+// player sign will actually have it be random 50/50, need to handle dice and other objects
 
 int Game::CalculateFinalCoords(int sr, int sc, int d) const
 {
@@ -87,6 +88,9 @@ bool Game::Arbiter::LegalMove(int start_row, int start_col, int end_row, int end
         std::cout << "Cannot move onto enemy pieces\n";
         return false;
     }
+    else if (BadRowChange(start_row, end_row)){
+        return false;
+    }
     else
     {
         int col_d = abs(end_col - start_col);
@@ -137,4 +141,12 @@ bool Game::Arbiter::LegalMove_2d(int sr, int sc, int d1, int d2) const
         return LegalMove(er2, ec2, er3, ec3); // can reach final destination
     }
     
+}
+
+bool Game::Arbiter::BadRowChange(int sr, int er) const
+{
+    if(sr == er)
+        return false;
+    else
+        return !(er = sr + g->player_sign); // only ok when white goes from row 0 to 1 or black from 1 to 0
 }
