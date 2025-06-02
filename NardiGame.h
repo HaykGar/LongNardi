@@ -1,5 +1,6 @@
-#include<iostream>
-#include<array>
+#include <iostream>
+#include <array>
+#include <cstdlib>
 
 /*
 Will need to capture game states and later allow undo move feature
@@ -13,16 +14,21 @@ Add game play function and write test cases
 class Game{
 
     public:
-        Game();
+        Game(int seed = 1);
         
-        bool MakeMove(int start_row, int start_col, int end_row, int end_col);
+        void PlayGame();
+
         void DisplayBoard() const;
+
+        void UseDice(int idx); // should be private but I want arbiter to access it
 
     private:
         int board[2][12] = {{-15, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}, {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 15}};
         int player_sign;
         int dice[2];
-        void RollDice(); // set both dice to random integer 1 to 6, important to force this to happen each turn
+        void RollDice(); // set both dice to random integer 1 to 6, important to force this to happen each turn.
+        
+        int seed;
 
         std::array<int, 2> CalculateFinalCoords(int sr, int sc, int d) const;
 
@@ -30,6 +36,7 @@ class Game{
         {
             public:
                 Arbiter(Game* gp);
+                bool ValidStart(int sr, int sc) const; // check that start is in bounds and occupied by player's piece
                 bool LegalMove(int start_row, int start_col, int end_row, int end_col) const;
                 bool LegalMove_2d(int start_row, int start_col, int d1, int d2) const;
                 bool BadRowChange(int sr, int er) const;
@@ -39,5 +46,8 @@ class Game{
         };
 
         Arbiter arbiter;
+        
+        void MakeMove(int start_row, int start_col, int end_row, int end_col);
+        bool MoveOver() const;
 };
 
