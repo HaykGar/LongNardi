@@ -4,6 +4,7 @@
 Game::Game(int rseed) : player_sign(1),  seed(rseed),  arbiter(this) 
 {
     std::srand(seed);
+    board = {  { {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 15}, {-15, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0} }  };
 } 
 // player sign will actually have it be random 50/50, need to handle dice and other objects
 
@@ -11,7 +12,6 @@ void Game::RollDice() // FIXME handle doubles
 {
     dice[0] = (rand() % 6) + 1;
     dice[1] = (rand() % 6) + 1;
-    std::cout << "Player " << player_sign << ", you rolled " << dice[0] << " " << dice[1] << std::endl;
 }
 
 void Game::UseDice(int idx)
@@ -46,68 +46,52 @@ void Game::MakeMove(int start_row, int start_col, int end_row, int end_col)
 {
     board[start_row][start_col] -= player_sign;
     board[end_row][end_col] += player_sign;
-
-    DisplayBoard();
-}
-
-void Game::DisplayBoard() const // animate this later with some graphic library
-{
-    if (player_sign > 0)    // white to play
-    {
-        for(int r = 0; r < 2; ++r)
-        {
-            for(int c = 0; c < 12; ++c){
-                std::cout << board[r][c] << "\t";
-            }
-            std::cout << "\n\n";
-        }
-    }
-    else
-    {
-        for(int r = 1; r >= 0; --r)
-        {
-            for(int c = 11; c >= 0; --c)
-            {
-                std::cout << board[r][c] << "\t";
-            }
-            std::cout << "\n\n";
-        }
-    }
-    std::cout << "\n\n";
 }
 
 void Game::PlayGame() // undo feature, especially for start coord
 {
-    DisplayBoard();
-    int sr, sc, er, ec;
-    std::string dummy;
+    if(!rw)
+    {
+        std::cerr << "No reader/writer attached, terminating game.\n";
+        ClearBoard();
+        return;
+    }
+
+    std::array<int, 2> start;
+    std::array<int, 2> end;
+
+    rw->ReAnimate();
+
     while(true)
     {
-        std::cout << "Press \'enter\' to roll dice, or q to quit\n";
-        std::getline(std::cin, dummy);
-        if(dummy == "q")
-            break;
+        rw->InstructionMessage("Press q to quit, anything else to roll the dice\n");
+        bool manual_quit = rw->ReadQuitOrProceed();
+        if(manual_quit)
+        {
+            rw->ErrorMessage("Quitting game\n");
+            ClearBoard();
+            return;
+        }
         
         RollDice();
+        rw->AnimateDice(dice[0], dice[1]);
+
         while(!MoveOver())
         {
             do
             {
-                std::cout << "Start slot - enter row\n";
-                std::cin >> sr;
-                std::cout << "Start slot - enter col\n";
-                std::cin >> sc;
-            } while (!arbiter.ValidStart(sr, sc));
+                rw->InstructionMessage("Start slot:");
+                start = rw->ReportSelectedSlot();   // FIXME - crashes when a non-number is entered
+            } while (!arbiter.ValidStart(start[0], start[1]));
     
             do
             {
-                std::cout << "End slot - enter row\n";
-                std::cin >> er;
-                std::cout << "End slot - enter col\n";
-                std::cin >> ec;
-            } while (!arbiter.LegalMove(sr, sc, er, ec));
+                rw->InstructionMessage("End slot:");
+                end = rw->ReportSelectedSlot();
+            } while (!arbiter.LegalMove(start[0], start[1], end[0], end[1]));
     
-            MakeMove(sr, sc, er, ec);
+            MakeMove(start[0], start[1], end[0], end[1]);
+            rw->ReAnimate();
         }
 
         player_sign = - player_sign;
@@ -116,6 +100,10 @@ void Game::PlayGame() // undo feature, especially for start coord
 
 }
 
+void Game::ClearBoard()
+{
+    board = {  { {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 15}, {-15, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0} }  };
+}
 
 /////////////////////////
 /////   Arbiter ////////
@@ -127,12 +115,12 @@ bool Game::Arbiter::ValidStart(int start_row, int start_col) const
 {
     if(start_row < 0 || start_row > 1 || start_col < 0 || start_col > 11)
     {
-        std::cout << "Out of bounds, please enter valid coordinates\n";
+        g->rw->ErrorMessage("Out of bounds, please enter valid coordinates\n");
         return false;
     }    
     else if (g->player_sign * g->board[start_row][start_col] <= 0)   // start slot empty or occupied by opponent
     {
-        std::cout << "Cannot move opponent's pieces or empty slots \n";
+        g->rw->ErrorMessage("Cannot move opponent's pieces or empty slots \n");
         return false;
     }
     else
@@ -143,26 +131,26 @@ bool Game::Arbiter::LegalMove(int start_row, int start_col, int end_row, int end
 {
     if(end_row < 0 || end_row > 1 || end_col < 0 || end_col > 11)
     {
-        std::cout << "Out of bounds, please enter valid coordinates\n";
+        g->rw->ErrorMessage("Out of bounds, please enter valid coordinates\n");
         return false;
     }
     else if (g->player_sign * g->board[end_row][end_col] < 0)   // destination occupied by opponent
     {
-        std::cout << "Cannot move onto enemy pieces\n";
+        g->rw->ErrorMessage("Cannot move onto enemy pieces\n");
         return false;
     }
     else if(start_row == end_row && start_row == 0 && start_col <= end_col)
     {
-        std::cout << "No backwards moves, please enter valid coordinates\n ";
+        g->rw->ErrorMessage("No backwards moves, please enter valid coordinates\n ");
         return false;
     }
     else if(start_row == end_row && start_row == 1 && start_col >= end_col)
     {
-        std::cout << "No backwards moves, please enter valid coordinates\n ";
+        g->rw->ErrorMessage("No backwards moves, please enter valid coordinates\n ");
         return false;
     }
     else if (BadRowChange(start_row, end_row)){
-        std::cout << "End of board reached, please enter valid coordinates \n";
+        g->rw->ErrorMessage("End of board reached, please enter valid coordinates \n");
         return false;
     }
     else
@@ -192,7 +180,7 @@ bool Game::Arbiter::LegalMove(int start_row, int start_col, int end_row, int end
         }
         else
         {
-            std::cout << "Invalid end, cannot reach this slot with current dice roll\n";
+            g->rw->ErrorMessage("Invalid end, cannot reach this slot with current dice roll\n");
             return false; // impossible to move there with current dice roll
         }
     }
@@ -223,7 +211,7 @@ bool Game::Arbiter::LegalMove_2d(int sr, int sc, int d1, int d2) const
         return LegalMove(dest2[0], dest2[1], dest3[0], dest3[1]); // last available way to reach final destination
     }
     
-    std::cout << "Path obstructed by enemy pieces, unable to move to this end coordinate \n";
+    g->rw->ErrorMessage("Path obstructed by enemy pieces, unable to move to this end coordinate \n");
     return false;
 }
 
@@ -234,3 +222,11 @@ bool Game::Arbiter::BadRowChange(int sr, int er) const
     else
         return !(er == sr + g->player_sign); // only ok when white goes from row 0 to 1 or black from 1 to 0
 }
+
+
+
+///////////////////////////////
+/////  Reader/Writer  ////////
+/////////////////////////////
+
+ReaderWriter::ReaderWriter(const Game& game) : g(game) {}
