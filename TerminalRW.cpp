@@ -66,10 +66,25 @@ bool TerminalRW::ReadQuitOrProceed() const
 std::array<int, 2> TerminalRW::ReportSelectedSlot() const
 {
     int r, c;
+    
     std::cout << "enter row\n";
     std::cin >> r;
+    if (std::cin.fail()) 
+    {
+        std::cin.clear();
+        std::cin.ignore(10000, '\n'); 
+        ErrorMessage("Invalid input. Please enter a number.\n");
+        return {-1, -1};
+    }
     std::cout << "enter col\n";
     std::cin >> c;
+    if (std::cin.fail()) 
+    {
+        std::cin.clear();
+        std::cin.ignore(10000, '\n'); 
+        ErrorMessage("Invalid input. Please enter a number.\n");
+        return {-1, -1};
+    }
 
     return {r, c};
 }
