@@ -4,27 +4,16 @@ TerminalRW::TerminalRW(const Game& game) : ReaderWriter(game) {}
 
 void TerminalRW::ReAnimate() const
 {
-    if (g.GetPlayerSign() > 0)    // white to play
-    {
-        for(int r = 0; r < 2; ++r)
-        {
-            for(int c = 0; c < 12; ++c){
-                std::cout << g.GetBoardRowCol(r, c) << "\t";
-            }
-            std::cout << "\n\n";
-        }
-    }
-    else
-    {
-        for(int r = 1; r >= 0; --r)
-        {
-            for(int c = 11; c >= 0; --c)
-            {
-                std::cout << g.GetBoardRowCol(r, c) << "\t";
-            }
-            std::cout << "\n\n";
-        }
-    }
+    bool player_row = (1 - g.GetPlayerSign()) / 2; // 0 for 1, 1 for -1
+    
+    for(int c = COL - 1; c >= 0; --c)
+        std::cout << g.GetBoardRowCol(player_row, c) << "\t";
+
+    std::cout << "\n\n";
+
+    for(int c = 0; c < COL; ++c)
+        std::cout << g.GetBoardRowCol(!player_row, c) << "\t";
+
     std::cout << "\n\n";
 }
 
