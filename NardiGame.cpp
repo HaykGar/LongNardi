@@ -267,7 +267,7 @@ bool Game::Arbiter::LegalMove_2step(bool sr, int sc) const
 bool Game::Arbiter::BadRowChange(bool er) const // guaranteed sr != er
 {
     int r = g->player_sign + er; // white to row 1 (r==2) or black to row 0 (r==-1) only acceptable choices, else r==1 or 0
-    return (r == 2 || r == -1);
+    return (r == 0 || r == 1);
 }
 
 //////////////////////////
