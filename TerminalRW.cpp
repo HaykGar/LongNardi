@@ -7,12 +7,12 @@ void TerminalRW::ReAnimate() const
     bool player_row = (1 - g.GetPlayerSign()) / 2; // 0 for 1, 1 for -1
     
     for(int c = COL - 1; c >= 0; --c)
-        std::cout << g.GetBoardRowCol(player_row, c) << "\t";
+        std::cout << board.at(player_row).at(c) << "\t";
 
     std::cout << "\n\n";
 
     for(int c = 0; c < COL; ++c)
-        std::cout << g.GetBoardRowCol(!player_row, c) << "\t";
+        std::cout << board.at(!player_row).at(c) << "\t";
 
     std::cout << "\n\n";
 }
@@ -52,7 +52,7 @@ bool TerminalRW::ReadQuitOrProceed() const
     return (user_input == 'q');
 }
 
-std::array<int, 2> TerminalRW::ReportSelectedSlot() const
+NardiCoord TerminalRW::ReportSelectedSlot() const
 {
     int r, c;
     

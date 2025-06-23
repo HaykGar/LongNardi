@@ -6,7 +6,7 @@ Game::Game(int rseed) : player_sign(1), rng(rseed), dist(1, 6), doubles_rolled(f
 } 
 // player sign will actually have it be random 50/50, need to handle dice and other objects
 
-void Game::RollDice()
+void Game::RollDice() // important to force this only once per turn in controller, no explicit safeguard here `
 {
     dice_used[0] = 0;
     dice_used[1] = 0;
@@ -16,9 +16,46 @@ void Game::RollDice()
     doubles_rolled = (dice[0] == dice[1]);
 }
 
-void Game::UseDice(bool idx, unsigned reps)    // pass bool to protect against out of bounds, reps 1 by default, only not for doubles
+void Game::SetDice(int d1, int d2)
 {
-    dice_used[idx] += dice[idx] * reps;
+    dice_used[0] = 0;
+    dice_used[1] = 0;
+    dice[0] = d1;
+    dice[1] = d2;
+
+    doubles_rolled = (dice[0] == dice[1]);
+}
+
+Game::status_codes Game::TryStart(int sr, int sc) const
+{
+    return arbiter.ValidStart(sr, sc);
+}
+
+Game::status_codes Game::TryMove(int sr, int sc, int er, int ec)
+{
+    status_codes start = TryStart(sr, sc);  // redundant ?
+    if(start != SUCCESS)
+        return start;
+    
+    status_codes can_move = arbiter.LegalMove(sr, sc, er, ec);
+    if (can_move != SUCCESS)
+        return can_move;
+    else
+    {
+        MakeMove(sr, sc, er, ec);
+        rw->ReAnimate();
+        return SUCCESS;
+    }
+}
+
+bool Game::UseDice(bool idx)
+{
+    // dice has been used, in case of doubles check if it's been used all 4 times
+    if(dice_used[idx] > 0 && (!doubles_rolled || (dice_used[idx] + dice_used[!idx] >= 4 * dice[0])) )
+        return false;
+
+    dice_used[idx] += dice[idx];
+    return true;
 }
 
 bool Game::MoveOver() const
@@ -27,7 +64,7 @@ bool Game::MoveOver() const
     // since dice_used are only incremented by their corresponding dice, check if both values are used or in case of doubles if they're both used twice
 }
 
-std::array<int, 2> Game::CalculateFinalCoords(bool sr, int sc, bool dice_idx) const
+NardiCoord Game::CalculateFinalCoords(bool sr, int sc, bool dice_idx) const
 {
     int ec = sc + dice[dice_idx];
     if (ec < COL)
@@ -45,9 +82,9 @@ void Game::MakeMove(bool sr, int sc, bool er, int ec)
     move_history.emplace(sr, sc, er, ec, dice_used[0], dice_used[1]);
 }
 
-void Game::UndoMove()
+void Game::UndoMove()   // strict: no undoing after enemy dice roll. Watch for case after turn over, before enemy rolls or make even stricter
 {
-    if(move_history.empty())
+    if(move_history.empty()) // no-op ? `
     {
         rw->ErrorMessage("No moves to undo");
     }
@@ -80,8 +117,8 @@ void Game::PlayGame() // undo feature, especially for start coord
         return;
     }
 
-    std::array<int, 2> start;
-    std::array<int, 2> end;
+    NardiCoord start;
+    NardiCoord end;
 
     rw->ReAnimate();
 
@@ -106,20 +143,20 @@ void Game::PlayGame() // undo feature, especially for start coord
                 rw->InstructionMessage("Start slot:");
                 start = rw->ReportSelectedSlot();
 
-                if(start[0] == 0)
-                    start[1] = COL - start[1] - 1; // reverse top row, no consequence if invalid coords given
-            } while (!arbiter.ValidStart(start[0], start[1]));
+                if(start.row == 0)
+                    start.col = COL - start.col - 1; // reverse top row, no consequence if invalid coords given
+            } while (arbiter.ValidStart(start.row, start.col) != SUCCESS);
     
             do
             {
                 rw->InstructionMessage("End slot:");
                 end = rw->ReportSelectedSlot();
 
-                if(end[0] == 0)
-                    end[1] = COL - end[1] - 1;
-            } while (!arbiter.LegalMove(start[0], start[1], end[0], end[1]));
+                if(end.row == 0)
+                    end.col = COL - end.col - 1;
+            } while (arbiter.LegalMove(start.row, start.col, end.row, end.col) != SUCCESS);
     
-            MakeMove(start[0], start[1], end[0], end[1]);
+            MakeMove(start.row, start.col, end.row, end.col);
             rw->ReAnimate();
         }while(!MoveOver());
 
@@ -149,119 +186,134 @@ void Game::ClearBoard()
 
 Game::Arbiter::Arbiter(Game* gp) : g(gp) {}
 
-bool Game::Arbiter::ValidStart(int sr, int sc) const
+Game::status_codes Game::Arbiter::ValidStart(int sr, int sc) const
 {
     if(sr < 0 || sr > ROW - 1 || sc < 0 || sc > COL - 1)
-    {
-        g->rw->ErrorMessage("Out of bounds or invalid input, please enter valid coordinates\n");
-        return false;
-    }    
-    else if (g->player_sign * g->board[sr][sc] <= 0)   // start slot empty or occupied by opponent
-    {
-        g->rw->ErrorMessage("Cannot move opponent's pieces or empty slots \n");
-        return false;
-    }
+        return OUT_OF_BOUNDS;
+
+    else if (g->player_sign * g->board[sr][sc] <= 0)
+        return START_EMPTY_OR_ENEMY;
+
     else
-        return true;
+        return SUCCESS;
 }
 
-bool Game::Arbiter::WellDefinedMove(int sr, int sc, int er, int ec) const // start already checked to be valid
+Game::status_codes Game::Arbiter::WellDefinedMove(int sr, int sc, int er, int ec) const // start already checked to be valid
 {
     if(er < 0 || er > ROW - 1 || ec < 0 || ec > COL - 1)
-    {
-        g->rw->ErrorMessage("Out of bounds or invalid input, please enter valid coordinates\n");
-        return false;
-    }
+        return OUT_OF_BOUNDS;
+    
     else if (g->player_sign * g->board[er][ec] < 0)   // destination occupied by opponent
-    {
-        g->rw->ErrorMessage("Cannot move onto enemy pieces\n");
-        return false;
-    }
+        return DEST_ENEMY;
+    
     else if(sr == er )
     {
         if (sc == ec)
-            return false; // FIXME unselect start in this case
+            return START_RESELECT; // FIXME unselect start in this case - controller can check `
         else if (sc > ec)
-        {
-            g->rw->ErrorMessage("No backwards moves, please enter valid coordinates\n ");
-            return false;
-        }
+            return BACKWARDS_MOVE;
 
-        return true;
+        return SUCCESS; // prevent unnecessary RowChangeCheck
     }
+
     else if (BadRowChange(er)) // sr != er
-    {
-        g->rw->ErrorMessage("End of board reached, please enter valid coordinates \n");
-        return false;
-    }
+        return BOARD_END_REACHED;
     
-    return true;
+    return SUCCESS;
 }
 
-bool Game::Arbiter::LegalMove(int sr, int sc, int er, int ec) const
+Game::status_codes Game::Arbiter::LegalMove(int sr, int sc, int er, int ec) const
 {
-    if(!WellDefinedMove(sr, sc, er, ec)){
-        return false;
-    }
-    else
-    {
-        unsigned d = g->GetDistance(sr, sc, er, ec); // bool casting here is ok since move well defined
+    status_codes well_def = WellDefinedMove(sr, sc, er, ec);
+    if(well_def != SUCCESS)
+        return well_def;
+    
+    unsigned d = g->GetDistance(sr, sc, er, ec); // bool casting here is ok since move well defined
 
-        if(d == g->dice[0])
+    if(d == g->dice[0])
+    {
+        if(g->UseDice(0))
+            return SUCCESS;
+       
+        return NO_PATH_TO_DEST; // dice already used up
+
+    }
+    else if (d == g->dice[1])
+    {
+        if(g->UseDice(1))
+            return SUCCESS;
+        
+        return NO_PATH_TO_DEST; // dice already used up
+
+    }
+    else    // can't reach with just one dice
+    {
+        bool both_dice_works = (d == ( g->dice[0] + g->dice[1]));   // dice one and two together make the distance
+
+        if(both_dice_works || (g->doubles_rolled && d % g->dice[0] == 0 && d / g->dice[0] <= 4) )  // both dice enough, or doubles with d a multiple of dice[0] <= 4
         {
-            g->UseDice(0);
-            return true;
-        }
-        else if (d == g->dice[1])
-        {
-            g->UseDice(1);
-            return true;
-        }
-        else if(g->doubles_rolled)
-        {
-            for(int i = 2; i <= 4; ++i) // i=1 case eliminated above
+            std::pair<int, int> dice_used_copy(g->dice_used[0], g->dice_used[1]);
+            status_codes step2x = LegalMove_2step(sr, sc);
+
+            if(both_dice_works)
+                return step2x;
+
+            else    // doubles with either 3 or 4 reps, case 2 just covered, case 1 covered earlier d == g->dice[0]
             {
-                if(d == i * g->dice[0])
+                if(step2x != SUCCESS)
+                    return step2x;
+                
+                NardiCoord midpoint = g->CalculateFinalCoords(sr, sc, 0);
+                midpoint = g->CalculateFinalCoords(midpoint.row, midpoint.col, 1); // take both steps, calculate coordinates of resulting "midpoint"
+                
+                status_codes final_step;
+                if(d == 3 * g->dice[0])
+                    final_step = LegalMove(midpoint.row, midpoint.col, er, ec);
+                
+                else if (d == 4 * g->dice[0])   // same as else since all other cases previously covered
+                    final_step = LegalMove_2step(midpoint.row, midpoint.col); 
+
+                if(final_step != SUCCESS)
                 {
-                    g->UseDice(0, i);
-                    return true;
+                    g->dice_used[0] = dice_used_copy.first;
+                    g->dice_used[1] = dice_used_copy.second; // undo effects of legalmove_2step if we can't do the full move
                 }
+
+                return final_step;
             }
-            return false;
-        }
-        else if (d == ( g->dice[0] + g->dice[1]))
-        {
-            return LegalMove_2step(sr, sc);
         }
         else
-        {
-            g->rw->ErrorMessage("Invalid end, cannot reach this slot with current dice roll\n");
-            return false; // impossible to move there with current dice roll
-        }
+            return NO_PATH_TO_DEST;
     }
 }
 
-bool Game::Arbiter::LegalMove_2step(bool sr, int sc) const  
-// if this is called, then the end square is not blocked by the enemy
+Game::status_codes Game::Arbiter::LegalMove_2step(bool sr, int sc) const  
 {
-    auto dest1 = g->CalculateFinalCoords(sr, sc, 0);
+    std::pair<int, int> dice_used_copy(g->dice_used[0], g->dice_used[1]);
 
-    if(LegalMove(sr, sc, dest1[0], dest1[1])) // can move by first dice[0]
-    {      
-        g->UseDice(1);  // use second dice to get to the end, dice1 used in LegalMove call
-        return true;
+    NardiCoord dest1 = g->CalculateFinalCoords(sr, sc, 0);
+
+    if(g->doubles_rolled) // extra check needed in this case, otherwise we are guaranteed that the endpoint is well defined already
+    {    
+        NardiCoord final_dest = g->CalculateFinalCoords(dest1.row, dest1.col, 1);
+
+        status_codes well_def = WellDefinedMove(sr, sc, final_dest.row, final_dest.col);
+        if(well_def != SUCCESS)
+            return well_def;
     }
-
-    auto dest2 = g->CalculateFinalCoords(sr, sc, 1);
-
-    if(LegalMove(sr, sc, dest2[0], dest2[1])) // can move by dice[1] first, dice0 used in LegalMove call
-    {
-        g->UseDice(0);
-        return true;
-    }
+    // can move by first dice[0], use second dice to get to the end
+    if( (LegalMove(sr, sc, dest1.row, dest1.col) == SUCCESS) &&  g->UseDice(1)) // dice0 used in LegalMove call
+        return SUCCESS;
     
-    g->rw->ErrorMessage("Path obstructed by enemy pieces, unable to move to this end coordinate \n");
-    return false;
+    NardiCoord dest2 = g->CalculateFinalCoords(sr, sc, 1);
+
+    if( (LegalMove(sr, sc, dest2.row, dest2.col) == SUCCESS) && g->UseDice(0) ) // can move by dice[1] first, dice1 used in LegalMove call
+        return SUCCESS;
+    
+    g->dice_used[0] = dice_used_copy.first;
+    g->dice_used[1] = dice_used_copy.second;
+
+    return NO_PATH_TO_DEST;
 }
 
 bool Game::Arbiter::BadRowChange(bool er) const // guaranteed sr != er
@@ -282,4 +334,4 @@ sr(start_r), sc(start_c), er(end_r), ec(end_c), dice1(d1), dice2(d2) {}
 /////  Reader/Writer  ////////
 /////////////////////////////
 
-ReaderWriter::ReaderWriter(const Game& game) : g(game) {}
+ReaderWriter::ReaderWriter(const Game& game) : g(game), board(game.GetBoardRef()) {}
