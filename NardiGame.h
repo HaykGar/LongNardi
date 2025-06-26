@@ -1,5 +1,7 @@
 #pragma once
 
+#include "Auxilaries.h"
+
 #include <iostream>
 #include <array>
 #include <stack>
@@ -41,28 +43,15 @@ If no legal move both dice, need to try larger one first
 Keep track of legal moves
 */
 
-const int ROW = 2;
-const int COL = 12;
-
-// using NardiCoord = std::pair<int, int>;
-
-struct NardiCoord
-{
-    NardiCoord(int r, int c) : row(r), col(c) {}
-    NardiCoord() : row(), col() {}
-    int row;
-    int col;
-};
-
 
 class ReaderWriter;
 
-class Game{
-
+class Game
+{
     public:
         Game(int seed = 1); 
 
-        enum status_codes
+        enum class status_codes // enum class for scoping and extra safety
         {
             SUCCESS,
             OUT_OF_BOUNDS,
@@ -71,33 +60,39 @@ class Game{
             BACKWARDS_MOVE, 
             BOARD_END_REACHED, 
             NO_PATH_TO_DEST,
-            START_RESELECT, 
-
-
-            // ...
+            START_RESELECT,
+            MISC_FAILURE
         }; //   `
         
-        void PlayGame(); // TODO move logic to controller class, will need to modify legalmove to include validstart `
-
         void AttachReaderWriter(ReaderWriter* r);
 
         void RollDice(); // set both dice to random integer 1 to 6
 
-        status_codes TryStart(int sr, int sc) const;
-        status_codes TryMove(int sr, int sc, int er, int ec); // `
+        status_codes TryStart(NardiCoord s) const;
+        status_codes TryFinishMove(NardiCoord start, NardiCoord end); // assuming valid start already `
 
         void ClearBoard(); // quit game
 
         void UndoMove(); // FIXME: add the functionality in Controller
             // as it is now, undoes entire turn so far. Once a turn is over it is over strictly.
+
+        void SwitchPlayerSign();
         
         const std::array<std::array<int, COL>, ROW>& GetBoardRef() const;
 
         int GetPlayerSign() const;
 
         unsigned GetDistance(bool sr, int sc, bool er, int ec) const;
+        
+        bool GameIsOver() const;
+
+        int GetDice(bool idx) const;
 
         void SetDice(int d1, int d2); // TESTING ONLY, DELETE ME LATER `
+
+        const ReaderWriter* GetConstRW();   // const pointer, allowing controller to read commands and ask for 
+
+        bool TurnOver() const;
 
     private:
         std::array<std::array<int, COL>, ROW> board;
@@ -145,27 +140,6 @@ class Game{
         std::stack<Move> move_history;
         
         void MakeMove(bool sr, int sc, bool er, int ec);
-        bool MoveOver() const;
-};
-
-class ReaderWriter
-{
-    public:
-        ReaderWriter(const Game& game);
-        
-        void ReadInput();
-
-        virtual void ReAnimate() const = 0;         // show the current state of the game
-        virtual void AnimateDice(int d1, int d2) const = 0;
-        virtual bool ReadQuitOrProceed() const = 0;                // read in quit or continue from user before every dice roll
-        virtual NardiCoord ReportSelectedSlot() const = 0;    // Return coordinates of slot user selects, either dest or source
-        virtual void InstructionMessage(std::string m) const = 0;      // In some implementations may even do nothing
-        virtual void ErrorMessage(std::string m) const = 0;
-    
-        protected:
-        const Game& g;
-        const std::array<std::array<int, COL>, ROW> board;
-
 };
 
 inline
@@ -185,3 +159,14 @@ void Game::AttachReaderWriter(ReaderWriter* r)
 {
     rw = r;
 }
+
+inline 
+int Game::GetDice(bool idx) const
+{
+    return dice[idx];
+}
+
+inline
+bool Game::GameIsOver() const {return false; } // FIXME LATER, won't even be inline `
+
+inline const ReaderWriter* Game::GetConstRW() {return rw;}

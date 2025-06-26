@@ -1,9 +1,10 @@
 #include "TerminalRW.h"
 
-TerminalRW::TerminalRW(const Game& game) : ReaderWriter(game) {}
+TerminalRW::TerminalRW(const Game& game, Controller& c) : ReaderWriter(game, c) {}
 
 void TerminalRW::ReAnimate() const
 {
+    const auto& board = g.GetBoardRef();
     bool player_row = (1 - g.GetPlayerSign()) / 2; // 0 for 1, 1 for -1
     
     for(int c = COL - 1; c >= 0; --c)
@@ -17,65 +18,65 @@ void TerminalRW::ReAnimate() const
     std::cout << "\n\n";
 }
 
-void TerminalRW::AnimateDice(int d1, int d2) const  // assumes proper values of dice fed in
+void TerminalRW::AnimateDice() const  // assumes proper values of dice fed in
 {
-    std::cout << "Player " << g.GetPlayerSign() << ", you rolled: " << d1 << " " << d2 << std::endl;
+    std::cout << "Player " << g.GetPlayerSign() << ", you rolled: " << g.GetDice(0) << " " << g.GetDice(1) << std::endl;
 }
 
-char TerminalRW::getch() const
+
+void TerminalRW::AwaitUserCommand()
 {
-    struct termios oldt, newt;
-    int ch;
-
-    // Get current terminal settings
-    tcgetattr(STDIN_FILENO, &oldt);
-    newt = oldt;
-
-    // Disable canonical mode and echo
-    newt.c_lflag &= ~(ICANON | ECHO);
-
-    // Apply new settings
-    tcsetattr(STDIN_FILENO, TCSANOW, &newt);
-
-    // Read a single character
-    ch = getchar();
-
-    // Restore old settings
-    tcsetattr(STDIN_FILENO, TCSANOW, &oldt);
-
-    return ch;
+    std::getline(std::cin, input);
+    ctrl.ReceiveCommand( Input_to_Command() );
 }
 
-bool TerminalRW::ReadQuitOrProceed() const
+Command TerminalRW::Input_to_Command() const
 {
-    char user_input = getch();
-    return (user_input == 'q');
-}
-
-NardiCoord TerminalRW::ReportSelectedSlot() const
-{
-    int r, c;
+    std::vector<std::string> input_pieces = splitStringByWhitespace(input);
     
-    std::cout << "enter row\n";
-    std::cin >> r;
-    if (std::cin.fail()) 
+    if (input_pieces.size() == 1 && input_pieces[0].length() == 1)
     {
-        std::cin.clear();
-        std::cin.ignore(10000, '\n'); 
-        ErrorMessage("Invalid input. Please enter a number.\n");
-        return {-1, -1};
-    }
-    std::cout << "enter col\n";
-    std::cin >> c;
-    if (std::cin.fail()) 
-    {
-        std::cin.clear();
-        std::cin.ignore(10000, '\n'); 
-        ErrorMessage("Invalid input. Please enter a number.\n");
-        return {-1, -1};
-    }
+        if(input_pieces[0] == "q")
+            return Command(Actions::QUIT);
+        
+        else if(input_pieces[0] == "r")
+            return Command(Actions::ROLL_DICE);
+        
+        else if(input_pieces[0] == "u")
+            return Command(Actions::UNDO);
 
-    return {r, c};
+        else
+            return Actions::NO_OP;
+    }
+    else if(input_pieces.size() == 2 && isNumeric(input_pieces[0]) && isNumeric(input_pieces[1]) )
+        return Command( Actions::SELECT_SLOT, NardiCoord( stoi(input_pieces[0]), stoi(input_pieces[1]) ) );
+    
+    else
+        return Command(Actions::NO_OP);
+}
+
+
+std::vector<std::string> TerminalRW::splitStringByWhitespace(const std::string& str) const
+{
+    std::istringstream iss(str);
+    std::vector<std::string> tokens;
+
+    // Use std::istream_iterator to read words separated by whitespace
+    std::copy(std::istream_iterator<std::string>(iss),
+              std::istream_iterator<std::string>(),
+              std::back_inserter(tokens));
+
+    return tokens;
+}
+
+bool TerminalRW::isNumeric(std::string s) const
+{
+    for(int i = 0; i < s.length(); ++i)
+    {
+        if(!isdigit(s[i]))
+            return false;
+    }
+    return true;
 }
 
 void TerminalRW::InstructionMessage(std::string m) const
@@ -86,4 +87,13 @@ void TerminalRW::InstructionMessage(std::string m) const
 void TerminalRW::ErrorMessage(std::string m) const
 {
     std::cerr << m << std::endl;
+}
+
+///////////////////////////
+/////   Factory   ////////
+/////////////////////////
+
+std::unique_ptr<ReaderWriter> TerminalRWFactory(Game& g, Controller& c)
+{
+    return std::make_unique<TerminalRW>(g, c);
 }
