@@ -10,11 +10,11 @@ void Controller::SwitchTurns()
     start_selected = false;
 }
 
-void Controller::ReceiveCommand(Command cmd)
+void Controller::ReceiveCommand(Command& cmd)
 {
     switch (cmd.action)
     {
-    case Actions::NO_OP:
+    case Actions::NO_OP:    // should not happen
         break;
     case Actions::QUIT:
         quit_requested = true;

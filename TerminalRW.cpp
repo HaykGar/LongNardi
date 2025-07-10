@@ -27,7 +27,9 @@ void TerminalRW::AnimateDice() const  // assumes proper values of dice fed in
 void TerminalRW::AwaitUserCommand()
 {
     std::getline(std::cin, input);
-    ctrl.ReceiveCommand( Input_to_Command() );
+    Command cmd = Input_to_Command();
+    if(cmd.action != NO_OP) // avoid wasteful passing flow to control
+        ctrl.ReceiveCommand(cmd);
 }
 
 Command TerminalRW::Input_to_Command() const

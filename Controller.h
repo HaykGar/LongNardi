@@ -8,7 +8,7 @@ class Controller
 {
     public:
         Controller(Game& game);
-        virtual void ReceiveCommand(Command cmd);
+        virtual void ReceiveCommand(Command& cmd);
         bool QuitRequested() const;
 
     protected:
