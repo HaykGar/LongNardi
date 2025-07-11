@@ -7,11 +7,9 @@ void ReaderWriter::DispErrorCode(Game::status_codes c) const
     case Game::status_codes::SUCCESS:
         ErrorMessage("Success");
         break;
-    case Game::status_codes::NO_LEGAL_MOVES:
-        ErrorMessage("NO_LEGAL_MOVES");
+    case Game::status_codes::NO_LEGAL_MOVES_LEFT:
+        ErrorMessage("NO_LEGAL_MOVES_LEFT");
         break;
-    case Game::status_codes::FORCED_MOVE_MADE:
-        ErrorMessage("FORCED_MOVE_MADE");
         break;
     case Game::status_codes::OUT_OF_BOUNDS:
         ErrorMessage("OUT_OF_BOUNDS");

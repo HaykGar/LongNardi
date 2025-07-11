@@ -25,7 +25,7 @@ Game::status_codes Controller::ReceiveCommand(Command& cmd)
         if(!dice_rolled)    // treat converse as misc failure
         {
             outcome = g.RollDice();
-            if(outcome == Game::status_codes::NO_LEGAL_MOVES || (outcome == Game::status_codes::FORCED_MOVE_MADE && g.TurnOver()) )
+            if(outcome == Game::status_codes::NO_LEGAL_MOVES_LEFT)
                 SwitchTurns();
             else
                 dice_rolled = true;
@@ -38,12 +38,10 @@ Game::status_codes Controller::ReceiveCommand(Command& cmd)
         else if(start_selected)
         {
             outcome = g.TryFinishMove(start, cmd.to_select.value()); // this makes the move if possible, triggering redraws
-            if(outcome == Game::status_codes::SUCCESS)
-            {
+            if(outcome == Game::status_codes::SUCCESS)  // turn not over
                 start_selected = false;
-                if(g.TurnOver())
-                    SwitchTurns();
-            }
+            else if(outcome == Game::status_codes::NO_LEGAL_MOVES_LEFT)
+                SwitchTurns();
             else
                 start_selected = false; // unselect start if illegal move attempted or start re-selected
 

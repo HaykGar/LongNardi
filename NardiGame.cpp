@@ -19,7 +19,7 @@ Game::status_codes Game::RollDice() // important to force this only once per tur
 
     rw->AnimateDice();
 
-    return arbiter.MakeForcedMoves_OnRoll();
+    return arbiter.MakeForcedMovesBothDiceUsable();
 }
 
 Game::status_codes Game::TryStart(const NardiCoord& s) const
@@ -34,12 +34,8 @@ Game::status_codes Game::TryFinishMove(const NardiCoord& start, const NardiCoord
         return can_move;
     else
     {
-        MakeMove(start, end);   // If anything forcing against making this move, it would have been done by arbiter already
-
         UseDice(0, times_dice_used[0]); UseDice(1, times_dice_used[1]);
-        arbiter.MakeForcedMoves_AfterMove();            
-
-        return status_codes::SUCCESS;
+        return MakeMove(start, end);    // checks for further forced moves internally
     }
 }
 
@@ -50,8 +46,7 @@ std::pair<Game::status_codes, NardiCoord> Game::TryMoveByDice(const NardiCoord& 
         return {result, {} };
     else{
         UseDice(dice_idx);
-        MakeMove(start, dest);
-        return { status_codes::SUCCESS, dest };
+        return { MakeMove(start, dest), dest };
     }
 }
 
@@ -62,52 +57,53 @@ void Game::UseDice(bool idx, int n)
 
 bool Game::TurnOver() const
 {
-    return (    (dice_used[0] + dice_used[1]) == ( (doubles_rolled + 1) * (dice[0] + dice[1]) )   );
-    // since dice_used are only incremented by their corresponding dice, check if both values are used or in case of doubles if they're both used twice
+    return ( !arbiter.CanUseDice(0) && !arbiter.CanUseDice(1) );    // set a flag to avoid redundancies
 }
 
-void Game::MakeMove(const NardiCoord& start, const NardiCoord& end)
+Game::status_codes Game::MakeMove(const NardiCoord& start, const NardiCoord& end, bool check_requested)
 {
     board[start.row][start.col] -= player_sign;
     board[end.row][end.col] += player_sign;
 
     arbiter.UpdateAvailabilitySets(start, end);
 
-    arbiter.FlagHeadUsed(start);
-    if(arbiter.IsHead(start))
-        arbiter.FlagHeadUsed();
+    arbiter.FlagHeadIfNeeded(start);
 
     move_history.emplace(start, end, dice_used[0], dice_used[1]);
 
     rw->ReAnimate();
 
+    if(check_requested)
+        return arbiter.MakeForcedMoves();
+    else 
+        return status_codes::SUCCESS;
 }
 
-void Game::UndoMove()   // strict: no undoing after enemy dice roll. Watch for case after turn over, before enemy rolls or make even stricter. Needs safeguard or removal
-{
-    // going to be more complicated with legality dicts, FIX `
-    if(move_history.empty()) // no-op ? `
-    {
-        rw->ErrorMessage("No moves to undo");
-    }
-    else{
-        Move& lastMove = move_history.top();
+// void Game::UndoMove()   // strict: no undoing after enemy dice roll. Watch for case after turn over, before enemy rolls or make even stricter. Needs safeguard or removal
+// {
+//     // going to be more complicated with legality dicts, FIX `
+//     if(move_history.empty()) // no-op ? `
+//     {
+//         rw->ErrorMessage("No moves to undo");
+//     }
+//     else{
+//         Move& lastMove = move_history.top();
 
-        MakeMove(lastMove.end, lastMove.start);
+//         MakeMove(lastMove.end, lastMove.start);
 
-        if(doubles_rolled)  // possibly dice used before this piece was moved, so we should not erase all of the progress on dice_used
-        {
-            unsigned d = arbiter.GetDistance(lastMove.start.row, lastMove.start.col, lastMove.end.row, lastMove.end.col);
-            dice_used[0] -= d;  // ok if negative, we only need the sum with dice_used[1] to match sum of (dice[0] + dice[1])*multiplier
-        }
-        else    // no doubles so only one dice used so far
-        {
-            dice_used[0] -= lastMove.m_diceUsed1;
-            dice_used[1] -= lastMove.m_diceUsed2;
-        }
-        move_history.pop();
-    }
-}
+//         if(doubles_rolled)  // possibly dice used before this piece was moved, so we should not erase all of the progress on dice_used
+//         {
+//             unsigned d = arbiter.GetDistance(lastMove.start.row, lastMove.start.col, lastMove.end.row, lastMove.end.col);
+//             dice_used[0] -= d;  // ok if negative, we only need the sum with dice_used[1] to match sum of (dice[0] + dice[1])*multiplier
+//         }
+//         else    // no doubles so only one dice used so far
+//         {
+//             dice_used[0] -= lastMove.m_diceUsed1;
+//             dice_used[1] -= lastMove.m_diceUsed2;
+//         }
+//         move_history.pop();
+//     }
+// }
 
 unsigned Game::Arbiter::GetDistance(bool sr, int sc, bool er, int ec) const
 {
@@ -342,74 +338,77 @@ void Game::Arbiter::UpdateAvailabilitySets(const NardiCoord start, const NardiCo
     }
 }
 
-Game::status_codes Game::Arbiter::MakeForcedMoves_OnRoll()
+Game::status_codes Game::Arbiter::MakeForcedMoves()
 {
-    if(g->doubles_rolled)
-        return ForcedMoves_DoublesCase();
-    
-    // no doubles from here
-
-    if (CanUseDice(0) && CanUseDice(1)) // no head reuse issues since we can't have made a move yet
-    {
-        size_t total_options[2] = {goes_idx_plusone[g->player_idx][g->dice[0] - 1].size(), goes_idx_plusone[g->player_idx][g->dice[1] - 1].size() };
-            // at this point this is just the number of ways to move in one step for both dice rolls
-        if(total_options[0] > 1 && total_options[1] > 1)
-            return status_codes::SUCCESS;
-        else if (total_options[0] == total_options[1] && total_options[0] == 0)
-            return status_codes::NO_LEGAL_MOVES;
-        else    // at least 1 non-zero, so we can move by at least one of the dice
-        {
-            std::unordered_set<NardiCoord> two_step_starts; // start coords for 2-step
-            for(int p = 0; p < 2; ++p ) // populate two_step_starts with all valid start points that use both dice
-            {
-                for(const auto& coord : goes_idx_plusone[g->player_idx][g->dice[p] - 1])
-                {
-                    if(!two_step_starts.contains(coord) && (!goes_idx_plusone[g->player_idx][g->dice[0] - 1].contains(coord) 
-                        || !goes_idx_plusone[g->player_idx][g->dice[1] - 1].contains(coord) ) )    // avoiding redundancy, either already inserted or it's accounted for
-                    {
-                        auto [outcome, dest] = CanMoveByDice(coord, p);    // this first step must work by construction
-                        std::tie(outcome, dest) = CanMoveByDice(dest, !p);
-                        if(outcome == status_codes::SUCCESS)        // can complete double step from a new location
-                        {
-                            ++total_options[ goes_idx_plusone[g->player_idx][g->dice[1] - 1].contains(coord) ]; 
-                                // incremement options for the dice that can now move from coord with a 2step
-                            if(total_options[0] > 1 && total_options[1] > 1)
-                                return status_codes::SUCCESS;   // nothing forced
-
-                            two_step_starts.insert(coord);  // total_options[i] is = two_step_starts.size() + g_idx[player_idx][dice[i] - 1].size()
-                        }
-                    }
-                }
-            }   // at least 1 move is forced or impossible if not returned by now
-            bool max_dice = (g->dice[1] > g->dice[0]);
-            if(total_options[max_dice] == 1) // only 1 option, forced to play larger dice if possible
-            {
-                HandleForced2DiceCase(max_dice, two_step_starts);
-                return status_codes::FORCED_MOVE_MADE;
-            }
-            else if(total_options[!max_dice] == 1)  
-            {   // with this logic, if max_dice and the other both have only 1 option, we prioritize max dice as needed
-                HandleForced2DiceCase(!max_dice, two_step_starts);
-                return status_codes::FORCED_MOVE_MADE;
-            }
-            else
-                return status_codes::SUCCESS;   // one of the moves is impossible but nothing is forced, there are multiple legal moves for the other
-        }
-    }
+    bool canUse0 = CanUseDice(0);
+    bool canUse1 = CanUseDice(1);
+    if(canUse0 && canUse1)
+        return MakeForcedMovesBothDiceUsable(); // includes doubles case
+    else if (canUse0 || canUse1)
+        return MakeForcedMoves_SingleDice();
     else
-        return status_codes::MISC_FAILURE; // should never happen
+        return status_codes::NO_LEGAL_MOVES_LEFT;   // no dice to move by
 }
 
-Game::status_codes Game::Arbiter::MakeForcedMoves_AfterMove()
+Game::status_codes Game::Arbiter::MakeForcedMovesBothDiceUsable()
 {
     if(g->doubles_rolled)
         return ForcedMoves_DoublesCase();
     
+    // no doubles from here, no head reuse issues since we can't have made a move yet
+    size_t total_options[2] = {goes_idx_plusone[g->player_idx][g->dice[0] - 1].size(), goes_idx_plusone[g->player_idx][g->dice[1] - 1].size() };
+        // at this point this is just the number of ways to move in one step for both dice rolls
+    if(total_options[0] > 1 && total_options[1] > 1)
+        return status_codes::SUCCESS;
+    else if (total_options[0] == total_options[1] && total_options[0] == 0)
+        return status_codes::NO_LEGAL_MOVES_LEFT;
+    else    // at least 1 non-zero, so we can move by at least one of the dice
+    {
+        std::unordered_set<NardiCoord> two_step_starts; // start coords for 2-step moves
+        for(int i = 0; i < 2; ++i ) // populate two_step_starts with all valid start points that use both dice
+        {
+            for(const auto& coord : goes_idx_plusone[g->player_idx][g->dice[i] - 1])
+            {
+                if(!two_step_starts.contains(coord) && (!goes_idx_plusone[g->player_idx][g->dice[0] - 1].contains(coord) 
+                    || !goes_idx_plusone[g->player_idx][g->dice[1] - 1].contains(coord) ) )  // avoiding redundancy, uninserted and missing from one set
+                {
+                    auto [outcome, dest] = CanMoveByDice(coord, i);    // this first step must work by construction
+                    std::tie(outcome, dest) = CanMoveByDice(dest, !i);
+                    if(outcome == status_codes::SUCCESS)        // can complete double step from a new location
+                    {
+                        bool new_option_idx = !goes_idx_plusone[g->player_idx][g->dice[1] - 1].contains(coord);
+                        ++total_options[new_option_idx]; 
+                            // incremement options for the dice that can now move from coord with a 2step
+                        if(total_options[0] > 1 && total_options[1] > 1)
+                            return status_codes::SUCCESS;   // nothing forced
+
+                        two_step_starts.insert(coord);  // total_options[i] is = two_step_starts.size() + g_idx[player_idx][dice[i] - 1].size()
+                    }
+                }
+            }
+        }   // at least 1 move is forced or impossible if not returned by now
+        bool max_dice = (g->dice[1] > g->dice[0]);
+        if(total_options[max_dice] == 1) // if can only play 1 dice, forced to play larger one
+            return HandleForced2DiceCase(max_dice, two_step_starts);
+        else if(total_options[!max_dice] == 1)
+            return HandleForced2DiceCase(!max_dice, two_step_starts);
+        else    // one of the moves is impossible but nothing is forced, there are multiple legal moves for the other
+            return status_codes::SUCCESS;   
+    }    
+}
+
+Game::status_codes Game::Arbiter::MakeForcedMoves_SingleDice()
+{
+    if(g->doubles_rolled)
+        return ForcedMoves_DoublesCase();
+    
+    bool canUse0 = CanUseDice(0);
     bool canUse1 = CanUseDice(1);
-    if(CanUseDice(0) || canUse1 )   // can use either dice, if true we can only use 1 of them
+
+    if(canUse0 || canUse1 )   // can use either dice, if true here we can only use 1 of them
         return HandleSingleDiceCase(canUse1);
     else
-        return status_codes::DICE_USED_ALREADY;
+        return status_codes::NO_LEGAL_MOVES_LEFT;   // cannot move by either dice
 }
 
 Game::status_codes Game::Arbiter::ForcedMoves_DoublesCase()
@@ -418,117 +417,80 @@ Game::status_codes Game::Arbiter::ForcedMoves_DoublesCase()
     int steps_taken = 0;    // counter, when exceeds steps_left 
 
     if(goes_idx_plusone[g->player_idx][g->dice[0] - 1].empty())    // no pieces that go
-        return status_codes::NO_LEGAL_MOVES;
+        return status_codes::NO_LEGAL_MOVES_LEFT;
 
-    else if (goes_idx_plusone[g->player_idx][g->dice[0] - 1].size() == 1)
-    {
-        NardiCoord start = *goes_idx_plusone[g->player_idx][g->dice[0] - 1].begin();
-        if(HeadReuseIssue(start)) // handle first move case later
-            return status_codes::NO_LEGAL_MOVES;
-        else if( abs(g->board[start.row][start.col]) == 1 || IsHead(start) )
-        {
-            auto [canGo, dest] = CanMoveByDice(start, 0);
-            while(canGo == status_codes::SUCCESS && steps_left > 0)
-            {
-                ForceMove(start, 0);
-                --steps_left;
-
-                start = dest;
-                std::tie(canGo, dest) = CanMoveByDice(start, 0);
-            }
-            return status_codes::FORCED_MOVE_MADE;
-        }
-    }
-    // multiple pieces can move, though perhaps from same square
     std::queue<NardiCoord> move_starts;
     for(const auto& coord : goes_idx_plusone[g->player_idx][g->dice[0] - 1])
     {
         if (HeadReuseIssue(coord))
             continue;   // don't use this coord
 
-        int n_pieces = IsHead(coord) ? 1 : abs(g->board[coord.row][coord.col]);
-        int d_steps = 0;
+        int n_pieces = IsHead(coord) ? 1 : abs(g->board[coord.row][coord.col]); // FIXME HERE add not 4 or 6, not first move `
         
         NardiCoord start = coord;
-        auto [canGo, dest] = CanMoveByDice(coord, 0);
+        auto [canGo, dest] = CanMoveByDice(start, 0);
 
         while(canGo == status_codes::SUCCESS)   // runs at most 4 times without returning
         {
-            ++d_steps;
+            steps_taken += n_pieces;
             move_starts.push(start);
 
-            if(steps_taken + d_steps > steps_left)   // -1 for double count                    
+            if(steps_taken > steps_left)            
                 return status_codes::SUCCESS;
 
             start = dest;
-            std::tie(canGo, dest) = CanMoveByDice(coord, 0);
+            std::tie(canGo, dest) = CanMoveByDice(start, 0);
         }
-
-        steps_taken += d_steps * n_pieces;
-        if(steps_taken > steps_left)
-            return status_codes::SUCCESS;   // nothing forced
     }  
-    // if we exit loop, then the moves are forced (no legal moves case already checked)
+    // if we exit loop, then the moves are forced
     while(!move_starts.empty())
     {
         NardiCoord start = move_starts.front();
-        int n = IsHead(start) ? 1 : abs(g->board[start.row][start.col]);
+        int n = IsHead(start) ? 1 : abs(g->board[start.row][start.col]);    // FIRST MOVE...
         for(int i = 0; i < n; ++i)
-            ForceMove(start, 0);
+            ForceMove(start, 0, false);
         
         move_starts.pop();
     }
-    return status_codes::FORCED_MOVE_MADE;
+
+    return status_codes::NO_LEGAL_MOVES_LEFT;   // impossible to have partial forcing in doubles case
 }
 
-void Game::Arbiter::HandleForced2DiceCase(bool dice_idx, const std::unordered_set<NardiCoord>& two_step_starts) // return no legal moves if none left after making one?
+Game::status_codes Game::Arbiter::HandleForced2DiceCase(bool dice_idx, const std::unordered_set<NardiCoord>& two_step_starts) // return no legal moves if none left after making one?
 {
     if(goes_idx_plusone[g->player_idx][g->dice[dice_idx] - 1].size() == 1)  // no new 2step moves
-    {
-        ForceMove(*goes_idx_plusone[g->player_idx][g->dice[dice_idx] - 1].begin(), dice_idx); // will updates goes_idx as needed
-
-        if(goes_idx_plusone[g->player_idx][g->dice[!dice_idx] - 1].size() == 1) // only one possible choice for other dice remaining
-        {
-            NardiCoord start = *goes_idx_plusone[g->player_idx][g->dice[!dice_idx] - 1].begin();
-            if (!HeadReuseIssue(start))
-                ForceMove(start, !dice_idx);
-        }
-        else if (goes_idx_plusone[g->player_idx][g->dice[!dice_idx] - 1].size() == 2 && 
-                goes_idx_plusone[g->player_idx][g->dice[!dice_idx] - 1].contains(head[g->player_idx]) && 
-                HeadReuseIssue(head[g->player_idx]))
-        {
-            for(const auto& coord : goes_idx_plusone[g->player_idx][g->dice[!dice_idx] - 1])
-            {
-                if(coord != head[g->player_idx])
-                {
-                    ForceMove(coord, !dice_idx);
-                    return;
-                }
-            }
-        }
-    }
+        return ForceMove(*goes_idx_plusone[g->player_idx][g->dice[dice_idx] - 1].begin(), dice_idx); // makes other forced move as needed
     else    // only a 2step move for max dice
-        Force2StepMove(*two_step_starts.begin());
+        return ForceMove(*two_step_starts.begin(), !dice_idx); // should always be NO_LEGAL_MOVES_LEFT
+        /*
+            can't make single move with dice[idx], so moves other dice then when checking forced moves it should have to move 
+            again as idx will only have one option
+        */
 }
 
-Game::status_codes Game::Arbiter::HandleSingleDiceCase(bool dice_idx) // no doubles here
-{
+Game::status_codes Game::Arbiter::HandleSingleDiceCase(bool dice_idx) // no doubles here, one dice used already
+{       
     if(goes_idx_plusone[g->player_idx][g->dice[dice_idx] - 1].empty())
-        return status_codes::NO_LEGAL_MOVES;
+        return status_codes::NO_LEGAL_MOVES_LEFT;
     else if (goes_idx_plusone[g->player_idx][g->dice[dice_idx] - 1].size() == 1)
     {
         NardiCoord start = *goes_idx_plusone[g->player_idx][g->dice[dice_idx] - 1].begin();
-        if(HeadReuseIssue(start))
-            return status_codes::NO_LEGAL_MOVES;
-        
-        auto [can_move, _ ] = g->TryMoveByDice(start, dice_idx);
-        if (can_move != status_codes::SUCCESS)
-            return status_codes::NO_LEGAL_MOVES;
-        else
-            return status_codes::FORCED_MOVE_MADE;
+        if(!HeadReuseIssue(start))
+            g->TryMoveByDice(start, dice_idx);
+        return status_codes::NO_LEGAL_MOVES_LEFT;   // success or fail, no legal moves remain
+    }
+    else if (goes_idx_plusone[g->player_idx][g->dice[dice_idx] - 1].size() == 2 &&     // two pieces that go
+            goes_idx_plusone[g->player_idx][g->dice[dice_idx] - 1].contains(head[g->player_idx]) &&    // one of which is head
+            HeadReuseIssue(head[g->player_idx]))                                        // can't reuse head, so only one piece which actually goes
+    {
+        std::unordered_set<NardiCoord>::iterator it =  goes_idx_plusone[g->player_idx][g->dice[dice_idx] - 1].begin();
+        if (IsHead(*it)) // only 2 items, either not head or next one is
+            ++it;
+        ForceMove(*it, dice_idx);
+        return status_codes::NO_LEGAL_MOVES_LEFT;
     }
     else
-        return status_codes::SUCCESS;   // not forced to move
+        return status_codes::SUCCESS;   // not forced to move, at least two choices
 }
 
 std::pair<Game::status_codes, NardiCoord> Game::Arbiter::CanMoveByDice(const NardiCoord& start, bool dice_idx) const
@@ -559,23 +521,19 @@ NardiCoord Game::Arbiter::CalculateFinalCoords(bool sr, int sc, bool dice_idx) c
 
 bool Game::Arbiter::CanUseDice(bool idx, int n) const
 {
-    int new_val = g->dice_used[idx] * n;
-
-    return (new_val + g->dice_used[!idx]) <= ( (g->doubles_rolled + 1) * (g->dice[0] + g->dice[1]) );
+    int new_val = g->dice_used[idx] + (n * g->dice[idx]);
+    /*
+    if doubles, need new_val + dice[!idx] <= 4*dice[idx] <==> new_val <= 4*dice[idx] - dice[!idx]
+    else, need new_val <=  1*g->dice[idx]
+    */
+    return ( new_val <= (1 + 3*g->doubles_rolled)*g->dice[idx] - g->doubles_rolled * g->dice[!idx] );
 }
 
-NardiCoord Game::Arbiter::ForceMove(const NardiCoord& start, bool dice_idx)  // only to be called when forced
+Game::status_codes Game::Arbiter::ForceMove(const NardiCoord& start, bool dice_idx, bool check_further)  // only to be called when forced
 {
     NardiCoord dest = CalculateFinalCoords(start.row, start.col, dice_idx);
     g->UseDice(dice_idx);
-    g->MakeMove(start, dest);
-    return dest;
-}
-
-NardiCoord Game::Arbiter::Force2StepMove(const NardiCoord& start)   // assumes legality, need to be carefuly when using either forcemove func
-{
-    NardiCoord mid = ForceMove(start, g->dice[0]);
-    return ForceMove(mid, g->dice[1]);
+    return g->MakeMove(start, dest, check_further);
 }
 
 //////////////////////////

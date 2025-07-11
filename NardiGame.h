@@ -13,7 +13,7 @@
 Check for only one piece from the "head" per turn 
     (with the exceptions 66, 44 on move 1)
 
-After making forced moves, if none left return NoLegalMove...
+undo move feature
 
 UI and also for driver: let them move pieces by dice, so input start coord and number
 
@@ -35,8 +35,6 @@ Chi kareli chtoghel tun mtnel araji angam -- check details of this rule
                 -> sagh pak: illegal
                 -> bac tegher: ardyok hnaravor a mtnel?
 
-undo move feature - maybe remove altogether?
-
 Thoroughly test basic mechanics
 */
 
@@ -51,8 +49,7 @@ class Game
         enum class status_codes // enum class for scoping and extra safety
         {
             SUCCESS,
-            NO_LEGAL_MOVES,
-            FORCED_MOVE_MADE,
+            NO_LEGAL_MOVES_LEFT,
             OUT_OF_BOUNDS,
             START_EMPTY_OR_ENEMY,
             DEST_ENEMY,
@@ -72,7 +69,7 @@ class Game
         status_codes TryStart(const NardiCoord& s) const;
         status_codes TryFinishMove(const NardiCoord& start, const NardiCoord& end); // assuming valid start already `
 
-        void UndoMove(); // FIXME: add the functionality in Controller
+        // void UndoMove(); // FIXME: add the functionality in Controller
             // as it is now, undoes entire turn so far. Once a turn is over it is over strictly. Also, will need changes for legality dicts `
 
         void SwitchPlayer();
@@ -113,8 +110,8 @@ class Game
                 status_codes ValidStart(int sr, int sc) const; // check that start is in bounds and occupied by player's piece
                 std::pair<status_codes, std::array<int, 2>> LegalMove(int sr, int sc, int er, int ec);
                 
-                status_codes MakeForcedMoves_OnRoll();
-                status_codes MakeForcedMoves_AfterMove();
+                status_codes MakeForcedMovesBothDiceUsable();
+                status_codes MakeForcedMoves_SingleDice();
 
                 std::pair<status_codes, NardiCoord> CanMoveByDice(const NardiCoord& start, bool dice_idx) const;
 
@@ -129,12 +126,14 @@ class Game
                 void UpdateAvailabilitySets(const NardiCoord start, const NardiCoord end);
 
                 void ResetHead();
-                void FlagHeadUsed(const NardiCoord& start);
+                void FlagHeadIfNeeded(const NardiCoord& start);
                 bool IsHead(const NardiCoord& c) const;
                 bool IsHead(int r, int c) const;
                 bool HeadReuseIssue(const NardiCoord& c) const;
                 bool HeadReuseIssue(int r, int c) const;
 
+                bool CanUseDice(bool idx, int n_times = 1) const;
+                status_codes MakeForcedMoves();
 
             private:
                 Game* g;
@@ -145,8 +144,9 @@ class Game
 
                 std::array< std::array< std::unordered_set<NardiCoord>, 6 >, 2 > goes_idx_plusone;
 
-                NardiCoord ForceMove(const NardiCoord& start, bool dice_idx);
-                NardiCoord Force2StepMove(const NardiCoord& start);
+                Game::status_codes ForceMove(const NardiCoord& start, bool dice_idx, bool check_further_forced = true);
+                
+                // void Force2StepMove(const NardiCoord& start);
 
                 NardiCoord midpoint;
 
@@ -156,10 +156,8 @@ class Game
                 status_codes WellDefinedMove(const NardiCoord& start, const NardiCoord& end) const; // check that move start and end are not against the rules
 
                 status_codes ForcedMoves_DoublesCase();
-                void  HandleForced2DiceCase(bool dice_idx, const std::unordered_set<NardiCoord>& two_step_starts);
+                status_codes HandleForced2DiceCase(bool dice_idx, const std::unordered_set<NardiCoord>& two_step_starts);
                 status_codes HandleSingleDiceCase(bool dice_idx);
-                
-                bool CanUseDice(bool idx, int n_times = 1) const;
         };
 
         struct Move{
@@ -175,7 +173,7 @@ class Game
         ReaderWriter* rw;
         std::stack<Move> move_history;
         
-        void MakeMove(const NardiCoord& start, const NardiCoord& end);
+        status_codes MakeMove(const NardiCoord& start, const NardiCoord& end, bool check = true);
         std::pair<Game::status_codes, NardiCoord> TryMoveByDice(const NardiCoord& start, bool dice);
 
 };
@@ -215,7 +213,7 @@ inline const ReaderWriter* Game::GetConstRW() {return rw;}
 
 
 inline 
-void Game::Arbiter::FlagHeadUsed(const NardiCoord& start)
+void Game::Arbiter::FlagHeadIfNeeded(const NardiCoord& start)
 { 
     if(!head_used && IsHead(start))
         head_used = true; 
