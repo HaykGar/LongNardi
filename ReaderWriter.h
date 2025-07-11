@@ -18,6 +18,7 @@ class ReaderWriter
 
         virtual void InstructionMessage(std::string m) const = 0;      // In some implementations may even do nothing
         virtual void ErrorMessage(std::string m) const = 0;
+        virtual void DispErrorCode(Game::status_codes code) const;
 
     protected:
         const Game& g;

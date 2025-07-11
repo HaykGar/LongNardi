@@ -5,7 +5,7 @@ TerminalRW::TerminalRW(const Game& game, Controller& c) : ReaderWriter(game, c) 
 void TerminalRW::ReAnimate() const
 {
     const auto& board = g.GetBoardRef();
-    bool player_row = (1 - g.GetPlayerSign()) / 2; // 0 for 1, 1 for -1
+    bool player_row = g.GetPlayerIdx();
     
     for(int c = COL - 1; c >= 0; --c)
         std::cout << board.at(player_row).at(c) << "\t";
@@ -28,8 +28,12 @@ void TerminalRW::AwaitUserCommand()
 {
     std::getline(std::cin, input);
     Command cmd = Input_to_Command();
+    Game::status_codes code = Game::status_codes::MISC_FAILURE;
+
     if(cmd.action != NO_OP) // avoid wasteful passing flow to control
-        ctrl.ReceiveCommand(cmd);
+        code = ctrl.ReceiveCommand(cmd);
+
+    DispErrorCode(code);
 }
 
 Command TerminalRW::Input_to_Command() const

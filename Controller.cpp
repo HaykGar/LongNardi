@@ -4,26 +4,31 @@ Controller::Controller(Game& game) : start(), start_selected(false), dice_rolled
 
 void Controller::SwitchTurns()
 {
-    g.SwitchPlayerSign();
+    g.SwitchPlayer();
     
     dice_rolled = false;
     start_selected = false;
 }
 
-void Controller::ReceiveCommand(Command& cmd)
+Game::status_codes Controller::ReceiveCommand(Command& cmd)
 {
+    Game::status_codes outcome = Game::status_codes::MISC_FAILURE;
     switch (cmd.action)
     {
     case Actions::NO_OP:    // should not happen
         break;
     case Actions::QUIT:
         quit_requested = true;
+        outcome = Game::status_codes::SUCCESS;  // user requested quit is not a problem
         break;
     case Actions::ROLL_DICE:
-        if(!dice_rolled)
+        if(!dice_rolled)    // treat converse as misc failure
         {
-            g.RollDice();
-            dice_rolled = true;
+            outcome = g.RollDice();
+            if(outcome == Game::status_codes::NO_LEGAL_MOVES || (outcome == Game::status_codes::FORCED_MOVE_MADE && g.TurnOver()) )
+                SwitchTurns();
+            else
+                dice_rolled = true;
         }
         break;
     case Actions::SELECT_SLOT:
@@ -32,8 +37,8 @@ void Controller::ReceiveCommand(Command& cmd)
         
         else if(start_selected)
         {
-            Game::status_codes move_status = g.TryFinishMove(start, cmd.to_select.value()); // this makes the move if possible, triggering redraws
-            if(move_status == Game::status_codes::SUCCESS)
+            outcome = g.TryFinishMove(start, cmd.to_select.value()); // this makes the move if possible, triggering redraws
+            if(outcome == Game::status_codes::SUCCESS)
             {
                 start_selected = false;
                 if(g.TurnOver())
@@ -46,9 +51,9 @@ void Controller::ReceiveCommand(Command& cmd)
         }
         else
         {
-            Game::status_codes start_status = g.TryStart(cmd.to_select.value());
+            outcome = g.TryStart(cmd.to_select.value());
 
-            if (start_status == Game::status_codes::SUCCESS)
+            if (outcome == Game::status_codes::SUCCESS)
             {
                 start = cmd.to_select.value();
                 start_selected = true;
@@ -60,5 +65,7 @@ void Controller::ReceiveCommand(Command& cmd)
         std::cerr << "Unexpected command received\n";
         break;
     }
+
+    return outcome;
 }
 
