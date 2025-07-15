@@ -52,7 +52,7 @@ std::pair<Game::status_codes, NardiCoord> Game::TryMoveByDice(const NardiCoord& 
 
 void Game::UseDice(bool idx, int n)
 {
-    dice_used[idx] += dice[idx] * n;
+    dice_used[idx] += n;
 }
 
 bool Game::TurnOver() const
@@ -69,7 +69,7 @@ Game::status_codes Game::MakeMove(const NardiCoord& start, const NardiCoord& end
 
     arbiter.FlagHeadIfNeeded(start);
 
-    move_history.emplace(start, end, dice_used[0], dice_used[1]);
+    // move_history.emplace(start, end, dice_used[0], dice_used[1]);
 
     rw->ReAnimate();
 
@@ -413,7 +413,7 @@ Game::status_codes Game::Arbiter::MakeForcedMoves_SingleDice()
 
 Game::status_codes Game::Arbiter::ForcedMoves_DoublesCase()
 {
-    int steps_left = 4 - ( (g->dice_used[0] + g->dice_used[1]) / g->dice[0] ); // steps left to complete turn
+    int steps_left = 4 - ( (g->dice_used[0]*g->dice[0] + g->dice_used[1]*g->dice[1]) / g->dice[0] ); // steps left to complete turn
     int steps_taken = 0;    // counter, when exceeds steps_left 
 
     if(goes_idx_plusone[g->player_idx][g->dice[0] - 1].empty())    // no pieces that go
@@ -521,12 +521,12 @@ NardiCoord Game::Arbiter::CalculateFinalCoords(bool sr, int sc, bool dice_idx) c
 
 bool Game::Arbiter::CanUseDice(bool idx, int n) const
 {
-    int new_val = g->dice_used[idx] + (n * g->dice[idx]);
+    int new_val = g->dice_used[idx] + n;
     /*
-    if doubles, need new_val + dice[!idx] <= 4*dice[idx] <==> new_val <= 4*dice[idx] - dice[!idx]
-    else, need new_val <=  1*g->dice[idx]
+    if doubles, new_val + dice_used[!idx] <= 4      <==>    new_val <= 4 - dice_used[!idx]
+    else, new_val <= 1
     */
-    return ( new_val <= (1 + 3*g->doubles_rolled)*g->dice[idx] - g->doubles_rolled * g->dice[!idx] );
+    return ( new_val <= 1 + 3*g->doubles_rolled - g->dice_used[!idx] * g->doubles_rolled );
 }
 
 Game::status_codes Game::Arbiter::ForceMove(const NardiCoord& start, bool dice_idx, bool check_further)  // only to be called when forced
