@@ -162,4 +162,36 @@ void SilentRW::AnimateDice() const {}
 void SilentRW::InstructionMessage(std::string m) const {}
 void SilentRW::ErrorMessage(std::string m) const {}
 
-Command SilentRW::Input_to_Command() const { return Command(NO_OP); } 
+Command SilentRW::Input_to_Command() const { return Command(Actions::NO_OP); } 
+
+//////////////////////////////////////
+/////    Test Case Generator    /////
+////////////////////////////////////
+
+std::vector<TestCase> TestLoader::operator() ()
+{
+    cases = {};
+    add_basic_move_cases();
+    add_dice_misuse_cases();
+    add_legality_cases();
+    
+    // push back quit request cases
+    // push back dice roll after dice already rolled case
+
+    return cases;
+}
+
+void TestLoader::add_basic_move_cases()
+{
+
+}
+
+void TestLoader::add_dice_misuse_cases()
+{
+
+}
+
+void TestLoader::add_legality_cases()
+{
+
+}

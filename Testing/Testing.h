@@ -5,6 +5,7 @@
 
 #include<functional>
 #include<cassert>
+#include<optional>
 
 struct TestCase
 {
@@ -78,4 +79,17 @@ class TestBuilder
 
         void ConstructAvailabilitySets();
         void ResetControllerState();
+};
+
+class TestLoader
+{
+    public:
+        std::vector<TestCase> operator() ();
+
+    private:
+        void add_basic_move_cases();
+        void add_dice_misuse_cases();
+        void add_legality_cases();
+
+        std::vector<TestCase> cases;
 };
