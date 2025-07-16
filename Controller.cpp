@@ -32,31 +32,35 @@ Game::status_codes Controller::ReceiveCommand(Command& cmd)
         }
         break;
     case Actions::SELECT_SLOT:
+    case Actions::MOVE_BY_DICE:
         if (!dice_rolled)   // no attempts to move before rolling
             break;
         
         else if(start_selected)
         {
-            outcome = g.TryFinishMove(start, cmd.to_select.value()); // this makes the move if possible, triggering redraws
+            if(std::holds_alternative<NardiCoord>(cmd.payload))
+                outcome = g.TryFinishMove(start, std::get<NardiCoord>(cmd.payload) ); // this makes the move if possible, triggering redraws
+            else if (std::holds_alternative<bool>(cmd.payload))
+                outcome = g.TryMoveByDice(start, std::get<bool>(cmd.payload)).first;
+
             if(outcome == Game::status_codes::SUCCESS)  // turn not over
                 start_selected = false;
             else if(outcome == Game::status_codes::NO_LEGAL_MOVES_LEFT)
                 SwitchTurns();
             else
                 start_selected = false; // unselect start if illegal move attempted or start re-selected
-
-            // ... respond to info, eg else print status (move_status)
         }
         else
         {
-            outcome = g.TryStart(cmd.to_select.value());
-
+            if(!std::holds_alternative<NardiCoord>(cmd.payload))
+                break;  // attempted to move by dice without selecting start, or monostate payload
+            
+            outcome = g.TryStart(std::get<NardiCoord>(cmd.payload));
             if (outcome == Game::status_codes::SUCCESS)
             {
-                start = cmd.to_select.value();
+                start = std::get<NardiCoord>(cmd.payload);
                 start_selected = true;
             }
-            // else ... respond to info or maybe do nothing
         }
         break;
     default:

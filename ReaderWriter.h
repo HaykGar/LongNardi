@@ -3,8 +3,6 @@
 #include "NardiGame.h"
 #include "Controller.h"
 
-#include <optional>
-
 class ReaderWriter
 {
     public:

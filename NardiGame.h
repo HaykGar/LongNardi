@@ -57,7 +57,8 @@ class Game
             DEST_ENEMY,
             BACKWARDS_MOVE, 
             BOARD_END_REACHED, 
-            NO_PATH_TO_DEST,
+            NO_PATH,
+            ILLEGAL_MOVE,
             START_RESELECT,
             DICE_USED_ALREADY,
             HEAD_PLAYED_ALREADY,    // set a flag to false every time dice rolled, whenever board[player_idx][0] is played, maybe need one for selected, one for played...
@@ -69,7 +70,9 @@ class Game
         status_codes RollDice(); // set both dice to random integer 1 to 6
 
         status_codes TryStart(const NardiCoord& s) const;
-        status_codes TryFinishMove(const NardiCoord& start, const NardiCoord& end); // assuming valid start already `
+        status_codes TryFinishMove(const NardiCoord& start, const NardiCoord& end); // assuming valid start already
+        std::pair<Game::status_codes, NardiCoord> TryMoveByDice(const NardiCoord& start, bool dice);
+
 
         // void UndoMove(); // FIXME: add the functionality in Controller
             // as it is now, undoes entire turn so far. Once a turn is over it is over strictly. Also, will need changes for legality dicts `
@@ -95,8 +98,6 @@ class Game
     private:
         std::array<std::array<int, COL>, ROW> board;
         // first row of board is reversed in view, but stored this way for convenience/efficiency
-        bool player_idx;
-        int player_sign;
 
         std::mt19937 rng;                           // Mersenne Twister engine
         std::uniform_int_distribution<int> dist;    // uniform distribution for dice
@@ -116,19 +117,20 @@ class Game
                 status_codes MakeForcedMovesBothDiceUsable();
                 status_codes MakeForcedMoves_SingleDice();
 
-                std::pair<status_codes, NardiCoord> CanMoveByDice(const NardiCoord& start, bool dice_idx) const;
+                std::pair<status_codes, NardiCoord> CanMoveByDice(const NardiCoord& start, bool dice_idx, bool moved_hypothetically = false) const;
 
                 const NardiCoord& GetMidpoint() const;
 
                 unsigned GetDistance(bool sr, int sc, bool er, int ec) const;
 
                 NardiCoord CalculateFinalCoords(bool sr, int sc, bool dice_idx) const;
-                NardiCoord CoordAfterDistance(int row, int col, int d) const;
-                NardiCoord CoordAfterDistance(const NardiCoord& start, int d) const;
+                NardiCoord CalculateFinalCoords(const NardiCoord& start, bool dice_idx) const;
+                NardiCoord CoordAfterDistance(int row, int col, int d, bool player)const;
+                NardiCoord CoordAfterDistance(const NardiCoord& start, int d, bool player) const;
 
                 void UpdateAvailabilitySets(const NardiCoord start, const NardiCoord end);
 
-                void ResetHead();
+                void Reset();
                 void FlagHeadIfNeeded(const NardiCoord& start);
                 bool IsHead(const NardiCoord& c) const;
                 bool IsHead(int r, int c) const;
@@ -138,11 +140,18 @@ class Game
                 bool CanUseDice(bool idx, int n_times = 1) const;
                 status_codes MakeForcedMoves();
 
+                void SwitchPlayer();
+
+                int GetPlayerSign() const;
+                bool GetPlayerIdx() const;
+
                 friend class TestBuilder;
 
             private:
                 Game* g;
                 bool head_used;
+                bool player_idx;
+                int player_sign;
                 NardiCoord midpoint;
 
                 const NardiCoord head[2] = {NardiCoord(0, 0), NardiCoord(1, 0)};
@@ -150,31 +159,29 @@ class Game
 
                 Game::status_codes ForceMove(const NardiCoord& start, bool dice_idx, bool check_further_forced = true);
                 
-                status_codes LegalMove_2step(bool sr, int sc);
+                std::pair<Game::status_codes, NardiCoord> LegalMove_2step(bool sr, int sc);
+                bool BadRowChange(bool er, bool player) const;
                 bool BadRowChange(bool er) const;
-                status_codes WellDefinedMove(int sr, int sc, int er, int ec) const; // check that move start and end are not against the rules
-                status_codes WellDefinedMove(const NardiCoord& start, const NardiCoord& end) const; // check that move start and end are not against the rules
+                status_codes WellDefinedStart(int sr, int sc) const;    // check start is "feasible", ie a friendly piece
+                status_codes WellDefinedStart(const NardiCoord& start) const;
+                status_codes WellDefinedEnd(int sr, int sc, int er, int ec) const;      // check that move end from start is friendly or empty
+                status_codes WellDefinedEnd(const NardiCoord& start, const NardiCoord& end) const;
+                bool PreventsTurnCompletion(const NardiCoord& start, bool dice_idx) const;
+                bool StepsTwice(const NardiCoord& start) const;
 
                 status_codes ForcedMoves_DoublesCase();
                 status_codes HandleForced2DiceCase(bool dice_idx, const std::unordered_set<NardiCoord>& two_step_starts);
                 status_codes HandleSingleDiceCase(bool dice_idx);
-        };
-        // struct Move{
-        //     Move(const NardiCoord& s, const NardiCoord& e, int d1, int d2);
 
-        //     NardiCoord start;
-        //     NardiCoord end;
-        //     int m_diceUsed1;
-        //     int m_diceUsed2;
-        // };
+                bool InBounds(const NardiCoord& coord) const;
+                bool InBounds(int r, int c) const;
+
+                void ResetHead();
+        };
 
         Arbiter arbiter;
-        ReaderWriter* rw;
-        // std::stack<Move> move_history;
-        
+        ReaderWriter* rw;        
         status_codes MakeMove(const NardiCoord& start, const NardiCoord& end, bool check = true);
-        std::pair<Game::status_codes, NardiCoord> TryMoveByDice(const NardiCoord& start, bool dice);
-
 };
 
 inline
@@ -186,12 +193,12 @@ const std::array<std::array<int, COL>, ROW>& Game::GetBoardRef() const
 inline
 int Game::GetPlayerSign() const
 {
-    return player_sign;
+    return arbiter.GetPlayerSign();
 }
 
 inline 
 bool Game::GetPlayerIdx() const
-{ return player_idx; }
+{ return arbiter.GetPlayerIdx(); }
 
 inline
 void Game::AttachReaderWriter(ReaderWriter* r)
@@ -210,6 +217,31 @@ bool Game::GameIsOver() const {return false; } // FIXME LATER, won't even be inl
 
 inline const ReaderWriter* Game::GetConstRW() {return rw;}
 
+inline
+void Game::SwitchPlayer()
+{
+    arbiter.SwitchPlayer();
+}
+
+inline
+bool Game::Arbiter::InBounds(const NardiCoord& coord) const
+{
+    return InBounds(coord.row, coord.col);
+}
+
+inline
+bool Game::Arbiter::InBounds(int r, int c) const
+{
+    return (r >= 0 && r < ROW && c >= 0 && c < COL);
+}
+
+inline
+int Game::Arbiter::GetPlayerSign() const
+{ return player_sign; }
+
+inline
+bool Game::Arbiter::GetPlayerIdx() const
+{ return player_idx; }
 
 inline 
 void Game::Arbiter::FlagHeadIfNeeded(const NardiCoord& start)
@@ -219,16 +251,29 @@ void Game::Arbiter::FlagHeadIfNeeded(const NardiCoord& start)
 }
 
 inline
+void Game::Arbiter::SwitchPlayer(){
+    player_idx  = !player_idx;
+    player_sign = -player_sign;
+    Reset();
+}
+
+inline
+void Game::Arbiter::Reset()
+{
+    ResetHead();    // might have additional functionality later
+}
+
+inline
 void Game::Arbiter::ResetHead()
 { head_used = false; }
 
 inline
 bool Game::Arbiter::IsHead(const NardiCoord& coord) const
-{ return (coord.row == g->player_idx && coord.col == 0); }
+{ return (coord.row == player_idx && coord.col == 0); }
 
 inline 
 bool Game::Arbiter::IsHead(int r, int c) const
-{ return (r == g->player_idx && c == 0); }
+{ return (r == player_idx && c == 0); }
 
 inline
 bool Game::Arbiter::HeadReuseIssue(const NardiCoord& coord) const
@@ -237,3 +282,7 @@ bool Game::Arbiter::HeadReuseIssue(const NardiCoord& coord) const
 inline
 bool Game::Arbiter::HeadReuseIssue(int r, int c) const
 { return (IsHead(r, c) && head_used); }
+
+inline
+const NardiCoord& Game::Arbiter::GetMidpoint() const
+{    return midpoint;   }

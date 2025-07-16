@@ -1,7 +1,7 @@
 #pragma once 
 
-#include<optional>
 #include<iostream>
+#include <variant>
 
 const int ROW = 2;
 const int COL = 12;
@@ -39,21 +39,23 @@ namespace std
     };
 } // namespace std
 
-enum Actions
+enum class Actions
 {
     QUIT,
     UNDO,
     ROLL_DICE,
     SELECT_SLOT, 
+    MOVE_BY_DICE,
     NO_OP
 };   // later: add resign offer, mars offer
 
-struct Command // considering making this a union or something... 
+struct Command // considering making this std::variant or something... 
 {
     Command(Actions a) : action(a) {}
     Command(Actions a, int r, int c);
     Command(Actions a, NardiCoord coord);
+    Command(Actions a, bool dice_idx);
 
     Actions action;
-    std::optional<NardiCoord> to_select;
+    std::variant<std::monostate, NardiCoord, bool> payload;
 };

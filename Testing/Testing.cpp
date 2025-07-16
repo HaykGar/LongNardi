@@ -115,7 +115,7 @@ void TestBuilder::ConstructAvailabilitySets()
                 for(int d = 1; d <= 6; ++d)
                 {
                     NardiCoord dest = arb.CoordAfterDistance(start, d);
-                    if(arb.WellDefinedMove(start, dest) == Game::status_codes::SUCCESS)
+                    if(arb.WellDefinedEnd(start, dest) == Game::status_codes::SUCCESS)
                         arb.goes_idx_plusone[player_idx][d-1].insert(start);
                 }
             }
