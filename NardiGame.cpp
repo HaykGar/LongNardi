@@ -118,7 +118,7 @@ NardiCoord Game::Arbiter::CoordAfterDistance(int row, int col, int d) const
     int ec = col + d;
     if(ec > 0 && ec < COL)
         return {row, ec};
-    else    // bad row change in WellDefinedMove
+    else    // bad row change in WellDefinedEnd
     {
         if(ec < 0)
             ec = COL - ec;
@@ -160,11 +160,15 @@ Game::status_codes Game::Arbiter::ValidStart(int sr, int sc) const
         return status_codes::START_EMPTY_OR_ENEMY;
     else if (HeadReuseIssue(sr, sc)) 
         return status_codes::HEAD_PLAYED_ALREADY;
-    
-    return status_codes::SUCCESS;
+    else if(CanMoveByDice( {sr, sc}, 0).first != status_codes::SUCCESS && 
+            CanMoveByDice( {sr, sc}, 1).first != status_codes::SUCCESS )    // can't move by either dice
+        return status_codes::NO_PATH;
+    else
+        return status_codes::SUCCESS;
 }
 
-Game::status_codes Game::Arbiter::WellDefinedMove(int sr, int sc, int er, int ec) const // assumes start already checked to be valid
+// FIXME: treating no blocking tun as an occupied square... so well defined move will handle this `
+Game::status_codes Game::Arbiter::WellDefinedEnd(int sr, int sc, int er, int ec) const
 {   // avoid using goes_idx_plusone here, else circular reasoning
     if(er < 0 || er > ROW - 1 || ec < 0 || ec > COL - 1)
         return status_codes::OUT_OF_BOUNDS;
@@ -175,7 +179,7 @@ Game::status_codes Game::Arbiter::WellDefinedMove(int sr, int sc, int er, int ec
     else if(sr == er )
     {
         if (sc == ec)
-            return status_codes::START_RESELECT; // unselect start in this case
+            return status_codes::START_RESELECT;
         else if (sc > ec)
             return status_codes::BACKWARDS_MOVE;
 
@@ -188,15 +192,21 @@ Game::status_codes Game::Arbiter::WellDefinedMove(int sr, int sc, int er, int ec
     return status_codes::SUCCESS;
 }
 
-Game::status_codes Game::Arbiter::WellDefinedMove(const NardiCoord& start, const NardiCoord& end) const // start already checked to be valid
+Game::status_codes Game::Arbiter::WellDefinedEnd(const NardiCoord& start, const NardiCoord& end) const // start already checked to be valid
 {
-    return WellDefinedMove(start.row, start.col, end.row, end.col);
+    return WellDefinedEnd(start.row, start.col, end.row, end.col);
+}
+
+bool Game::Arbiter::BadRowChange(bool er) const // guaranteed sr != er
+{
+    int r = g->player_sign + er; // white to row 1 (r==2) or black to row 0 (r==-1) only acceptable choices, else r==1 or 0
+    return (r == 0 || r == 1);
 }
 
 std::pair<Game::status_codes, std::array<int, 2>> Game::Arbiter::LegalMove(int sr, int sc, int er, int ec)    
 // array represents how many times each dice is used, 0 or 1 usually, in case of doubles can be up to 4
 {
-    status_codes well_def = WellDefinedMove(sr, sc, er, ec);
+    status_codes well_def = WellDefinedEnd(sr, sc, er, ec);
     if(well_def != status_codes::SUCCESS)
         return {well_def, {}};
     
@@ -206,13 +216,13 @@ std::pair<Game::status_codes, std::array<int, 2>> Game::Arbiter::LegalMove(int s
         if(CanUseDice(0))
             return {status_codes::SUCCESS, {1, 0} };    // alert game that the legal move uses first dice once
        
-        return {status_codes::NO_PATH_TO_DEST, {}}; // dice already used up
+        return {status_codes::NO_PATH, {}}; // dice already used up
     }
     else if (d == g->dice[1]) {
         if(CanUseDice(1))
             return {status_codes::SUCCESS, {0, 1} };
         
-        return {status_codes::NO_PATH_TO_DEST, {} }; // dice already used up
+        return {status_codes::NO_PATH, {} }; // dice already used up
     }
     else    // can't reach with just one dice
     {
@@ -247,7 +257,7 @@ std::pair<Game::status_codes, std::array<int, 2>> Game::Arbiter::LegalMove(int s
             }
         }
         else
-            return {status_codes::NO_PATH_TO_DEST, {}};
+            return {status_codes::NO_PATH, {}};
     }
 }
 
@@ -259,7 +269,7 @@ Game::status_codes Game::Arbiter::LegalMove_2step(bool sr, int sc)
     {   // When moving 4, the second call of this function doesn't actually use a new midpoint because both_dice_works == true
         midpoint = CalculateFinalCoords(dest1.row, dest1.col, 1);
 
-        status_codes well_def = WellDefinedMove(sr, sc, midpoint.row, midpoint.col);
+        status_codes well_def = WellDefinedEnd(sr, sc, midpoint.row, midpoint.col);
         if(well_def != status_codes::SUCCESS)
             return well_def;
     }
@@ -272,13 +282,7 @@ Game::status_codes Game::Arbiter::LegalMove_2step(bool sr, int sc)
     if( (LegalMove(sr, sc, dest2.row, dest2.col).first == status_codes::SUCCESS) && CanUseDice(0) ) // can move by dice[1] first, dice1 used in LegalMove call
         return status_codes::SUCCESS;
 
-    return status_codes::NO_PATH_TO_DEST;
-}
-
-bool Game::Arbiter::BadRowChange(bool er) const // guaranteed sr != er
-{
-    int r = g->player_sign + er; // white to row 1 (r==2) or black to row 0 (r==-1) only acceptable choices, else r==1 or 0
-    return (r == 0 || r == 1);
+    return status_codes::NO_PATH;
 }
 
 void Game::Arbiter::UpdateAvailabilitySets(const NardiCoord start, const NardiCoord dest) // not reference since we destroy stuff
@@ -291,7 +295,7 @@ void Game::Arbiter::UpdateAvailabilitySets(const NardiCoord start, const NardiCo
         // update other player's options - can now move to this square
         int d = 1;
         NardiCoord coord = CoordAfterDistance(start, -d);
-        status_codes can_go = WellDefinedMove(coord, start);
+        status_codes can_go = WellDefinedEnd(coord, start);
 
         while( can_go != status_codes::OUT_OF_BOUNDS  && d <= 6 )
         {
@@ -300,7 +304,7 @@ void Game::Arbiter::UpdateAvailabilitySets(const NardiCoord start, const NardiCo
 
             ++d;
             coord = CoordAfterDistance(start, -d);
-            can_go = WellDefinedMove(coord, start);
+            can_go = WellDefinedEnd(coord, start);
         }
     }
     
@@ -309,8 +313,7 @@ void Game::Arbiter::UpdateAvailabilitySets(const NardiCoord start, const NardiCo
         // update player's options - can now move from this square
         int d = 1;
         NardiCoord coord = CoordAfterDistance(dest, d);
-        status_codes can_go = WellDefinedMove(dest, coord);
-
+        status_codes can_go = WellDefinedEnd(dest, coord);
         while( can_go != status_codes::OUT_OF_BOUNDS  && d <= 6 )
         {
             if(can_go == status_codes::SUCCESS && g->board[coord.row][coord.col] * g->player_sign >= 0) // square empty or occupied by player already
@@ -318,20 +321,19 @@ void Game::Arbiter::UpdateAvailabilitySets(const NardiCoord start, const NardiCo
             
             ++d;
             coord = CoordAfterDistance(dest, d);
-            can_go = WellDefinedMove(dest, coord);
+            can_go = WellDefinedEnd(dest, coord);
         }
-
         // update other player's options - can no longer move to this square
         d = 1;
         coord = CoordAfterDistance(start, -d);
-        while(d <= 6 && WellDefinedMove(coord, start) == status_codes::SUCCESS)
+        while(d <= 6 && WellDefinedEnd(coord, start) == status_codes::SUCCESS)
         {
             if(g->board[coord.row][coord.col] * g->player_sign < 0) // other player occupies coord
                 goes_idx_plusone[!g->player_idx][d-1].erase(coord);   // pieces at coord can no longer travel here
 
             ++d;
             coord = CoordAfterDistance(start, -d);
-            can_go = WellDefinedMove(coord, start);
+            can_go = WellDefinedEnd(coord, start);
         }
     }
 }
@@ -497,14 +499,36 @@ std::pair<Game::status_codes, NardiCoord> Game::Arbiter::CanMoveByDice(const Nar
         return {status_codes::DICE_USED_ALREADY, {} };
     
     NardiCoord final_dest = CalculateFinalCoords(start.row, start.col, dice_idx);
-    status_codes result = WellDefinedMove(start.row, start.col, final_dest.row, final_dest.col);
+    status_codes result = WellDefinedEnd(start.row, start.col, final_dest.row, final_dest.col);
 
-    return {result, final_dest};
+    if (result == status_codes::SUCCESS && PreventsTurnCompletion(start, dice_idx))
+        return {status_codes::ILLEGAL_MOVE, {} };
+    else
+        return {result, final_dest};
 }
 
-const NardiCoord& Game::Arbiter::GetMidpoint() const
+bool Game::Arbiter::PreventsTurnCompletion(const NardiCoord& start, bool dice_idx) const
 {
-    return midpoint;
+    if(!g->doubles_rolled && CanUseDice(0) && CanUseDice(1) && !StepsTwice(start))
+    {
+        /*
+            If can move another piece (goes_idx non empty, isn't just start or can reuse start), no problem
+            so problem is when goes_idx empty or only start without reuse available
+        */
+        bool NoReuseStart = IsHead(start) || g->player_sign * g->board[start.row][start.col] == 1;
+        return ( goes_idx_plusone[g->player_idx][g->dice[!dice_idx] - 1].empty() || 
+                (   goes_idx_plusone[g->player_idx][g->dice[!dice_idx] - 1].size() == 1 &&
+                    goes_idx_plusone[g->player_idx][g->dice[!dice_idx] - 1].contains(start) && NoReuseStart    ) );
+    }
+    else
+        return false;
+}
+
+bool Game::Arbiter::StepsTwice(const NardiCoord& start) const
+{
+    NardiCoord dest = CalculateFinalCoords(start, 0);
+    dest =  CalculateFinalCoords(dest, 1);
+    return (WellDefinedEnd(start, dest) == status_codes::SUCCESS);
 }
 
 NardiCoord Game::Arbiter::CalculateFinalCoords(bool sr, int sc, bool dice_idx) const
@@ -517,6 +541,11 @@ NardiCoord Game::Arbiter::CalculateFinalCoords(bool sr, int sc, bool dice_idx) c
     // validity not inherently guaranteed by this computation
 } 
 
+NardiCoord Game::Arbiter::CalculateFinalCoords(const NardiCoord& start, bool dice_idx) const
+{
+    return CalculateFinalCoords(start.row, start.col, dice_idx);
+}
+
 bool Game::Arbiter::CanUseDice(bool idx, int n) const
 {
     int new_val = g->dice_used[idx] + n;
@@ -524,7 +553,7 @@ bool Game::Arbiter::CanUseDice(bool idx, int n) const
     if doubles, new_val + dice_used[!idx] <= 4      <==>    new_val <= 4 - dice_used[!idx]
     else, new_val <= 1
     */
-    return ( new_val <= 1 + 3*g->doubles_rolled - g->dice_used[!idx] * g->doubles_rolled );
+    return ( new_val <= 1 + g->doubles_rolled*(3 - g->dice_used[!idx]));
 }
 
 Game::status_codes Game::Arbiter::ForceMove(const NardiCoord& start, bool dice_idx, bool check_further)  // only to be called when forced

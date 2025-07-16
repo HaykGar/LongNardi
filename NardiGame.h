@@ -57,7 +57,8 @@ class Game
             DEST_ENEMY,
             BACKWARDS_MOVE, 
             BOARD_END_REACHED, 
-            NO_PATH_TO_DEST,
+            NO_PATH,
+            ILLEGAL_MOVE,
             START_RESELECT,
             DICE_USED_ALREADY,
             HEAD_PLAYED_ALREADY,    // set a flag to false every time dice rolled, whenever board[player_idx][0] is played, maybe need one for selected, one for played...
@@ -125,6 +126,7 @@ class Game
                 unsigned GetDistance(bool sr, int sc, bool er, int ec) const;
 
                 NardiCoord CalculateFinalCoords(bool sr, int sc, bool dice_idx) const;
+                NardiCoord CalculateFinalCoords(const NardiCoord& start, bool dice_idx) const;
                 NardiCoord CoordAfterDistance(int row, int col, int d) const;
                 NardiCoord CoordAfterDistance(const NardiCoord& start, int d) const;
 
@@ -154,8 +156,10 @@ class Game
                 
                 status_codes LegalMove_2step(bool sr, int sc);
                 bool BadRowChange(bool er) const;
-                status_codes WellDefinedMove(int sr, int sc, int er, int ec) const; // check that move start and end are not against the rules
-                status_codes WellDefinedMove(const NardiCoord& start, const NardiCoord& end) const; // check that move start and end are not against the rules
+                status_codes WellDefinedEnd(int sr, int sc, int er, int ec) const; // check that move start and end are not against the rules
+                status_codes WellDefinedEnd(const NardiCoord& start, const NardiCoord& end) const; // check that move start and end are not against the rules
+                bool PreventsTurnCompletion(const NardiCoord& start, bool dice_idx) const;
+                bool StepsTwice(const NardiCoord& start) const;
 
                 status_codes ForcedMoves_DoublesCase();
                 status_codes HandleForced2DiceCase(bool dice_idx, const std::unordered_set<NardiCoord>& two_step_starts);
@@ -237,3 +241,7 @@ bool Game::Arbiter::HeadReuseIssue(const NardiCoord& coord) const
 inline
 bool Game::Arbiter::HeadReuseIssue(int r, int c) const
 { return (IsHead(r, c) && head_used); }
+
+inline
+const NardiCoord& Game::Arbiter::GetMidpoint() const
+{    return midpoint;   }

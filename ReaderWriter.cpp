@@ -26,8 +26,8 @@ void ReaderWriter::DispErrorCode(Game::status_codes c) const
     case Game::status_codes::BOARD_END_REACHED:
         ErrorMessage("BOARD_END_REACHED");
         break;
-    case Game::status_codes::NO_PATH_TO_DEST:
-        ErrorMessage("NO_PATH_TO_DEST");
+    case Game::status_codes::NO_PATH:
+        ErrorMessage("NO_PATH");
         break;
     case Game::status_codes::START_RESELECT:
         ErrorMessage("START_RESELECT");
