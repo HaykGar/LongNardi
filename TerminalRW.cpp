@@ -30,7 +30,7 @@ void TerminalRW::AwaitUserCommand()
     Command cmd = Input_to_Command();
     Game::status_codes code = Game::status_codes::MISC_FAILURE;
 
-    if(cmd.action != NO_OP) // avoid wasteful passing flow to control
+    if(cmd.action != Actions::NO_OP) // avoid wasteful passing flow to control
         code = ctrl.ReceiveCommand(cmd);
 
     DispErrorCode(code);
@@ -42,14 +42,18 @@ Command TerminalRW::Input_to_Command() const
     
     if (input_pieces.size() == 1 && input_pieces[0].length() == 1)
     {
-        if(input_pieces[0] == "q")
+        char ch = input_pieces[0][0];
+        if(ch == 'q')
             return Command(Actions::QUIT);
         
-        else if(input_pieces[0] == "r")
+        else if(ch == 'r')
             return Command(Actions::ROLL_DICE);
         
-        else if(input_pieces[0] == "u")
+        else if(ch == 'u')
             return Command(Actions::UNDO);
+
+        else if(isdigit(ch))
+            return Command(Actions::MOVE_BY_DICE, ch - '0');
 
         else
             return Actions::NO_OP;

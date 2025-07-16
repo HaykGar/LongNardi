@@ -69,7 +69,9 @@ class Game
         status_codes RollDice(); // set both dice to random integer 1 to 6
 
         status_codes TryStart(const NardiCoord& s) const;
-        status_codes TryFinishMove(const NardiCoord& start, const NardiCoord& end); // assuming valid start already `
+        status_codes TryFinishMove(const NardiCoord& start, const NardiCoord& end); // assuming valid start already
+        std::pair<Game::status_codes, NardiCoord> TryMoveByDice(const NardiCoord& start, bool dice);
+
 
         // void UndoMove(); // FIXME: add the functionality in Controller
             // as it is now, undoes entire turn so far. Once a turn is over it is over strictly. Also, will need changes for legality dicts `
@@ -173,8 +175,6 @@ class Game
         // std::stack<Move> move_history;
         
         status_codes MakeMove(const NardiCoord& start, const NardiCoord& end, bool check = true);
-        std::pair<Game::status_codes, NardiCoord> TryMoveByDice(const NardiCoord& start, bool dice);
-
 };
 
 inline
