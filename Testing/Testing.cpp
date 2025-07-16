@@ -183,7 +183,136 @@ std::vector<TestCase> TestLoader::operator() ()
 
 void TestLoader::add_basic_move_cases()
 {
+    std::array< std::array<int, COL>, ROW> brd = {  { {15, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}, {-15, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0} }  };
+    std::array<int, 2> dice = {6, 5};
+    std::array<int, 2> dice_used = {0, 0};
 
+    std::queue<TestCase> cases;
+
+    cases.push(TestCase (
+        "Select Test",
+        Command(Actions::SELECT_SLOT, {0, 11}),
+        brd,
+        false, // white
+        dice,
+        dice_used,
+        false,  // head not used
+        Game::status_codes::SUCCESS
+    ));
+
+    cases.push(TestCase (
+        "Move Test",
+        Command(Actions::SELECT_SLOT, {0, 0}),  
+        brd,
+        false, // white
+        dice,
+        dice_used,
+        false,  // head not used
+        Game::status_codes::NO_LEGAL_MOVES_LEFT,
+        {0, 11} // start coord as seen
+    ));
+
+    std::array< std::array<int, COL>, ROW> brd2 = {  { {13, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0}, 
+                                                    {-10, 0, 0, 0, 0, 0, 0, -1, 0, -1, 0, 1} }  };
+
+    std::array< std::array<int, COL>, ROW> brd3 = {  {  {15, 0, 0, -1, -1, 0, 0, 0, 0, 0, 0, 0}, 
+                                                        {-13, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0} }  };
+
+    std::array<int, 2> dice2 = {3, 4};
+
+    cases.push(TestCase(
+        "2 step move - both midpoints obstructed",
+        Command(Actions::SELECT_SLOT, {0, 4}),
+        brd3,
+        false, // white
+        dice2, 
+        dice_used,
+        false,  // head not used
+        Game::status_codes::NO_PATH,
+        {0, 11} // start coord
+    ));
+
+    std::array<int, 2> dice3 = {4, 2};
+
+    cases.push(TestCase(
+        "2 step move no obstruction",
+        Command(Actions::SELECT_SLOT, {0, 5}),
+        brd3,
+        false, // white
+        dice3, 
+        dice_used,
+        false,  // head not used
+        Game::status_codes::NO_LEGAL_MOVES_LEFT,
+        {0, 11} // start coord
+    ));
+
+    std::array<int, 2> dice4 = {5, 5};
+
+    cases.push(TestCase(
+        "Doubles - move 3x no obstructions",
+        Command(Actions::SELECT_SLOT, {1, 3}),
+        brd,    // starting board
+        false, // white
+        dice4, 
+        dice_used,
+        false,  // head not used
+        Game::status_codes::NO_LEGAL_MOVES_LEFT,
+        {0, 11} // start coord, head
+    ));
+
+    cases.push(TestCase(
+        "Doubles - move 4x no obstructions",
+        Command(Actions::SELECT_SLOT, {1, 8}),
+        brd,    // starting board
+        false, // white
+        dice4, 
+        dice_used,
+        false,  // head not used
+        Game::status_codes::NO_LEGAL_MOVES_LEFT,
+        {0, 11} // start coord, head
+    ));
+
+    std::array< std::array<int, COL>, ROW> brd4 = {  {  {14, 0, 0, 0, 0, 0, 0, 0, 0, 0, -1, 0}, 
+                                                        {-14, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0} }  };
+
+    cases.push(TestCase(
+        "Doubles - move 3x with obstruction",
+        Command(Actions::SELECT_SLOT, {1, 3}),
+        brd4,
+        false, // white
+        dice4, 
+        dice_used,
+        false,  // head not used
+        Game::status_codes::NO_PATH,
+        {0, 11} // start coord
+    ));
+
+    cases.push(TestCase(
+        "Doubles - move 4x with obstruction",
+        Command(Actions::SELECT_SLOT, {1, 8}),
+        brd4,
+        false, // white
+        dice4, 
+        dice_used,
+        false,  // head not used
+        Game::status_codes::NO_PATH,
+        {0, 11} // start coord
+    ));
+
+    std::array< std::array<int, COL>, ROW> brd5 = {  {  {14, 0, 0, 0, 0, 0, 1, 0, 0, 0, -1, 0}, 
+                                                        {-13, 0, 0, 0, -1, 0, 0, 0, 0, 0, 0, 0} }  };
+
+    cases.push(TestCase(
+        "Doubles - forced move, not enough for full turn",
+        Command(Actions::MOVE_BY_DICE, 0),
+        brd5,
+        false, // white
+        dice4, 
+        dice_used,
+        false,  // head not used
+        Game::status_codes::NO_LEGAL_MOVES_LEFT,
+        {0, 5} // start coord
+    ));
 }
 
 void TestLoader::add_dice_misuse_cases()
@@ -193,5 +322,15 @@ void TestLoader::add_dice_misuse_cases()
 
 void TestLoader::add_legality_cases()
 {
-
+    cases.push(TestCase(
+        "Prevents Turn Finish",
+        Command(Actions::MOVE_BY_DICE, 0),  // move by 5
+        brd2,
+        true, // black
+        dice, 
+        dice_used,
+        false,  // head not used
+        Game::status_codes::ILLEGAL_MOVE,
+        {1, 0} // start coord
+    ));
 }
