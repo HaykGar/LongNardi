@@ -1,6 +1,6 @@
 #include "Controller.h"
 
-Controller::Controller(Game& game) : start(), start_selected(false), dice_rolled(false), quit_requested(false), g(game) {}
+Controller::Controller(Game& game) : g(game), start(), start_selected(false), dice_rolled(false), quit_requested(false)  {}
 
 void Controller::SwitchTurns()
 {
@@ -66,4 +66,3 @@ Game::status_codes Controller::ReceiveCommand(Command& cmd)
 
     return outcome;
 }
-

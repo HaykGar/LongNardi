@@ -13,6 +13,8 @@
 Check for only one piece from the "head" per turn 
     (with the exceptions 66, 44 on move 1)
 
+Legality issue (see test_cases)
+
 undo move feature
 
 UI and also for driver: let them move pieces by dice, so input start coord and number
@@ -83,11 +85,12 @@ class Game
 
         int GetDice(bool idx) const;
 
-        // void SetDice(int d1, int d2); // TESTING ONLY, DELETE ME LATER `
-
         const ReaderWriter* GetConstRW();   // const pointer, allowing controller to read commands and ask for 
 
         bool TurnOver() const;
+
+        // For Testing Only
+        friend class TestBuilder;
 
     private:
         std::array<std::array<int, COL>, ROW> board;
@@ -135,21 +138,18 @@ class Game
                 bool CanUseDice(bool idx, int n_times = 1) const;
                 status_codes MakeForcedMoves();
 
+                friend class TestBuilder;
+
             private:
                 Game* g;
                 bool head_used;
+                NardiCoord midpoint;
 
-                NardiCoord head[2];
-
-
+                const NardiCoord head[2] = {NardiCoord(0, 0), NardiCoord(1, 0)};
                 std::array< std::array< std::unordered_set<NardiCoord>, 6 >, 2 > goes_idx_plusone;
 
                 Game::status_codes ForceMove(const NardiCoord& start, bool dice_idx, bool check_further_forced = true);
                 
-                // void Force2StepMove(const NardiCoord& start);
-
-                NardiCoord midpoint;
-
                 status_codes LegalMove_2step(bool sr, int sc);
                 bool BadRowChange(bool er) const;
                 status_codes WellDefinedMove(int sr, int sc, int er, int ec) const; // check that move start and end are not against the rules
@@ -159,19 +159,18 @@ class Game
                 status_codes HandleForced2DiceCase(bool dice_idx, const std::unordered_set<NardiCoord>& two_step_starts);
                 status_codes HandleSingleDiceCase(bool dice_idx);
         };
+        // struct Move{
+        //     Move(const NardiCoord& s, const NardiCoord& e, int d1, int d2);
 
-        struct Move{
-            Move(const NardiCoord& s, const NardiCoord& e, int d1, int d2);
-
-            NardiCoord start;
-            NardiCoord end;
-            int m_diceUsed1;  // 
-            int m_diceUsed2;
-        };
+        //     NardiCoord start;
+        //     NardiCoord end;
+        //     int m_diceUsed1;
+        //     int m_diceUsed2;
+        // };
 
         Arbiter arbiter;
         ReaderWriter* rw;
-        std::stack<Move> move_history;
+        // std::stack<Move> move_history;
         
         status_codes MakeMove(const NardiCoord& start, const NardiCoord& end, bool check = true);
         std::pair<Game::status_codes, NardiCoord> TryMoveByDice(const NardiCoord& start, bool dice);

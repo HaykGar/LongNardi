@@ -11,17 +11,15 @@ class Controller
         virtual Game::status_codes ReceiveCommand(Command& cmd);
         bool QuitRequested() const;
 
-    protected:
+        friend class TestBuilder;
+    private:
+        Game& g;
         NardiCoord start;
         bool start_selected;
         bool dice_rolled;
-
         bool quit_requested;
 
         void SwitchTurns();
-
-        Game& g;
-
 };
 
 

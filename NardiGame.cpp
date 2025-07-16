@@ -147,8 +147,6 @@ void Game::SwitchPlayer()
 
 Game::Arbiter::Arbiter(Game* gp) : g(gp), head_used(false)
 {
-    head[0] = NardiCoord(0, 0);
-    head[1] = NardiCoord(1, 0);
     for(int p = 0; p < 2; ++p)  // 0 is player 1, 1 is player -1
         for(int i = 0; i < 6; ++i)
             goes_idx_plusone[p][i].insert(NardiCoord(p, 0));   // "head" can move any of the numbers initially
@@ -540,5 +538,5 @@ Game::status_codes Game::Arbiter::ForceMove(const NardiCoord& start, bool dice_i
 /////    Move    ////////
 ////////////////////////
 
-Game::Move::Move(const NardiCoord& s, const NardiCoord& e, int d1, int d2) : 
-start(s), end(e), m_diceUsed1(d1), m_diceUsed2(d2) {}
+// Game::Move::Move(const NardiCoord& s, const NardiCoord& e, int d1, int d2) : 
+// start(s), end(e), m_diceUsed1(d1), m_diceUsed2(d2) {}
