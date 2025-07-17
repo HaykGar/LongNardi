@@ -3,39 +3,18 @@
 int main()
 {
     TestBuilder tester;
+    TestLoader load_tests; 
 
-    std::array< std::array<int, COL>, ROW> brd = {  { {15, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}, {-15, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0} }  };
-    std::array<int, 2> dice = {6, 5};
-    std::array<int, 2> dice_used = {0, 0};
+    std::vector<TestCase> cases = load_tests();
 
-    std::queue<TestCase> cases;
-    cases.push(TestCase (
-        "Select Test",
-        Command(SELECT_SLOT, {0, 11}),
-        brd,
-        false, // white
-        dice,
-        dice_used,
-        false,  // head not used
-        Game::status_codes::SUCCESS
-    ));
+    int total_tests = cases.size();
+    int passed_tests = 0;
 
-    cases.push(TestCase (
-        "Move Test",
-        Command(SELECT_SLOT, {0, 0}),
-        brd,
-        false, // white
-        dice,
-        dice_used,
-        false,  // head not used
-        Game::status_codes::NO_LEGAL_MOVES_LEFT,
-        {0, 0} // start coord
-    ));
-
-    while(!cases.empty())
+    for (auto test_case : cases)
     {
-        tester.Test(cases.front());
-        cases.pop();
+        passed_tests += tester.Test(test_case); // adds 1 for every passed test
     }
 
+    std::cout << "\n\n" << "All test complete\n" << "Passed " << passed_tests << " / " << total_tests << " tests.\n";
+        
 }

@@ -49,11 +49,13 @@ enum class Actions
     NO_OP
 };   // later: add resign offer, mars offer
 
+void VisualToGameCoord(NardiCoord& coord);
+
 struct Command // considering making this std::variant or something... 
 {
     Command(Actions a) : action(a) {}
-    Command(Actions a, int r, int c);
     Command(Actions a, NardiCoord coord);
+    Command(Actions a, int r, int c);
     Command(Actions a, bool dice_idx);
 
     Actions action;
