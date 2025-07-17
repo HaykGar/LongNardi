@@ -41,9 +41,12 @@ class ReaderWriter;
 class Game
 {
     public:
+        // construction and initialization:
         Game(int seed = 1); 
+        void AttachReaderWriter(ReaderWriter* r);
 
-        enum class status_codes // enum class for scoping and extra safety
+        // enum class for scoping and extra safety
+        enum class status_codes 
         {
             SUCCESS,
             NO_LEGAL_MOVES_LEFT,
@@ -56,94 +59,65 @@ class Game
             ILLEGAL_MOVE,
             START_RESELECT,
             DICE_USED_ALREADY,
-            HEAD_PLAYED_ALREADY,    // set a flag to false every time dice rolled, whenever board[player_idx][0] is played, maybe need one for selected, one for played...
-            GAME_OVER,
+            HEAD_PLAYED_ALREADY,
             MISC_FAILURE
-        }; // 
-        
-        void AttachReaderWriter(ReaderWriter* r);
+        };        
 
-        status_codes RollDice(); // set both dice to random integer 1 to 6
-
+        // Gameplay
+        status_codes RollDice();
         status_codes TryStart(const NardiCoord& s) const;
-        status_codes TryFinishMove(const NardiCoord& start, const NardiCoord& end); // assuming valid start already
+        status_codes TryFinishMove(const NardiCoord& start, const NardiCoord& end); 
         std::pair<Game::status_codes, NardiCoord> TryMoveByDice(const NardiCoord& start, bool dice);
-
-
-        // void UndoMove(); // FIXME: add the functionality in Controller
-            // as it is now, undoes entire turn so far. Once a turn is over it is over strictly. Also, will need changes for legality dicts `
-
         void SwitchPlayer();
         
-        const std::array<std::array<int, COL>, ROW>& GetBoardRef() const;
-
-        int GetPlayerSign() const;
-        bool GetPlayerIdx() const;
-
+        // State Checks
         bool CurrPlayerInEndgame() const;
-        
         bool GameIsOver() const;
 
+        // Getters
         int GetDice(bool idx) const;
-
+        int GetPlayerSign() const;
+        bool GetPlayerIdx() const;
+        const std::array<std::array<int, COL>, ROW>& GetBoardRef() const;
         const ReaderWriter* GetConstRW();   // const pointer, allowing controller to read commands and ask for 
 
-        bool TurnOver() const;
-
-        // For Testing Only
+        // Friend class for testing
         friend class TestBuilder;
 
     private:
-        std::array<std::array<int, COL>, ROW> board;
-        // first row of board is reversed in view, but stored this way for convenience/efficiency
-
+        std::array<std::array<int, COL>, ROW> board;    // first row of board is reversed from view
         std::mt19937 rng;                           // Mersenne Twister engine
         std::uniform_int_distribution<int> dist;    // uniform distribution for dice
         std::array<int, 2> dice; 
-        std::array<int, 2> dice_used;
+        std::array<int, 2> times_dice_used;
         bool doubles_rolled;
-        bool game_over;        
-
-        void UseDice(bool idx, int n = 1);
-
+        bool game_over; 
+        ReaderWriter* rw;        
+       
         class Arbiter
         {
             public:
                 Arbiter(Game* gp);
+
+                // Legality Checks
                 status_codes ValidStart(int sr, int sc) const; // check that start is in bounds and occupied by player's piece
+                std::pair<status_codes, NardiCoord> CanMoveByDice   (const NardiCoord& start, bool dice_idx, 
+                                                                    bool moved_hypothetically = false) const;
                 std::pair<status_codes, std::array<int, 2>> LegalMove(int sr, int sc, int er, int ec);
 
+                // Updates and Actions
                 void IncrementTurnNumber();
                 void UpdateOnMove(const NardiCoord& start, const NardiCoord& end);
-
-                std::pair<status_codes, NardiCoord> CanMoveByDice(const NardiCoord& start, bool dice_idx, bool moved_hypothetically = false) const;
-
-                unsigned GetDistance(bool sr, int sc, bool er, int ec) const;
-
-                NardiCoord CalculateFinalCoords(bool sr, int sc, bool dice_idx) const;
-                NardiCoord CalculateFinalCoords(const NardiCoord& start, bool dice_idx) const;
-                NardiCoord CoordAfterDistance(int row, int col, int d, bool player)const;
-                NardiCoord CoordAfterDistance(const NardiCoord& start, int d, bool player) const;
-
-                void UpdateAvailabilitySets(const NardiCoord start, const NardiCoord end);
-
-                void Reset();
                 void FlagHeadIfNeeded(const NardiCoord& start);
-                bool IsHead(const NardiCoord& c) const;
-                bool IsHead(int r, int c) const;
-                bool HeadReuseIssue(const NardiCoord& c) const;
-                bool HeadReuseIssue(int r, int c) const;
-
-                bool CanUseDice(bool idx, int n_times = 1) const;
+                void SwitchPlayer();
                 status_codes MakeForcedMoves();
 
-                void SwitchPlayer();
-
+                // Getters and state checks
                 int GetPlayerSign() const;
                 bool GetPlayerIdx() const;
-
                 bool CurrPlayerInEndgame() const;
 
+                // friend class for testing
                 friend class TestBuilder;
 
             private:
@@ -156,127 +130,115 @@ class Game
                 const NardiCoord head[2] = {NardiCoord(0, 0), NardiCoord(1, 0)};
                 std::array< std::array< std::unordered_set<NardiCoord>, 6 >, 2 > goes_idx_plusone;
                 int max_num_occ;
-
-                Game::status_codes ForceMove(const NardiCoord& start, bool dice_idx, bool check_further_forced = true);
                 
-                std::pair<Game::status_codes, NardiCoord> LegalMove_2step(bool sr, int sc);
-                bool BadRowChange(bool er, bool player) const;
-                bool BadRowChange(bool er) const;
+                // Legality Helpers
                 status_codes WellDefinedEnd(int sr, int sc, int er, int ec) const;      // check that move end from start is friendly or empty
                 status_codes WellDefinedEnd(const NardiCoord& start, const NardiCoord& end) const;
+                bool BadRowChange(bool er, bool player) const;
+                bool BadRowChange(bool er) const;
+
+                std::pair<Game::status_codes, NardiCoord> LegalMove_2step(bool sr, int sc);
+                
+                bool CanUseDice(bool idx, int n_times = 1) const;
                 bool PreventsTurnCompletion(const NardiCoord& start, bool dice_idx) const;
                 bool StepsTwice(const NardiCoord& start) const;
-
-                status_codes MakeForcedMovesBothDiceUsable();
-                status_codes HandleForced2DiceCase(bool dice_idx, const std::unordered_set<NardiCoord>& two_step_starts);
-
-                status_codes MakeForcedMoves_SingleDice();
-                status_codes HandleSingleDiceCase(bool dice_idx);
-                status_codes ForcedMoves_DoublesCase();
+                
+                bool IsHead(const NardiCoord& c) const;
+                bool IsHead(int r, int c) const;
+                bool HeadReuseIssue(const NardiCoord& c) const;
+                bool HeadReuseIssue(int r, int c) const;
 
                 bool InBounds(const NardiCoord& coord) const;
                 bool InBounds(int r, int c) const;
+                
+                // Coord and Distance Calculations
+                NardiCoord CalculateFinalCoords(bool sr, int sc, bool dice_idx) const;
+                NardiCoord CalculateFinalCoords(const NardiCoord& start, bool dice_idx) const;
+                NardiCoord CoordAfterDistance(int row, int col, int d, bool player)const;
+                NardiCoord CoordAfterDistance(const NardiCoord& start, int d, bool player) const;
+                unsigned GetDistance(bool sr, int sc, bool er, int ec) const;
 
+                // Forced Moves
+                status_codes CheckForced_2Dice();
+                status_codes HandleForced2Dice(bool dice_idx, const std::unordered_set<NardiCoord>& two_step_starts);
+                
+                status_codes CheckForced_1Dice();
+                status_codes HandleForced1Dice(bool dice_idx);
+                
+                status_codes CheckForced_Doubles();
+                
+                Game::status_codes ForceMove(const NardiCoord& start, bool dice_idx, bool check_further_forced = true);
+
+                // Updates and Actions
+                void UpdateAvailabilitySets(const NardiCoord start, const NardiCoord end);  // fixme cleanup code
+                void Reset();
                 void ResetHead();
-                bool GameIsOver() const;
                 void CalcMaxOcc();
         };
-
+        
         Arbiter arbiter;
-        ReaderWriter* rw;        
+        
         status_codes MakeMove(const NardiCoord& start, const NardiCoord& end, bool check = true);
+        void UseDice(bool idx, int n = 1);
 };
 
+
+///////////////////////////
+////////   Game   ////////
+/////////////////////////
+
+///////////// Initialization /////////////
+
 inline
-const std::array<std::array<int, COL>, ROW>& Game::GetBoardRef() const
-{
-    return board;
-}
+void Game::AttachReaderWriter(ReaderWriter* r)
+{   rw = r;   }
 
-inline bool Game::Arbiter::CurrPlayerInEndgame() const
-{ return (in_enemy_home[player_idx] == PIECES_PER_PLAYER); }
+///////////// Gameplay /////////////
 
+inline 
+void Game::UseDice(bool idx, int n)
+{   times_dice_used[idx] += n;  }
+
+inline
+void Game::SwitchPlayer()
+{   arbiter.SwitchPlayer();  }
+
+///////////// State Checks /////////////
 
 inline 
 bool Game::CurrPlayerInEndgame() const
 {   return arbiter.CurrPlayerInEndgame();    }
 
 inline
-int Game::GetPlayerSign() const
-{
-    return arbiter.GetPlayerSign();
-}
+bool Game::GameIsOver() const 
+{   return game_over;   }     // FIXME ALWAYS FALSE at the moment
 
-inline 
-bool Game::GetPlayerIdx() const
-{ return arbiter.GetPlayerIdx(); }
-
-inline
-void Game::AttachReaderWriter(ReaderWriter* r)
-{
-    rw = r;
-}
+///////////// Getters /////////////
 
 inline 
 int Game::GetDice(bool idx) const
-{
-    return dice[idx];
-}
+{   return dice[idx];   }
 
 inline
-bool Game::GameIsOver() const {return game_over; }
-
-inline const ReaderWriter* Game::GetConstRW() {return rw;}
-
-inline
-void Game::SwitchPlayer()
-{
-    arbiter.SwitchPlayer();
-}
-
-inline
-bool Game::Arbiter::InBounds(const NardiCoord& coord) const
-{
-    return InBounds(coord.row, coord.col);
-}
-
-inline
-bool Game::Arbiter::InBounds(int r, int c) const
-{
-    return (r >= 0 && r < ROW && c >= 0 && c < COL);
-}
-
-inline
-int Game::Arbiter::GetPlayerSign() const
-{ return player_sign; }
-
-inline
-bool Game::Arbiter::GetPlayerIdx() const
-{ return player_idx; }
+int Game::GetPlayerSign() const
+{   return arbiter.GetPlayerSign();   }
 
 inline 
-void Game::Arbiter::FlagHeadIfNeeded(const NardiCoord& start)
-{ 
-    if(!head_used && IsHead(start))
-        head_used = true; 
-}
+bool Game::GetPlayerIdx() const
+{   return arbiter.GetPlayerIdx();   }
 
 inline
-void Game::Arbiter::SwitchPlayer(){
-    player_idx  = !player_idx;
-    player_sign = -player_sign;
-    Reset();
-}
+const std::array<std::array<int, COL>, ROW>& Game::GetBoardRef() const
+{   return board;   }
 
-inline
-void Game::Arbiter::Reset()
-{
-    ResetHead();    // might have additional functionality later
-}
+inline const ReaderWriter* Game::GetConstRW() 
+{   return rw;   }
 
-inline
-void Game::Arbiter::ResetHead()
-{ head_used = false; }
+//////////////////////////////
+////////   Arbiter   ////////
+////////////////////////////
+
+///////////// Legality /////////////
 
 inline
 bool Game::Arbiter::IsHead(const NardiCoord& coord) const
@@ -294,6 +256,55 @@ inline
 bool Game::Arbiter::HeadReuseIssue(int r, int c) const
 { return HeadReuseIssue({r, c}); }
 
+inline
+bool Game::Arbiter::InBounds(const NardiCoord& coord) const
+{
+    return InBounds(coord.row, coord.col);
+}
+
+inline
+bool Game::Arbiter::InBounds(int r, int c) const
+{
+    return (r >= 0 && r < ROW && c >= 0 && c < COL);
+}
+
+///////////// Updates and Actions /////////////
+
 inline 
 void Game::Arbiter::IncrementTurnNumber()
 {   ++turn_number[player_idx];  }
+
+inline 
+void Game::Arbiter::FlagHeadIfNeeded(const NardiCoord& start)
+{ 
+    if(!head_used && IsHead(start))
+        head_used = true; 
+}
+
+inline
+void Game::Arbiter::SwitchPlayer(){
+    player_idx  = !player_idx;
+    player_sign = -player_sign;
+    Reset();
+}
+
+inline
+void Game::Arbiter::ResetHead()
+{ head_used = false; }
+
+inline
+void Game::Arbiter::Reset()
+{   ResetHead();   }
+
+///////////// Getters and State Checks /////////////
+
+inline
+int Game::Arbiter::GetPlayerSign() const
+{ return player_sign; }
+
+inline
+bool Game::Arbiter::GetPlayerIdx() const
+{ return player_idx; }
+
+inline bool Game::Arbiter::CurrPlayerInEndgame() const
+{ return (in_enemy_home[player_idx] == PIECES_PER_PLAYER); }
