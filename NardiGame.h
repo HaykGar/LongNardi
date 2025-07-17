@@ -10,8 +10,6 @@
 #include <random>
 
 /*
-Check for only one piece from the "head" per turn 
-    (with the exceptions 66, 44 on move 1)
 
 Legality issue (see test_cases)
 
@@ -101,8 +99,8 @@ class Game
 
         std::mt19937 rng;                           // Mersenne Twister engine
         std::uniform_int_distribution<int> dist;    // uniform distribution for dice
-        int dice[2] = {0, 0};
-        int dice_used[2] = {0, 0};
+        std::array<int, 2> dice; 
+        std::array<int, 2> dice_used;
         bool doubles_rolled;
 
         void UseDice(bool idx, int n = 1);
@@ -113,13 +111,13 @@ class Game
                 Arbiter(Game* gp);
                 status_codes ValidStart(int sr, int sc) const; // check that start is in bounds and occupied by player's piece
                 std::pair<status_codes, std::array<int, 2>> LegalMove(int sr, int sc, int er, int ec);
+
+                void IncrementTurnNumber();
                 
                 status_codes MakeForcedMovesBothDiceUsable();
                 status_codes MakeForcedMoves_SingleDice();
 
                 std::pair<status_codes, NardiCoord> CanMoveByDice(const NardiCoord& start, bool dice_idx, bool moved_hypothetically = false) const;
-
-                const NardiCoord& GetMidpoint() const;
 
                 unsigned GetDistance(bool sr, int sc, bool er, int ec) const;
 
@@ -152,7 +150,7 @@ class Game
                 bool head_used;
                 bool player_idx;
                 int player_sign;
-                NardiCoord midpoint;
+                std::array<int, 2> turn_number;
 
                 const NardiCoord head[2] = {NardiCoord(0, 0), NardiCoord(1, 0)};
                 std::array< std::array< std::unordered_set<NardiCoord>, 6 >, 2 > goes_idx_plusone;
@@ -281,8 +279,8 @@ bool Game::Arbiter::HeadReuseIssue(const NardiCoord& coord) const
 
 inline
 bool Game::Arbiter::HeadReuseIssue(int r, int c) const
-{ return (IsHead(r, c) && head_used); }
+{ return HeadReuseIssue({r, c}); }
 
-inline
-const NardiCoord& Game::Arbiter::GetMidpoint() const
-{    return midpoint;   }
+inline 
+void Game::Arbiter::IncrementTurnNumber()
+{   ++turn_number[player_idx];  }

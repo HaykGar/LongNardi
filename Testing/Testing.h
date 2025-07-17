@@ -1,7 +1,7 @@
 #pragma once
 #include "../NardiGame.h"
 #include "../Controller.h"
-#include "../ReaderWriter.h"
+#include "../TerminalRW.h"
 
 #include<functional>
 #include<cassert>
@@ -17,7 +17,8 @@ struct TestCase
         std::array<int, 2>& dice,
         std::array<int, 2>& diceUsed,
         bool headUsed,
-        Game::status_codes exp
+        Game::status_codes exp,
+        bool fm = false
     );
     TestCase(
         std::string msg,
@@ -28,7 +29,8 @@ struct TestCase
         std::array<int, 2>& diceUsed,
         bool headUsed,
         Game::status_codes exp,
-        NardiCoord s
+        NardiCoord s,
+        bool fm = false
     );
 
     std::string message;
@@ -41,6 +43,8 @@ struct TestCase
     Game::status_codes expected;
 
     std::optional<NardiCoord> start;
+
+    bool first_move;
 };
 
 class SilentRW : public ReaderWriter   // does nothing
@@ -75,7 +79,7 @@ class TestBuilder
     private:
         Game _game;
         Controller _ctrl;
-        SilentRW srw;
+        TerminalRW trw;
 
         void ConstructAvailabilitySets();
         void ResetControllerState();

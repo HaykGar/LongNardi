@@ -11,7 +11,8 @@ TestCase::TestCase(
         std::array<int, 2>& dice,
         std::array<int, 2>& diceUsed,
         bool headUsed,
-        Game::status_codes exp
+        Game::status_codes exp,
+        bool fm
     ) :
         message(std::move(msg)),
         cmd(std::move(c)),
@@ -20,7 +21,8 @@ TestCase::TestCase(
         dice_(dice),
         diceUsed_(diceUsed),
         headUsed_(headUsed),
-        expected(exp)
+        expected(exp),
+        first_move(fm)
     {}
 
 TestCase::TestCase(
@@ -32,7 +34,8 @@ TestCase::TestCase(
         std::array<int, 2>& diceUsed,
         bool headUsed,
         Game::status_codes exp,
-        NardiCoord s
+        NardiCoord s,
+        bool fm
     ) :
         message(std::move(msg)),
         cmd(std::move(c)),
@@ -42,7 +45,8 @@ TestCase::TestCase(
         diceUsed_(diceUsed),
         headUsed_(headUsed),
         expected(exp),
-        start(s)
+        start(s),
+        first_move(fm)
     {}
 
 
@@ -50,9 +54,9 @@ TestCase::TestCase(
 /////    Builder    /////
 ////////////////////////
 
-TestBuilder::TestBuilder(int seed) : _game(seed), _ctrl(_game), srw(_game, _ctrl) 
+TestBuilder::TestBuilder(int seed) : _game(seed), _ctrl(_game), trw(_game, _ctrl) 
 {
-    _game.AttachReaderWriter(&srw);
+    _game.AttachReaderWriter(&trw);
 }
 
 TestBuilder& TestBuilder::withBoard(const std::array<std::array<int, COL>, ROW>& b)
@@ -137,21 +141,35 @@ void TestBuilder::ResetControllerState()
 
 bool TestBuilder::Test(TestCase t_case) 
 {
-    withBoard(t_case.brd);
-    withDice(t_case.dice_);
-    withDiceUsed(t_case.diceUsed_);
-    withPlayer(t_case.p_idx);
-            
+    ResetControllerState();
+
+    Actions test_action = t_case.cmd.action;
+
     if(!t_case.message.empty())
         std::cout << t_case.message << std::endl;
 
-    if(t_case.start){
+    withBoard(t_case.brd);
+    withPlayer(t_case.p_idx);
+    withDice(t_case.dice_);
+    withDiceUsed(t_case.diceUsed_);
+    if(t_case.start) 
         withStart(t_case.start.value());
+    if(t_case.first_move)
+        _game.arbiter.turn_number[_game.arbiter.player_idx] = 1;
+
+    if(test_action == Actions::MOVE_BY_DICE || (test_action == Actions::SELECT_SLOT && t_case.start) 
+        || test_action == Actions::ROLL_DICE)
+    {
         std::cout << "Start Board:\n";
         _game.rw->ReAnimate();
     }
+
+    Game::status_codes result;
+    if (test_action == Actions::ROLL_DICE)
+        result = _game.arbiter.MakeForcedMovesBothDiceUsable();
+    else
+        result = _ctrl.ReceiveCommand(t_case.cmd);
     
-    Game::status_codes result = _ctrl.ReceiveCommand(t_case.cmd);
     bool passed = result == t_case.expected;
 
     std::cout << "End Board:\n";
@@ -162,32 +180,6 @@ bool TestBuilder::Test(TestCase t_case)
     return passed;
 }
 
-///////////////////////////
-/////    SilentRW    /////
-/////////////////////////
-
-SilentRW::SilentRW(const Game& game, Controller& c) : ReaderWriter(game, c) {}
-
-void SilentRW::AwaitUserCommand() {}
-void SilentRW::ReAnimate() const {
-    const auto& board = g.GetBoardRef();
-    bool player_row = g.GetPlayerIdx();
-    
-    for(int c = COL - 1; c >= 0; --c)
-        std::cout << board.at(player_row).at(c) << "\t";
-
-    std::cout << "\n\n";
-
-    for(int c = 0; c < COL; ++c)
-        std::cout << board.at(!player_row).at(c) << "\t";
-
-    std::cout << "\n\n";
-}        
-void SilentRW::AnimateDice() const {}
-void SilentRW::InstructionMessage(std::string m) const {}
-void SilentRW::ErrorMessage(std::string m) const {}
-
-Command SilentRW::Input_to_Command() const { return Command(Actions::NO_OP); } 
 
 //////////////////////////////////////
 /////    Test Case Generator    /////
@@ -340,6 +332,7 @@ void TestLoader::add_dice_misuse_cases()
 {
     std::array< std::array<int, COL>, ROW> brd = {  { {13, 0, 1, 0, 0, 0, 1, 0, 0, 0, 0, 0}, 
                                                     {-14, 0, 0, 0, 0, 0, 0, 0, 0, -1, 0, 0} }  };
+    
     std::array<int, 2> dice = {6, 5};
     std::array<int, 2> dice_used = {1, 0};
 
@@ -353,6 +346,37 @@ void TestLoader::add_dice_misuse_cases()
         false,  // head not used
         Game::status_codes::DICE_USED_ALREADY,
         {0, 0} // start coord
+    ));
+
+    std::array< std::array<int, COL>, ROW> start_brd = {  { {15, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}, 
+                                                    {-15, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0} }  };
+
+    std::array<int, 2> dice2 = {6, 6};
+    std::array<int, 2> dice_used2 = {0, 0};
+
+    cases.push_back(TestCase(
+        "First move double 6s",
+        Command(Actions::ROLL_DICE),
+        start_brd,
+        0, // white
+        dice2, 
+        dice_used2,
+        false,  // head not used
+        Game::status_codes::NO_LEGAL_MOVES_LEFT,
+        true    // first move
+    ));
+
+    dice2 = { {4, 4} };
+        cases.push_back(TestCase(
+        "First move double 4s",
+        Command(Actions::ROLL_DICE),
+        start_brd,
+        0, // white
+        dice2, 
+        dice_used2,
+        false,  // head not used
+        Game::status_codes::NO_LEGAL_MOVES_LEFT,
+        true    // first move
     ));
 }
 
@@ -374,4 +398,6 @@ void TestLoader::add_legality_cases()
         Game::status_codes::ILLEGAL_MOVE,
         {1, 0} // start coord
     ));
+
+
 }

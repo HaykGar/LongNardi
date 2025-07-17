@@ -15,7 +15,7 @@ void TerminalRW::ReAnimate() const
     for(int c = 0; c < COL; ++c)
         std::cout << board.at(!player_row).at(c) << "\t";
 
-    std::cout << "\n\n";
+    std::cout << "\n\n\n\n\n";
 }
 
 void TerminalRW::AnimateDice() const  // assumes proper values of dice fed in

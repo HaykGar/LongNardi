@@ -1,22 +1,24 @@
 #include "NardiGame.h"
 #include "ReaderWriter.h"
 
-Game::Game(int rseed) : rng(rseed), dist(1, 6), doubles_rolled(false), arbiter(this), rw(nullptr) 
+Game::Game(int rseed) : rng(rseed), dist(1, 6), dice({0, 0}), dice_used({0, 0}), 
+                        doubles_rolled(false), arbiter(this), rw(nullptr) 
 {
-    board = {  { {15, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}, {-15, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0} }  };
+    board = { { { 15, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}, 
+                {-15, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0} } };
 } 
-// player sign will actually have it be random 50/50, need to handle dice and other objects
 
 Game::status_codes Game::RollDice() // important to force this only once per turn in controller, no explicit safeguard here `
-{
+{    
     dice_used[0] = 0;
     dice_used[1] = 0;
     dice[0] = dist(rng);
     dice[1] = dist(rng);
-
     doubles_rolled = (dice[0] == dice[1]);
 
     rw->AnimateDice();
+
+    arbiter.IncrementTurnNumber();
 
     return arbiter.MakeForcedMovesBothDiceUsable();
 }
@@ -78,32 +80,6 @@ Game::status_codes Game::MakeMove(const NardiCoord& start, const NardiCoord& end
         return status_codes::SUCCESS;
 }
 
-// void Game::UndoMove()   // strict: no undoing after enemy dice roll. Watch for case after turn over, before enemy rolls or make even stricter. Needs safeguard or removal
-// {
-//     // going to be more complicated with legality dicts, FIX `
-//     if(move_history.empty()) // no-op ? `
-//     {
-//         rw->ErrorMessage("No moves to undo");
-//     }
-//     else{
-//         Move& lastMove = move_history.top();
-
-//         MakeMove(lastMove.end, lastMove.start);
-
-//         if(doubles_rolled)  // possibly dice used before this piece was moved, so we should not erase all of the progress on dice_used
-//         {
-//             unsigned d = arbiter.GetDistance(lastMove.start.row, lastMove.start.col, lastMove.end.row, lastMove.end.col);
-//             dice_used[0] -= d;  // ok if negative, we only need the sum with dice_used[1] to match sum of (dice[0] + dice[1])*multiplier
-//         }
-//         else    // no doubles so only one dice used so far
-//         {
-//             dice_used[0] -= lastMove.m_diceUsed1;
-//             dice_used[1] -= lastMove.m_diceUsed2;
-//         }
-//         move_history.pop();
-//     }
-// }
-
 unsigned Game::Arbiter::GetDistance(bool sr, int sc, bool er, int ec) const
 {
     if(sr == er)
@@ -142,7 +118,7 @@ NardiCoord Game::Arbiter::CoordAfterDistance(const NardiCoord& start, int d, boo
 /////   Arbiter ////////
 ///////////////////////
 
-Game::Arbiter::Arbiter(Game* gp) : g(gp), head_used(false), player_idx(0)
+Game::Arbiter::Arbiter(Game* gp) : g(gp), head_used(false), player_idx(0), turn_number({0, 0})   // player sign 50/50 ?
 {
     player_sign = player_idx ? -1 : 1;
     for(int p = 0; p < 2; ++p)  // 0 is player 1, 1 is player -1
@@ -396,6 +372,18 @@ Game::status_codes Game::Arbiter::MakeForcedMoves_SingleDice()
 
 Game::status_codes Game::Arbiter::ForcedMoves_DoublesCase()
 {
+    if(turn_number[player_idx] == 1 && (g->dice[0] == 4 || g->dice[0] == 6 ) )
+    {
+        ForceMove(head[player_idx], 0, false);  // twice from head
+        ForceMove(head[player_idx], 0, false);
+        if(g->dice[0] == 4 )
+        {
+            ForceMove({player_idx, g->dice[0]}, 0, false);      // move both resulting pieces
+            ForceMove({player_idx, g->dice[0]}, 0, false);
+        }
+        return status_codes::NO_LEGAL_MOVES_LEFT;
+    }
+
     int steps_left = 4 - ( (g->dice_used[0]*g->dice[0] + g->dice_used[1]*g->dice[1]) / g->dice[0] ); // steps left to complete turn
     int steps_taken = 0;    // counter, when exceeds steps_left 
 
