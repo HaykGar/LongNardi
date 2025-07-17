@@ -38,7 +38,12 @@ Game::status_codes Controller::ReceiveCommand(Command& cmd)
         
         else if(start_selected)
         {
-            if(std::holds_alternative<NardiCoord>(cmd.payload))
+            if(g.CurrPlayerInEndgame())
+            {
+                if (std::holds_alternative<bool>(cmd.payload))  // only accept dice idx in this case
+                    outcome = g.TryMovePieceEndgame(start, std::get<bool>(cmd.payload));
+            }
+            else if(std::holds_alternative<NardiCoord>(cmd.payload))
                 outcome = g.TryFinishMove(start, std::get<NardiCoord>(cmd.payload) ); // this makes the move if possible, triggering redraws
             else if (std::holds_alternative<bool>(cmd.payload))
                 outcome = g.TryMoveByDice(start, std::get<bool>(cmd.payload)).first;

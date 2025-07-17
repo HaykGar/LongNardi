@@ -5,6 +5,7 @@
 
 const int ROW = 2;
 const int COL = 12;
+const int PIECES_PER_PLAYER = 15;
 
 struct NardiCoord
 {

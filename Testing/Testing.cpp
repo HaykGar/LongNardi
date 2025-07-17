@@ -200,8 +200,8 @@ std::vector<TestCase> TestLoader::operator() ()
 
 void TestLoader::add_basic_move_cases()
 {
-    std::array< std::array<int, COL>, ROW> brd = {{ {15, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}, 
-                                                    {-15, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0} }};
+    std::array< std::array<int, COL>, ROW> brd = {{ {PIECES_PER_PLAYER, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}, 
+                                                    {-PIECES_PER_PLAYER, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0} }};
     std::array<int, 2> dice = {6, 5};
     std::array<int, 2> dice_used = {0, 0};
 
@@ -228,7 +228,7 @@ void TestLoader::add_basic_move_cases()
         {0, 11} // start coord as seen
     ));
 
-    std::array< std::array<int, COL>, ROW> brd3 = {  {  {15, 0, 0, -1, -1, 0, 0, 0, 0, 0, 0, 0}, 
+    std::array< std::array<int, COL>, ROW> brd3 = {  {  {PIECES_PER_PLAYER, 0, 0, -1, -1, 0, 0, 0, 0, 0, 0, 0}, 
                                                         {-13, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0} }  };
 
     std::array<int, 2> dice2 = {3, 4};
@@ -348,8 +348,8 @@ void TestLoader::add_dice_misuse_cases()
         {0, 0} // start coord
     ));
 
-    std::array< std::array<int, COL>, ROW> start_brd = {  { {15, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}, 
-                                                    {-15, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0} }  };
+    std::array< std::array<int, COL>, ROW> start_brd = {  { {PIECES_PER_PLAYER, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}, 
+                                                    {-PIECES_PER_PLAYER, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0} }  };
 
     std::array<int, 2> dice2 = {6, 6};
     std::array<int, 2> dice_used2 = {0, 0};

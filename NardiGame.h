@@ -10,21 +10,16 @@
 #include <random>
 
 /*
-
-Legality issue (see test_cases)
-
-undo move feature
-
-UI and also for driver: let them move pieces by dice, so input start coord and number
-
-Automate dice rolling from controller
-
 Hanel@ verjum
 
 Handle Win, hanel@ vor prcni it'll alert. Possibly increment a score or something, maybe controller or display handles that
     counters for pieces in house...
 
-Clean up Coord vs row and col
+Case: mtnel during turn
+
+undo move feature
+
+Automate dice rolling from controller
 
 Chi kareli chtoghel tun mtnel araji angam -- check details of this rule
     - bool mtac[2], mtneluc -> mtac[player] = true
@@ -34,6 +29,8 @@ Chi kareli chtoghel tun mtnel araji angam -- check details of this rule
             - ha -> hnaravor a drancic mek@ mtnel? bolori naxkin 6 tegh@ stugel...
                 -> sagh pak: illegal
                 -> bac tegher: ardyok hnaravor a mtnel?
+
+Rule precedence: only available move creates block issue not allowed
 
 Thoroughly test basic mechanics
 */
@@ -60,6 +57,7 @@ class Game
             START_RESELECT,
             DICE_USED_ALREADY,
             HEAD_PLAYED_ALREADY,    // set a flag to false every time dice rolled, whenever board[player_idx][0] is played, maybe need one for selected, one for played...
+            GAME_OVER,
             MISC_FAILURE
         }; // 
         
@@ -81,6 +79,8 @@ class Game
 
         int GetPlayerSign() const;
         bool GetPlayerIdx() const;
+
+        bool CurrPlayerInEndgame() const;
         
         bool GameIsOver() const;
 
@@ -102,6 +102,7 @@ class Game
         std::array<int, 2> dice; 
         std::array<int, 2> dice_used;
         bool doubles_rolled;
+        bool game_over;        
 
         void UseDice(bool idx, int n = 1);
 
@@ -113,9 +114,7 @@ class Game
                 std::pair<status_codes, std::array<int, 2>> LegalMove(int sr, int sc, int er, int ec);
 
                 void IncrementTurnNumber();
-                
-                status_codes MakeForcedMovesBothDiceUsable();
-                status_codes MakeForcedMoves_SingleDice();
+                void UpdateOnMove(const NardiCoord& start, const NardiCoord& end);
 
                 std::pair<status_codes, NardiCoord> CanMoveByDice(const NardiCoord& start, bool dice_idx, bool moved_hypothetically = false) const;
 
@@ -143,6 +142,8 @@ class Game
                 int GetPlayerSign() const;
                 bool GetPlayerIdx() const;
 
+                bool CurrPlayerInEndgame() const;
+
                 friend class TestBuilder;
 
             private:
@@ -151,30 +152,34 @@ class Game
                 bool player_idx;
                 int player_sign;
                 std::array<int, 2> turn_number;
-
+                std::array<int, 2> in_enemy_home;
                 const NardiCoord head[2] = {NardiCoord(0, 0), NardiCoord(1, 0)};
                 std::array< std::array< std::unordered_set<NardiCoord>, 6 >, 2 > goes_idx_plusone;
+                int max_num_occ;
 
                 Game::status_codes ForceMove(const NardiCoord& start, bool dice_idx, bool check_further_forced = true);
                 
                 std::pair<Game::status_codes, NardiCoord> LegalMove_2step(bool sr, int sc);
                 bool BadRowChange(bool er, bool player) const;
                 bool BadRowChange(bool er) const;
-                status_codes WellDefinedStart(int sr, int sc) const;    // check start is "feasible", ie a friendly piece
-                status_codes WellDefinedStart(const NardiCoord& start) const;
                 status_codes WellDefinedEnd(int sr, int sc, int er, int ec) const;      // check that move end from start is friendly or empty
                 status_codes WellDefinedEnd(const NardiCoord& start, const NardiCoord& end) const;
                 bool PreventsTurnCompletion(const NardiCoord& start, bool dice_idx) const;
                 bool StepsTwice(const NardiCoord& start) const;
 
-                status_codes ForcedMoves_DoublesCase();
+                status_codes MakeForcedMovesBothDiceUsable();
                 status_codes HandleForced2DiceCase(bool dice_idx, const std::unordered_set<NardiCoord>& two_step_starts);
+
+                status_codes MakeForcedMoves_SingleDice();
                 status_codes HandleSingleDiceCase(bool dice_idx);
+                status_codes ForcedMoves_DoublesCase();
 
                 bool InBounds(const NardiCoord& coord) const;
                 bool InBounds(int r, int c) const;
 
                 void ResetHead();
+                bool GameIsOver() const;
+                void CalcMaxOcc();
         };
 
         Arbiter arbiter;
@@ -187,6 +192,14 @@ const std::array<std::array<int, COL>, ROW>& Game::GetBoardRef() const
 {
     return board;
 }
+
+inline bool Game::Arbiter::CurrPlayerInEndgame() const
+{ return (in_enemy_home[player_idx] == PIECES_PER_PLAYER); }
+
+
+inline 
+bool Game::CurrPlayerInEndgame() const
+{   return arbiter.CurrPlayerInEndgame();    }
 
 inline
 int Game::GetPlayerSign() const
@@ -211,7 +224,7 @@ int Game::GetDice(bool idx) const
 }
 
 inline
-bool Game::GameIsOver() const {return false; } // FIXME LATER, won't even be inline `
+bool Game::GameIsOver() const {return game_over; }
 
 inline const ReaderWriter* Game::GetConstRW() {return rw;}
 

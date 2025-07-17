@@ -1,11 +1,11 @@
 #include "NardiGame.h"
 #include "ReaderWriter.h"
 
-Game::Game(int rseed) : rng(rseed), dist(1, 6), dice({0, 0}), dice_used({0, 0}), 
-                        doubles_rolled(false), arbiter(this), rw(nullptr) 
+Game::Game(int rseed) : rng(rseed), dist(1, 6), dice({0, 0}), dice_used({0, 0}),
+                        doubles_rolled(false), game_over(false),  arbiter(this), rw(nullptr) 
 {
-    board = { { { 15, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}, 
-                {-15, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0} } };
+    board = { { { PIECES_PER_PLAYER, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}, 
+                {-PIECES_PER_PLAYER, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0} } };
 } 
 
 Game::status_codes Game::RollDice() // important to force this only once per turn in controller, no explicit safeguard here `
@@ -20,7 +20,7 @@ Game::status_codes Game::RollDice() // important to force this only once per tur
 
     arbiter.IncrementTurnNumber();
 
-    return arbiter.MakeForcedMovesBothDiceUsable();
+    return arbiter.MakeForcedMoves();
 }
 
 Game::status_codes Game::TryStart(const NardiCoord& s) const
@@ -66,11 +66,8 @@ Game::status_codes Game::MakeMove(const NardiCoord& start, const NardiCoord& end
     board[start.row][start.col] -= arbiter.GetPlayerSign();
     board[end.row][end.col] += arbiter.GetPlayerSign();
 
-    arbiter.UpdateAvailabilitySets(start, end);
 
-    arbiter.FlagHeadIfNeeded(start);
-
-    // move_history.emplace(start, end, dice_used[0], dice_used[1]);
+    arbiter.UpdateOnMove(start, end);
 
     rw->ReAnimate();
 
@@ -78,6 +75,13 @@ Game::status_codes Game::MakeMove(const NardiCoord& start, const NardiCoord& end
         return arbiter.MakeForcedMoves();
     else 
         return status_codes::SUCCESS;
+}
+void Game::Arbiter::UpdateOnMove(const NardiCoord& start, const NardiCoord& end)
+{
+    UpdateAvailabilitySets(start, end);
+    FlagHeadIfNeeded(start);
+    if(end.row != player_idx && end.col >= 6) // other row, second half
+        ++in_enemy_home[player_idx];
 }
 
 unsigned Game::Arbiter::GetDistance(bool sr, int sc, bool er, int ec) const
@@ -118,7 +122,7 @@ NardiCoord Game::Arbiter::CoordAfterDistance(const NardiCoord& start, int d, boo
 /////   Arbiter ////////
 ///////////////////////
 
-Game::Arbiter::Arbiter(Game* gp) : g(gp), head_used(false), player_idx(0), turn_number({0, 0})   // player sign 50/50 ?
+Game::Arbiter::Arbiter(Game* gp) : g(gp), head_used(false), player_idx(0), turn_number({0, 0}), in_enemy_home({0, 0})   // player sign 50/50 ?
 {
     player_sign = player_idx ? -1 : 1;
     for(int p = 0; p < 2; ++p)  // 0 is player 1, 1 is player -1
@@ -127,18 +131,6 @@ Game::Arbiter::Arbiter(Game* gp) : g(gp), head_used(false), player_idx(0), turn_
 }
 
 Game::status_codes Game::Arbiter::ValidStart(int sr, int sc) const
-{
-    status_codes well_def = WellDefinedStart(sr, sc);
-    if(well_def != status_codes::SUCCESS)
-        return well_def;
-    else if(CanMoveByDice( {sr, sc}, 0).first != status_codes::SUCCESS && 
-            CanMoveByDice( {sr, sc}, 1).first != status_codes::SUCCESS )    // can't move by either dice
-        return status_codes::NO_PATH;
-    else
-        return status_codes::SUCCESS;
-}
-
-Game::status_codes Game::Arbiter::WellDefinedStart(int sr, int sc) const
 {
     if(sr < 0 || sr > ROW - 1 || sc < 0 || sc > COL - 1)
         return status_codes::OUT_OF_BOUNDS;
@@ -150,12 +142,6 @@ Game::status_codes Game::Arbiter::WellDefinedStart(int sr, int sc) const
         return status_codes::SUCCESS;
 }
 
-Game::status_codes Game::Arbiter::WellDefinedStart(const NardiCoord& start) const
-{
-    return WellDefinedStart(start.row, start.col);
-}
-
-// FIXME: treating no blocking tun as an occupied square... so well defined move will handle this `
 Game::status_codes Game::Arbiter::WellDefinedEnd(int sr, int sc, int er, int ec) const
 {   // avoid using goes_idx_plusone here, else circular reasoning
     if(er < 0 || er > ROW - 1 || ec < 0 || ec > COL - 1)
@@ -297,23 +283,56 @@ void Game::Arbiter::UpdateAvailabilitySets(const NardiCoord start, const NardiCo
     }
 }
 
+void Game::Arbiter::CalcMaxOcc()
+{
+    max_num_occ = 6;     // largest number by which we can remove a dice, class member???
+    while(player_sign * g->board[!player_idx][COL - max_num_occ] <= 0 && max_num_occ > 0)   // slot empty or enemy
+        --max_num_occ;   
+}
+
 Game::status_codes Game::Arbiter::MakeForcedMoves()
 {
-    bool canUse0 = CanUseDice(0);
-    bool canUse1 = CanUseDice(1);
-    if(canUse0 && canUse1)
-        return MakeForcedMovesBothDiceUsable(); // includes doubles case
-    else if (canUse0 || canUse1)
+    if(g->CurrPlayerInEndgame())
+        return ForcedEndgameMoves();
+
+    else if(g->doubles_rolled)
+        return ForcedMoves_DoublesCase();
+
+    else if(CanUseDice(0) && CanUseDice(1))
+        return MakeForcedMovesBothDiceUsable();
+
+    else if (CanUseDice(0) || CanUseDice(1) )
         return MakeForcedMoves_SingleDice();
+
     else
         return status_codes::NO_LEGAL_MOVES_LEFT;   // no dice to move by
 }
 
+Game::status_codes Game::Arbiter::ForcedEndgameMoves()
+{   
+    CalcMaxOcc();
+    if(max_num_occ == 0)
+    {
+        g->game_over = true;
+        return status_codes::NO_LEGAL_MOVES_LEFT;
+    }
+
+    if(CanUseDice(0) || CanUseDice(1))
+    {   
+        if(g->doubles_rolled)
+            return ForceEndgame_Doubles();
+        else if(CanUseDice(0) && CanUseDice(1))
+            return ForceEndgame_2Dice();
+        else 
+            return ForceEndgame_1Dice();
+    }   
+    else
+        return status_codes::NO_LEGAL_MOVES_LEFT;
+}
+
 Game::status_codes Game::Arbiter::MakeForcedMovesBothDiceUsable()
 {
-    if(g->doubles_rolled)
-        return ForcedMoves_DoublesCase();
-    
+
     // no doubles from here, no head reuse issues since we can't have made a move yet
     size_t total_options[2] = {goes_idx_plusone[player_idx][g->dice[0] - 1].size(), goes_idx_plusone[player_idx][g->dice[1] - 1].size() };
         // at this point this is just the number of ways to move in one step for both dice rolls
