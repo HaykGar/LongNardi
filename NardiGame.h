@@ -10,10 +10,6 @@
 #include <random>
 
 /*
-Hanel@ verjum
-
-Handle Win, hanel@ vor prcni it'll alert. Possibly increment a score or something, maybe controller or display handles that
-    counters for pieces in house...
 
 Case: mtnel during turn
 
@@ -66,8 +62,8 @@ class Game
         // Gameplay
         status_codes RollDice();
         status_codes TryStart(const NardiCoord& s) const;
-        status_codes TryFinishMove(const NardiCoord& start, const NardiCoord& end); 
-        std::pair<Game::status_codes, NardiCoord> TryMoveByDice(const NardiCoord& start, bool dice);
+        status_codes TryFinishMove(const NardiCoord& start, const NardiCoord& end);     // No Removals
+        status_codes TryMoveByDice(const NardiCoord& start, bool dice);                 // Removals and regular moves
         void SwitchPlayer();
         
         // State Checks
@@ -86,13 +82,13 @@ class Game
 
     private:
         std::array<std::array<int, COL>, ROW> board;    // first row of board is reversed from view
+        std::array<int, 2>  pieces_left;
         std::mt19937 rng;                           // Mersenne Twister engine
         std::uniform_int_distribution<int> dist;    // uniform distribution for dice
         std::array<int, 2> dice; 
         std::array<int, 2> times_dice_used;
         bool doubles_rolled;
-        bool game_over; 
-        ReaderWriter* rw;        
+        ReaderWriter* rw;
        
         class Arbiter
         {
@@ -103,14 +99,18 @@ class Game
                 status_codes ValidStart(int sr, int sc) const; // check that start is in bounds and occupied by player's piece
                 std::pair<status_codes, NardiCoord> CanMoveByDice   (const NardiCoord& start, bool dice_idx, 
                                                                     bool moved_hypothetically = false) const;
+                bool CanRemovePiece(const NardiCoord& start, bool d_idx);
                 std::pair<status_codes, std::array<int, 2>> LegalMove(int sr, int sc, int er, int ec);
 
                 // Updates and Actions
                 void IncrementTurnNumber();
-                void UpdateOnMove(const NardiCoord& start, const NardiCoord& end);
                 void FlagHeadIfNeeded(const NardiCoord& start);
                 void SwitchPlayer();
-                status_codes MakeForcedMoves();
+
+                status_codes OnRoll();
+                status_codes OnMove(const NardiCoord& start, const NardiCoord& end);
+                status_codes OnRemoval(const NardiCoord& start);
+
 
                 // Getters and state checks
                 int GetPlayerSign() const;
@@ -129,7 +129,8 @@ class Game
                 std::array<int, 2> in_enemy_home;
                 const NardiCoord head[2] = {NardiCoord(0, 0), NardiCoord(1, 0)};
                 std::array< std::array< std::unordered_set<NardiCoord>, 6 >, 2 > goes_idx_plusone;
-                int max_num_occ;
+                std::array<size_t, 2> min_options;
+                std::array<int, 2> max_num_occ;
                 
                 // Legality Helpers
                 status_codes WellDefinedEnd(int sr, int sc, int er, int ec) const;      // check that move end from start is friendly or empty
@@ -152,13 +153,13 @@ class Game
                 bool InBounds(int r, int c) const;
                 
                 // Coord and Distance Calculations
-                NardiCoord CalculateFinalCoords(bool sr, int sc, bool dice_idx) const;
-                NardiCoord CalculateFinalCoords(const NardiCoord& start, bool dice_idx) const;
                 NardiCoord CoordAfterDistance(int row, int col, int d, bool player)const;
                 NardiCoord CoordAfterDistance(const NardiCoord& start, int d, bool player) const;
                 unsigned GetDistance(bool sr, int sc, bool er, int ec) const;
 
                 // Forced Moves
+                status_codes CheckForcedMoves();
+
                 status_codes CheckForced_2Dice();
                 status_codes HandleForced2Dice(bool dice_idx, const std::unordered_set<NardiCoord>& two_step_starts);
                 
@@ -166,19 +167,25 @@ class Game
                 status_codes HandleForced1Dice(bool dice_idx);
                 
                 status_codes CheckForced_Doubles();
+                void Force_1stMoveException();
                 
-                Game::status_codes ForceMove(const NardiCoord& start, bool dice_idx, bool check_further_forced = true);
+                Game::status_codes ForceMove(const NardiCoord& start, bool dice_idx, bool check_further = true);
+                Game::status_codes ForceRemovePiece(const NardiCoord& start, bool dice_idx);
+
 
                 // Updates and Actions
                 void UpdateAvailabilitySets(const NardiCoord start, const NardiCoord end);  // fixme cleanup code
+                void UpdateAvailabilitySets(const NardiCoord start);
+
                 void Reset();
                 void ResetHead();
-                void CalcMaxOcc();
+                void SetMaxOcc();
         };
         
         Arbiter arbiter;
         
-        status_codes MakeMove(const NardiCoord& start, const NardiCoord& end, bool check = true);
+        status_codes MakeMove(const NardiCoord& start, const NardiCoord& end, bool check_needed = true);
+        status_codes RemovePiece(const NardiCoord& start);
         void UseDice(bool idx, int n = 1);
 };
 
@@ -211,7 +218,7 @@ bool Game::CurrPlayerInEndgame() const
 
 inline
 bool Game::GameIsOver() const 
-{   return game_over;   }     // FIXME ALWAYS FALSE at the moment
+{   return (pieces_left[0] == 0 || pieces_left[1] == 0);   }
 
 ///////////// Getters /////////////
 

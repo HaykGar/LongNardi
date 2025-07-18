@@ -12,6 +12,9 @@ void Controller::SwitchTurns()
 
 Game::status_codes Controller::ReceiveCommand(Command& cmd)
 {
+    if(g.GameIsOver())  // redundant, cheap protection so no changes made after end.
+        return Game::status_codes::NO_LEGAL_MOVES_LEFT; 
+
     Game::status_codes outcome = Game::status_codes::MISC_FAILURE;
     switch (cmd.action)
     {
@@ -38,15 +41,10 @@ Game::status_codes Controller::ReceiveCommand(Command& cmd)
         
         else if(start_selected)
         {
-            if(g.CurrPlayerInEndgame())
-            {
-                if (std::holds_alternative<bool>(cmd.payload))  // only accept dice idx in this case
-                    outcome = g.TryMovePieceEndgame(start, std::get<bool>(cmd.payload));
-            }
-            else if(std::holds_alternative<NardiCoord>(cmd.payload))
+            if(std::holds_alternative<NardiCoord>(cmd.payload))
                 outcome = g.TryFinishMove(start, std::get<NardiCoord>(cmd.payload) ); // this makes the move if possible, triggering redraws
             else if (std::holds_alternative<bool>(cmd.payload))
-                outcome = g.TryMoveByDice(start, std::get<bool>(cmd.payload)).first;
+                outcome = g.TryMoveByDice(start, std::get<bool>(cmd.payload));
 
             if(outcome == Game::status_codes::SUCCESS)  // turn not over
                 start_selected = false;
