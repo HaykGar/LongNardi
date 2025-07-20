@@ -19,10 +19,16 @@ public:
     const std::array<int, 2>& MaxNumOcc() const;
     const std::array<int, 2>& ReachedEnemyHome() const;
     const std::array<int, 2>& PiecesLeft() const;
+    const std::array< std::array< std::unordered_set<NardiCoord>, 6 >, 2 >& GoesIdxPlusOne() const; // unnecessary?
+    const std::unordered_set<NardiCoord>& PlayerGoesByDist(size_t dist) const;
 
     // Updates and Actions    
     void Move(const NardiCoord& start, const NardiCoord& end);
     void Remove(const NardiCoord& to_remove);
+
+    void UpdateAvailabilitySets(const NardiCoord& start, const NardiCoord& end);
+    void UpdateAvailabilitySets(const NardiCoord start);
+
     void SetMaxOcc();
     void SwitchPlayer();
     void FlagHeadIfNeeded(const NardiCoord& start);
@@ -43,14 +49,18 @@ public:
     unsigned GetDistance(const NardiCoord& start, const NardiCoord& end) const;
 
 private:
+    std::array<std::array<int, COL>, ROW> data;     // worth making private?
+
     bool player_idx;
     int player_sign;
     bool head_used;
     std::array<int, 2> reached_enemy_home;
     std::array<int, 2>  pieces_left;
-    std::array<int, 2> max_num_occ;
+    std::array<int, 2> max_num_occ; // left uninitialized because we don't use it until the endgame, maybe can set to -1, -1
+    std::array< std::array< std::unordered_set<NardiCoord>, 6 >, 2 > goes_idx_plusone;
 
-    std::array<std::array<int, COL>, ROW> data;     // worth making private?
+    void OnMove(const NardiCoord& start, const NardiCoord& end);
+    void OnRemove(const NardiCoord& to_remove);
 };
 
 ///////////// Getters /////////////
@@ -87,6 +97,14 @@ const std::array<int, 2>& NardiBoard::ReachedEnemyHome() const
 inline 
 const std::array<int, 2>& NardiBoard::PiecesLeft() const
 {   return pieces_left;   }
+
+inline
+const std::array< std::array< std::unordered_set<NardiCoord>, 6 >, 2 >& NardiBoard::GoesIdxPlusOne() const
+{   return goes_idx_plusone;   }
+
+inline
+const std::unordered_set<NardiCoord>& NardiBoard::PlayerGoesByDist(size_t dist) const
+{   return goes_idx_plusone[player_idx][dist - 1];   }
 
 ///////////// Updates and Actions /////////////
 

@@ -2,10 +2,15 @@
 
 ///////////// Constructor /////////////
 
-NardiBoard::NardiBoard() :      player_idx(0), player_sign(BoolToSign(player_idx)),
-                                reached_enemy_home{0, 0}, pieces_left{PIECES_PER_PLAYER, PIECES_PER_PLAYER},
-                                data {{ { PIECES_PER_PLAYER, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}, 
-                                        {-PIECES_PER_PLAYER, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0} }}  {}
+NardiBoard::NardiBoard() :      data {{ { PIECES_PER_PLAYER, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}, 
+                                        {-PIECES_PER_PLAYER, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0} }},
+                                player_idx(0), player_sign(BoolToSign(player_idx)), reached_enemy_home{0, 0}, 
+                                pieces_left{PIECES_PER_PLAYER, PIECES_PER_PLAYER}
+{
+    for(int p = 0; p < 2; ++p)
+        for(int i = 0; i < 6; ++i)
+            goes_idx_plusone[p][i].emplace(p, 0);   // "head" can move any of the numbers initially
+}
 
 ///////////// Updates and Actions /////////////
 
@@ -13,21 +18,93 @@ void NardiBoard::Move(const NardiCoord& start, const NardiCoord& end)
 {
     data[start.row][start.col]  -= player_sign;
     data[end.row][end.col]      += player_sign;
+    OnMove(start, end);
+}
 
+void NardiBoard::OnMove(const NardiCoord& start, const NardiCoord& end)
+{
     if(end.row != player_idx && end.col >= 6 && (start.col < 6 || start.row != end.row) )  // moved to home from outside
         ++reached_enemy_home[player_idx];
 
     FlagHeadIfNeeded(start);
-    if(CurrPlayerInEndgame())
-        SetMaxOcc();
+
+    UpdateAvailabilitySets(start, end);
+
 }
 
 void NardiBoard::Remove(const NardiCoord& to_remove)
 {
     data[to_remove.row][to_remove.col] -= player_sign;
     --pieces_left.at(player_idx);
+}
 
-    SetMaxOcc();
+void NardiBoard::OnRemove(const NardiCoord& to_remove)
+{
+    UpdateAvailabilitySets(to_remove);
+}
+
+void NardiBoard::UpdateAvailabilitySets(const NardiCoord& start, const NardiCoord& dest)
+{   // only to be called within MakeMove()
+    UpdateAvailabilitySets(start);
+    
+    if ( at(dest) * player_sign == 1 )  // dest newly filled, note both ifs can be true
+    {
+        // update player's options - can now possibly move from dest square
+        int d = 1;
+        NardiCoord coord = CoordAfterDistance(dest, d);
+        while( !coord.OutOfBounds() && d <= 6 )
+        {
+            if(at(coord) * PlayerSign() >= 0) // square empty or occupied by player already
+                goes_idx_plusone[player_idx][d-1].insert(dest);
+            
+            ++d;
+            coord = CoordAfterDistance(dest, d);
+        }
+        // update other player's options - can no longer move to dest square
+        d = 1;
+        coord = CoordAfterDistance(dest, -d, !player_idx);
+        while( !coord.OutOfBounds() && d <= 6 )
+        {
+            if(at(coord) * PlayerSign() < 0) // other player occupies coord
+                goes_idx_plusone[!player_idx][d-1].erase(coord);   // pieces at coord can no longer travel here
+
+            ++d;
+            coord = CoordAfterDistance(dest, -d, !player_idx);
+        }
+    }
+}
+
+void NardiBoard::UpdateAvailabilitySets(const NardiCoord start)  // not reference since we destroy stuff
+{
+    if (at(start) == 0) // start square vacated
+    {
+        for(int i = 0; i < 6; ++i)  // update player's options - can no longer move from this square
+            goes_idx_plusone[player_idx][i].erase(start);   // no op if it wasn't in the set
+        
+        // update other player's options - can now move to this square
+        int d = 1;
+        NardiCoord coord = CoordAfterDistance(start, -d, !player_idx);
+
+        while( !coord.OutOfBounds()  && d <= 6 )
+        {
+            if(at(coord) * PlayerSign() < 0) // other player occupies coord
+                goes_idx_plusone[!player_idx][d-1].insert(coord);   // coord reaches a new empty spot at start with distance d
+
+            ++d;
+            coord = CoordAfterDistance(start, -d, !player_idx);
+        }
+    }
+
+    if(CurrPlayerInEndgame())
+    {
+        SetMaxOcc();
+        for(int i = max_num_occ.at(player_idx); i <= 6; ++i)
+            goes_idx_plusone[player_idx][i-1].insert({!player_idx, COL - max_num_occ.at(player_idx)}); 
+
+        for(int i = 1; i < max_num_occ.at(player_idx); ++i)
+            if(at(!player_idx, COL - i) * PlayerSign()  > 0)
+                goes_idx_plusone[player_idx][i-1].insert({!player_idx, COL - i});
+    }
 }
 
 void NardiBoard::SetMaxOcc()
@@ -36,7 +113,6 @@ void NardiBoard::SetMaxOcc()
     while(max_num_occ[player_idx] > 0 && player_sign * at(!player_idx, COL - max_num_occ[player_idx]) <= 0 )   // slot empty or enemy
         --max_num_occ[player_idx];   
 }
-
 
 ///////////// Legality /////////////
 

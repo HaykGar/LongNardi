@@ -78,12 +78,6 @@ class Game
                 status_codes OnMove(const NardiCoord& start, const NardiCoord& end);
                 status_codes OnRemoval(const NardiCoord& start);
 
-
-                // Getters and state checks
-                bool CurrPlayerInEndgame() const;
-
-                NardiCoord PlayerHead() const;
-
                 // friend class for testing
                 friend class TestBuilder;
 
@@ -91,12 +85,13 @@ class Game
                 Game* g;
                 std::array<int, 2> turn_number;
                 bool forcing_doubles;
-
-                std::array< std::array< std::unordered_set<NardiCoord>, 6 >, 2 > goes_idx_plusone;
-
                 std::array<size_t, 2> min_options;
-                
-                
+
+                // Getter
+                const std::unordered_set<NardiCoord>& PlayerGoesByDice(bool dice_idx) const;
+                NardiCoord PlayerHead() const;
+
+
                 // Legality Helpers
                 std::pair<status_codes, NardiCoord> LegalMove_2step(const NardiCoord& start);
                 
@@ -118,10 +113,6 @@ class Game
                 
                 status_codes ForceMove(const NardiCoord& start, bool dice_idx);
                 status_codes ForceRemovePiece(const NardiCoord& start, bool dice_idx);
-
-                // Updates and Actions
-                void UpdateAvailabilitySets(const NardiCoord& start, const NardiCoord& end);  // fixme cleanup code
-                void UpdateAvailabilitySets(const NardiCoord start);
         };
         
         Arbiter arbiter;
@@ -168,15 +159,20 @@ inline const ReaderWriter* Game::GetConstRW()
 ////////   Arbiter   ////////
 ////////////////////////////
 
+///////////// Getters /////////////
+
+inline
+const std::unordered_set<NardiCoord>& Game::Arbiter::PlayerGoesByDice(bool dice_idx) const
+{   return g->board.PlayerGoesByDist(g->dice[dice_idx]);   }
+
+inline
+NardiCoord Game::Arbiter::PlayerHead() const
+{   return {g->board.PlayerIdx(), 0};   }
+
 ///////////// Updates and Actions /////////////
 
 inline 
 void Game::Arbiter::IncrementTurnNumber()
 {   ++turn_number[g->board.PlayerIdx()];  }
 
-inline bool Game::Arbiter::CurrPlayerInEndgame() const
-{   return g->board.CurrPlayerInEndgame();   }
 
-inline
-NardiCoord Game::Arbiter::PlayerHead() const
-{   return {g->board.PlayerIdx(), 0};   }
