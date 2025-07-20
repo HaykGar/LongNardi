@@ -73,16 +73,12 @@ class Game
                 Arbiter(Game* gp);
 
                 // Legality Checks
-                // status_codes ValidStart(const NardiCoord& start) const; // check that start is in bounds and occupied by player's piece
-                std::pair<status_codes, NardiCoord> CanMoveByDice   (const NardiCoord& start, bool dice_idx, 
-                                                                    bool moved_hypothetically = false) const;
+                std::pair<status_codes, NardiCoord> CanMoveByDice   (const NardiCoord& start, bool dice_idx) const;
                 bool CanRemovePiece(const NardiCoord& start, bool d_idx);
                 std::pair<status_codes, std::array<int, 2>> LegalMove(const NardiCoord& start, const NardiCoord& end);
 
                 // Updates and Actions
                 void IncrementTurnNumber();
-                // void FlagHeadIfNeeded(const NardiCoord& start);
-                // void SwitchPlayer();
 
                 status_codes OnRoll();
                 status_codes OnMove(const NardiCoord& start, const NardiCoord& end);
@@ -90,8 +86,6 @@ class Game
 
 
                 // Getters and state checks
-                // int GetPlayerSign() const;
-                // bool GetPlayerIdx() const;
                 bool CurrPlayerInEndgame() const;
 
                 NardiCoord PlayerHead() const;
@@ -134,10 +128,6 @@ class Game
                 // Updates and Actions
                 void UpdateAvailabilitySets(const NardiCoord start, const NardiCoord end);  // fixme cleanup code
                 void UpdateAvailabilitySets(const NardiCoord start);
-
-                // void Reset();
-                // void ResetHead();
-                // void SetMaxOcc();
         };
         
         Arbiter arbiter;

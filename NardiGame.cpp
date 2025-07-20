@@ -97,7 +97,7 @@ Game::Arbiter::Arbiter(Game* gp) : g(gp), turn_number({0, 0}), forcing_doubles(f
 
 ///////////// Legality /////////////
 
-std::pair<status_codes, NardiCoord> Game::Arbiter::CanMoveByDice(const NardiCoord& start, bool dice_idx, bool moved_hypothetically) const
+std::pair<status_codes, NardiCoord> Game::Arbiter::CanMoveByDice(const NardiCoord& start, bool dice_idx) const
 {
     if(!CanUseDice(dice_idx))
         return {status_codes::DICE_USED_ALREADY, {} };
@@ -105,7 +105,7 @@ std::pair<status_codes, NardiCoord> Game::Arbiter::CanMoveByDice(const NardiCoor
     NardiCoord final_dest = g->board.CoordAfterDistance(start, g->dice[dice_idx]);
     status_codes result = g->board.WellDefinedEnd(start, final_dest);
 
-    if (result == status_codes::SUCCESS && !moved_hypothetically && PreventsTurnCompletion(start, dice_idx))
+    if (result == status_codes::SUCCESS && PreventsTurnCompletion(start, dice_idx))
         return {status_codes::PREVENTS_COMPLETION, {} };
     else
         return {result, final_dest};
@@ -188,7 +188,13 @@ std::pair<status_codes, NardiCoord> Game::Arbiter::LegalMove_2step(const NardiCo
     }
 
     if(status == status_codes::SUCCESS)
-        return CanMoveByDice(mid, !first_dice, true);
+    {
+        auto [outcome, dest] = CanMoveByDice(mid, !first_dice);
+        if(outcome == status_codes::SUCCESS || outcome == status_codes::PREVENTS_COMPLETION)
+            return { status_codes::SUCCESS, dest };
+        else
+            return { outcome, dest };
+    }
     else
         return {status_codes::NO_PATH, {} };    // unable to reach midpoint
 }
