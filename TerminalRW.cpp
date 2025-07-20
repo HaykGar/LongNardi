@@ -5,22 +5,22 @@ TerminalRW::TerminalRW(const Game& game, Controller& c) : ReaderWriter(game, c) 
 void TerminalRW::ReAnimate() const
 {
     const auto& board = g.GetBoardRef();
-    bool player_row = g.GetPlayerIdx();
+    bool player_row = board.PlayerIdx();
     
     for(int c = COL - 1; c >= 0; --c)
-        std::cout << board.at(player_row).at(c) << "\t";
+        std::cout << board.at(player_row, c) << "\t";
 
     std::cout << "\n\n";
 
     for(int c = 0; c < COL; ++c)
-        std::cout << board.at(!player_row).at(c) << "\t";
+        std::cout << board.at(!player_row, c) << "\t";
 
     std::cout << "\n\n\n\n\n";
 }
 
 void TerminalRW::AnimateDice() const  // assumes proper values of dice fed in
 {
-    std::cout << "Player " << g.GetPlayerSign() << ", you rolled: " << g.GetDice(0) << " " << g.GetDice(1) << std::endl;
+    std::cout << "Player " << g.GetBoardRef().PlayerSign() << ", you rolled: " << g.GetDice(0) << " " << g.GetDice(1) << std::endl;
 }
 
 
@@ -28,7 +28,7 @@ void TerminalRW::AwaitUserCommand()
 {
     std::getline(std::cin, input);
     Command cmd = Input_to_Command();
-    Game::status_codes code = Game::status_codes::MISC_FAILURE;
+    status_codes code = status_codes::MISC_FAILURE;
 
     if(cmd.action != Actions::NO_OP) // avoid wasteful passing flow to control
         code = ctrl.ReceiveCommand(cmd);
@@ -51,6 +51,12 @@ Command TerminalRW::Input_to_Command() const
         
         else if(ch == 'u')
             return Command(Actions::UNDO);
+
+        else if(ch == 'p')
+        {
+            ReAnimate();
+            return Command(Actions::NO_OP);
+        }
 
         else if(isdigit(ch))
             return Command(Actions::MOVE_BY_DICE, ch - '0');

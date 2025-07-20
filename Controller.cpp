@@ -4,31 +4,30 @@ Controller::Controller(Game& game) : g(game), start(), start_selected(false), di
 
 void Controller::SwitchTurns()
 {
-    g.SwitchPlayer();
-    
+    // player calls switch turns internally on dice roll    
     dice_rolled = false;
     start_selected = false;
 }
 
-Game::status_codes Controller::ReceiveCommand(Command& cmd)
+status_codes Controller::ReceiveCommand(Command& cmd)
 {
     if(g.GameIsOver())  // redundant, cheap protection so no changes made after end.
-        return Game::status_codes::NO_LEGAL_MOVES_LEFT; 
+        return status_codes::NO_LEGAL_MOVES_LEFT; 
 
-    Game::status_codes outcome = Game::status_codes::MISC_FAILURE;
+    status_codes outcome = status_codes::MISC_FAILURE;
     switch (cmd.action)
     {
     case Actions::NO_OP:    // should not happen
         break;
     case Actions::QUIT:
         quit_requested = true;
-        outcome = Game::status_codes::SUCCESS;  // user requested quit is not a problem
+        outcome = status_codes::SUCCESS;  // user requested quit is not a problem
         break;
     case Actions::ROLL_DICE:
         if(!dice_rolled)    // treat converse as misc failure
         {
             outcome = g.RollDice();
-            if(outcome == Game::status_codes::NO_LEGAL_MOVES_LEFT)
+            if(outcome == status_codes::NO_LEGAL_MOVES_LEFT)
                 SwitchTurns();
             else
                 dice_rolled = true;
@@ -46,9 +45,9 @@ Game::status_codes Controller::ReceiveCommand(Command& cmd)
             else if (std::holds_alternative<bool>(cmd.payload))
                 outcome = g.TryMoveByDice(start, std::get<bool>(cmd.payload));
 
-            if(outcome == Game::status_codes::SUCCESS)  // turn not over
+            if(outcome == status_codes::SUCCESS)  // turn not over
                 start_selected = false;
-            else if(outcome == Game::status_codes::NO_LEGAL_MOVES_LEFT)
+            else if(outcome == status_codes::NO_LEGAL_MOVES_LEFT)
                 SwitchTurns();
             else
                 start_selected = false; // unselect start if illegal move attempted or start re-selected
@@ -59,7 +58,7 @@ Game::status_codes Controller::ReceiveCommand(Command& cmd)
                 break;  // attempted to move by dice without selecting start, or monostate payload
             
             outcome = g.TryStart(std::get<NardiCoord>(cmd.payload));
-            if (outcome == Game::status_codes::SUCCESS)
+            if (outcome == status_codes::SUCCESS)
             {
                 start = std::get<NardiCoord>(cmd.payload);
                 start_selected = true;

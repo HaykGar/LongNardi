@@ -8,7 +8,7 @@ class Controller
 {
     public:
         Controller(Game& game);
-        virtual Game::status_codes ReceiveCommand(Command& cmd);
+        virtual status_codes ReceiveCommand(Command& cmd);
         bool QuitRequested() const;
 
         friend class TestBuilder;
