@@ -5,21 +5,19 @@
 
 #include <array>
 #include <stack>
-#include <queue>
 #include <random>
 
 /*
+Chi kareli chtoghel tun mtnel araji angam -- details:
+    Can't block >= 6 consecutive squares without at least 1 enemy piece ahead of the block
+
+Rule precedence: only available move creates block issue not allowed
+
 Pass ownership of goes_idx to board... 
     needs board to handle the 1st move exception
     const reference Getters for the sets...
 
 Automate dice rolling from controller ?
-
-Chi kareli chtoghel tun mtnel araji angam -- details:
-    Can't block >= 6 consecutive squares without at least 1 enemy piece ahead of the block
-
-
-Rule precedence: only available move creates block issue not allowed
 
 undo move feature
 
@@ -42,23 +40,19 @@ class Game
         status_codes TryMoveByDice(const NardiCoord& start, bool dice);                 // Removals and regular moves
         
         // State Checks
-        // bool CurrPlayerInEndgame() const;
         bool GameIsOver() const;
 
         // Getters
         int GetDice(bool idx) const;
-        // int GetPlayerSign() const;
-        // bool GetPlayerIdx() const;
+
         const NardiBoard& GetBoardRef() const;
-        const ReaderWriter* GetConstRW();   // const pointer, allowing controller to read commands and ask for 
+        const ReaderWriter* GetConstRW();
 
         // Friend class for testing
         friend class TestBuilder;
 
     private:
         NardiBoard board;    // reminder: first row of board is reversed from view
-
-        // std::array<int, 2>  pieces_left; moved to board
 
         std::mt19937 rng;                           // Mersenne Twister engine
         std::uniform_int_distribution<int> dist;    // uniform distribution for dice
@@ -108,13 +102,13 @@ class Game
                 
                 bool CanUseDice(bool idx, int n_times = 1) const;
                 bool PreventsTurnCompletion(const NardiCoord& start, bool dice_idx) const;
-                bool StepsTwice(const NardiCoord& start) const;  // rename, rework, move to board `
+                bool MakesSecondStep(const NardiCoord& start) const;  // rename, rework, move to board `
 
                 // Forced Moves - implement handlers `
                 status_codes CheckForcedMoves();
 
                 status_codes CheckForced_2Dice();
-                status_codes HandleForced2Dice(bool dice_idx, const std::unordered_set<NardiCoord>& two_step_starts);
+                status_codes HandleForced2Dice(bool dice_idx, const std::stack<NardiCoord>& two_step_starts);
                 
                 status_codes CheckForced_1Dice();
                 status_codes HandleForced1Dice(bool dice_idx);
@@ -126,7 +120,7 @@ class Game
                 status_codes ForceRemovePiece(const NardiCoord& start, bool dice_idx);
 
                 // Updates and Actions
-                void UpdateAvailabilitySets(const NardiCoord start, const NardiCoord end);  // fixme cleanup code
+                void UpdateAvailabilitySets(const NardiCoord& start, const NardiCoord& end);  // fixme cleanup code
                 void UpdateAvailabilitySets(const NardiCoord start);
         };
         
