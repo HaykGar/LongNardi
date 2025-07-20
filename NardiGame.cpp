@@ -63,16 +63,13 @@ status_codes Game::TryMoveByDice(const NardiCoord& start, bool dice_idx)
     }
 }
 
-status_codes Game::MakeMove(const NardiCoord& start, const NardiCoord& end, bool check_requested)
+status_codes Game::MakeMove(const NardiCoord& start, const NardiCoord& end)
 {
     board.Move(start, end);
 
     rw->ReAnimate();
 
-    if(check_requested)
-        return arbiter.OnMove(start, end);
-    else
-        return status_codes::SUCCESS;
+    return arbiter.OnMove(start, end);
 }
 
 status_codes Game::RemovePiece(const NardiCoord& start)
@@ -91,7 +88,7 @@ status_codes Game::RemovePiece(const NardiCoord& start)
 
 ///////////// Constructor /////////////
 
-Game::Arbiter::Arbiter(Game* gp) : g(gp), turn_number({0, 0})   // player sign 50/50 ?
+Game::Arbiter::Arbiter(Game* gp) : g(gp), turn_number({0, 0}), forcing_doubles(false)   // player sign 50/50 ?
 {
     for(int p = 0; p < 2; ++p)  // 0 is player 1, 1 is player -1
         for(int i = 0; i < 6; ++i)
@@ -99,16 +96,6 @@ Game::Arbiter::Arbiter(Game* gp) : g(gp), turn_number({0, 0})   // player sign 5
 }
 
 ///////////// Legality /////////////
-
-// status_codes Game::Arbiter::ValidStart(const NardiCoord& start) const
-// {
-//     return g->board.ValidStart(start);
-// }
-
-// status_codes Game::Arbiter::WellDefinedEnd(const NardiCoord& start, const NardiCoord& end) const // start already checked to be valid
-// {
-//     return g->board.WellDefinedEnd(start, end);
-// }
 
 std::pair<status_codes, NardiCoord> Game::Arbiter::CanMoveByDice(const NardiCoord& start, bool dice_idx, bool moved_hypothetically) const
 {
@@ -282,11 +269,7 @@ status_codes Game::Arbiter::OnRoll()
 
 status_codes Game::Arbiter::OnMove(const NardiCoord& start, const NardiCoord& end)
 {
-    UpdateAvailabilitySets(start, end);
-    // FlagHeadIfNeeded(start);
-    // if(g->board.CurrPlayerInEndgame())
-    //     SetMaxOcc();
-    
+    UpdateAvailabilitySets(start, end);    
     return CheckForcedMoves();
 }
 
@@ -417,19 +400,39 @@ status_codes Game::Arbiter::HandleForced1Dice(bool dice_idx) // no doubles here,
 
 status_codes Game::Arbiter::CheckForced_Doubles()
 {
+
+    if(forcing_doubles)
+    {
+        if( goes_idx_plusone[g->board.PlayerIdx()][g->dice[0] - 1].empty() ||
+            ( goes_idx_plusone[g->board.PlayerIdx()][g->dice[0] - 1].size() == 1 &&
+            g->board.HeadReuseIssue(*goes_idx_plusone[g->board.PlayerIdx()][g->dice[0] - 1].begin()) ) )
+        {
+            forcing_doubles = false;
+            return status_codes::NO_LEGAL_MOVES_LEFT;
+        }
+        else 
+            return ForceMove(*goes_idx_plusone[g->board.PlayerIdx()][g->dice[0] - 1].begin(), 0);   // will recurse until empty
+    }
+    else if (g->times_dice_used[0] + g->times_dice_used[1] > 0) // if no forced on roll, no forced after
+    {
+        if(g->times_dice_used[0] + g->times_dice_used[1] == 4)
+            return status_codes::NO_LEGAL_MOVES_LEFT;
+        else
+            return status_codes::SUCCESS;
+    }    
+
     if( turn_number[g->board.PlayerIdx()] == 1 && (g->dice[0] == 4 || g->dice[0] == 6 ) )  // first move double 4 or 6
     {
         Force_1stMoveException();
         return status_codes::NO_LEGAL_MOVES_LEFT;
     }
 
-    int steps_left = 4 - ( (g->times_dice_used[0]*g->dice[0] + g->times_dice_used[1]*g->dice[1]) / g->dice[0] ); // steps left to complete turn
-    int steps_taken = 0;    // counter, when exceeds steps_left 
+    int steps_left = 4; // 4 steps left to complete turn by earlier if statement
+    int steps_taken = 0;
 
     if(goes_idx_plusone[g->board.PlayerIdx()][g->dice[0] - 1].empty())    // no pieces that go
         return status_codes::NO_LEGAL_MOVES_LEFT;
 
-    std::queue<NardiCoord> move_starts;
     for(const auto& coord : goes_idx_plusone[g->board.PlayerIdx()][g->dice[0] - 1])
     {
         if (g->board.HeadReuseIssue(coord))
@@ -443,7 +446,6 @@ status_codes Game::Arbiter::CheckForced_Doubles()
         while(canGo == status_codes::SUCCESS)   // runs at most 4 times without returning
         {
             steps_taken += n_pieces;
-            move_starts.push(start);
 
             if(steps_taken > steps_left)            
                 return status_codes::SUCCESS;
@@ -453,17 +455,19 @@ status_codes Game::Arbiter::CheckForced_Doubles()
         }
     }  
     // if we exit loop, then the moves are forced
-    while(!move_starts.empty())
+    if( goes_idx_plusone[g->board.PlayerIdx()][g->dice[0] - 1].empty() ||
+            ( goes_idx_plusone[g->board.PlayerIdx()][g->dice[0] - 1].size() == 1 &&
+            g->board.HeadReuseIssue(*goes_idx_plusone[g->board.PlayerIdx()][g->dice[0] - 1].begin()) ) )
     {
-        NardiCoord start = move_starts.front();
-        int n = g->board.IsPlayerHead(start) ? 1 : abs(g->board.at(start));
-        for(int i = 0; i < n; ++i)
-            ForceMove(start, 0, false);
-        
-        move_starts.pop();
+        forcing_doubles = false;
+        return status_codes::NO_LEGAL_MOVES_LEFT;
+    }
+    else
+    { 
+        forcing_doubles = true;
+        return ForceMove(*goes_idx_plusone[g->board.PlayerIdx()][g->dice[0] - 1].begin(), 0);   // will recurse until empty
     }
 
-    return status_codes::NO_LEGAL_MOVES_LEFT;   // impossible to have partial forcing in doubles case
 }
 
 void Game::Arbiter::Force_1stMoveException()
@@ -493,11 +497,11 @@ void Game::Arbiter::Force_1stMoveException()
     g->rw->ReAnimate(); 
 }
 
-status_codes Game::Arbiter::ForceMove(const NardiCoord& start, bool dice_idx, bool check_further)  // only to be called when forced
+status_codes Game::Arbiter::ForceMove(const NardiCoord& start, bool dice_idx)  // only to be called when forced
 {
     NardiCoord dest =  g->board.CoordAfterDistance(start, g->dice[dice_idx]);
     g->UseDice(dice_idx);
-    return g->MakeMove(start, dest, check_further);
+    return g->MakeMove(start, dest);
 }
 
 status_codes Game::Arbiter::ForceRemovePiece(const NardiCoord& start, bool dice_idx)
@@ -505,4 +509,3 @@ status_codes Game::Arbiter::ForceRemovePiece(const NardiCoord& start, bool dice_
     g->UseDice(dice_idx);
     return g->RemovePiece(start);
 }
-

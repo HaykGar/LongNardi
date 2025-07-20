@@ -9,25 +9,20 @@
 #include <random>
 
 /*
+Pass ownership of goes_idx to board... 
+    needs board to handle the 1st move exception
+    const reference Getters for the sets...
 
-Case: mtnel during turn
+Automate dice rolling from controller ?
 
-undo move feature
+Chi kareli chtoghel tun mtnel araji angam -- details:
+    Can't block >= 6 consecutive squares without at least 1 enemy piece ahead of the block
 
-Automate dice rolling from controller
-
-Chi kareli chtoghel tun mtnel araji angam -- check details of this rule
-    - bool mtac[2], mtneluc -> mtac[player] = true
-    - legality check: yete mtac[opp] == false, qo tun mtneluc: 
-        - azat tegh(er) mnum a? 
-            - che -> illegal
-            - ha -> hnaravor a drancic mek@ mtnel? bolori naxkin 6 tegh@ stugel...
-                -> sagh pak: illegal
-                -> bac tegher: ardyok hnaravor a mtnel?
 
 Rule precedence: only available move creates block issue not allowed
 
-Thoroughly test basic mechanics
+undo move feature
+
 */
 
 
@@ -106,21 +101,15 @@ class Game
 
             private:
                 Game* g;
-                // bool head_used;
-                // bool player_idx;
-                // int player_sign;
                 std::array<int, 2> turn_number;
-                // std::array<int, 2> in_enemy_home;
-                // const NardiCoord head[2] = {NardiCoord(0, 0), NardiCoord(1, 0)};
+                bool forcing_doubles;
 
                 std::array< std::array< std::unordered_set<NardiCoord>, 6 >, 2 > goes_idx_plusone;
 
                 std::array<size_t, 2> min_options;
-                // std::array<int, 2> max_num_occ;
+                
                 
                 // Legality Helpers
-                // status_codes WellDefinedEnd(const NardiCoord& start, const NardiCoord& end) const; // check that move end from start is friendly or empty
-
                 std::pair<status_codes, NardiCoord> LegalMove_2step(const NardiCoord& start);
                 
                 bool CanUseDice(bool idx, int n_times = 1) const;
@@ -139,7 +128,7 @@ class Game
                 status_codes CheckForced_Doubles();
                 void Force_1stMoveException();
                 
-                status_codes ForceMove(const NardiCoord& start, bool dice_idx, bool check_further = true);
+                status_codes ForceMove(const NardiCoord& start, bool dice_idx);
                 status_codes ForceRemovePiece(const NardiCoord& start, bool dice_idx);
 
                 // Updates and Actions
@@ -153,13 +142,10 @@ class Game
         
         Arbiter arbiter;
         
-        // void SwitchPlayer();
-        status_codes MakeMove(const NardiCoord& start, const NardiCoord& end, bool check_needed = true);
-            // remove check requested parameter, make silentmakemove, silentforcemove functions instead
+        status_codes MakeMove(const NardiCoord& start, const NardiCoord& end);
         status_codes RemovePiece(const NardiCoord& start);
         void UseDice(bool idx, int n = 1);
 };
-
 
 ///////////////////////////
 ////////   Game   ////////
@@ -177,16 +163,6 @@ inline
 void Game::UseDice(bool idx, int n)
 {   times_dice_used[idx] += n;  }
 
-// inline
-// void Game::SwitchPlayer()
-// {   arbiter.SwitchPlayer();  }
-
-///////////// State Checks /////////////
-
-// inline 
-// bool Game::CurrPlayerInEndgame() const
-// {   return board.CurrPlayerInEndgame();    }
-
 inline
 bool Game::GameIsOver() const 
 {   return (board.PiecesLeft().at(0) == 0 || board.PiecesLeft().at(1) == 0);   }
@@ -196,14 +172,6 @@ bool Game::GameIsOver() const
 inline 
 int Game::GetDice(bool idx) const
 {   return dice[idx];   }
-
-// inline
-// int Game::GetPlayerSign() const
-// {   return arbiter.GetPlayerSign();   }
-
-// inline 
-// bool Game::GetPlayerIdx() const
-// {   return board.PlayerIdx();   }
 
 inline
 const NardiBoard& Game::GetBoardRef() const
@@ -216,58 +184,11 @@ inline const ReaderWriter* Game::GetConstRW()
 ////////   Arbiter   ////////
 ////////////////////////////
 
-///////////// Legality /////////////
-
-
-// inline
-// bool Game::Arbiter::InBounds(const NardiCoord& coord) const
-// {
-//     return InBounds(coord.row, coord.col);
-// }
-
-// inline
-// bool Game::Arbiter::InBounds(int r, int c) const
-// {
-//     return (r >= 0 && r < ROW && c >= 0 && c < COL);
-// }
-
 ///////////// Updates and Actions /////////////
 
 inline 
 void Game::Arbiter::IncrementTurnNumber()
 {   ++turn_number[g->board.PlayerIdx()];  }
-
-// inline 
-// void Game::Arbiter::FlagHeadIfNeeded(const NardiCoord& start)
-// { 
-//     if(!head_used && IsHead(start))
-//         head_used = true; 
-// }
-
-// inline
-// void Game::Arbiter::SwitchPlayer(){
-//     player_idx  = !player_idx;
-//     player_sign = -player_sign;
-//     Reset();
-// }
-
-// inline
-// void Game::Arbiter::ResetHead()
-// { head_used = false; }
-
-// inline
-// void Game::Arbiter::Reset()
-// {   ResetHead();   }
-
-///////////// Getters and State Checks /////////////
-
-// inline
-// int Game::Arbiter::GetPlayerSign() const
-// { return player_sign; }
-
-// inline
-// bool Game::Arbiter::GetPlayerIdx() const
-// { return player_idx; }
 
 inline bool Game::Arbiter::CurrPlayerInEndgame() const
 {   return g->board.CurrPlayerInEndgame();   }
