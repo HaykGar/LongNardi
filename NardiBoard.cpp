@@ -29,13 +29,13 @@ void NardiBoard::OnMove(const NardiCoord& start, const NardiCoord& end)
     FlagHeadIfNeeded(start);
 
     UpdateAvailabilitySets(start, end);
-
 }
 
 void NardiBoard::Remove(const NardiCoord& to_remove)
 {
     data[to_remove.row][to_remove.col] -= player_sign;
     --pieces_left.at(player_idx);
+    OnRemove(to_remove);
 }
 
 void NardiBoard::OnRemove(const NardiCoord& to_remove)
@@ -54,7 +54,7 @@ void NardiBoard::UpdateAvailabilitySets(const NardiCoord& start, const NardiCoor
         NardiCoord coord = CoordAfterDistance(dest, d);
         while( !coord.OutOfBounds() && d <= 6 )
         {
-            if(at(coord) * PlayerSign() >= 0) // square empty or occupied by player already
+            if(at(coord) * player_sign >= 0) // square empty or occupied by player already
                 goes_idx_plusone[player_idx][d-1].insert(dest);
             
             ++d;
@@ -65,7 +65,7 @@ void NardiBoard::UpdateAvailabilitySets(const NardiCoord& start, const NardiCoor
         coord = CoordAfterDistance(dest, -d, !player_idx);
         while( !coord.OutOfBounds() && d <= 6 )
         {
-            if(at(coord) * PlayerSign() < 0) // other player occupies coord
+            if(at(coord) * player_sign < 0) // other player occupies coord
                 goes_idx_plusone[!player_idx][d-1].erase(coord);   // pieces at coord can no longer travel here
 
             ++d;
@@ -87,7 +87,7 @@ void NardiBoard::UpdateAvailabilitySets(const NardiCoord start)  // not referenc
 
         while( !coord.OutOfBounds()  && d <= 6 )
         {
-            if(at(coord) * PlayerSign() < 0) // other player occupies coord
+            if(at(coord) * player_sign < 0) // other player occupies coord
                 goes_idx_plusone[!player_idx][d-1].insert(coord);   // coord reaches a new empty spot at start with distance d
 
             ++d;
@@ -102,7 +102,7 @@ void NardiBoard::UpdateAvailabilitySets(const NardiCoord start)  // not referenc
             goes_idx_plusone[player_idx][i-1].insert({!player_idx, COL - max_num_occ.at(player_idx)}); 
 
         for(int i = 1; i < max_num_occ.at(player_idx); ++i)
-            if(at(!player_idx, COL - i) * PlayerSign()  > 0)
+            if(at(!player_idx, COL - i) * player_sign  > 0)
                 goes_idx_plusone[player_idx][i-1].insert({!player_idx, COL - i});
     }
 }
@@ -118,6 +118,18 @@ void NardiBoard::SetMaxOcc()
 
 status_codes NardiBoard::ValidStart(const NardiCoord& start) const
 {
+    //std::cout << "\n\n\n\n";
+    
+    //std::cout << "out of bounds? " << std::boolalpha << start.OutOfBounds() << "\n";
+    // if(!start.OutOfBounds())
+    // {
+    //     //std::cout << "checking start: " << start.row << ", " << start.col << " with val " << at(start) << "\n";
+    //     //std::cout << "empty or enemy? " << std::boolalpha << (player_sign * at(start) <= 0) << "\n";
+    //     //std::cout << "HeadReuse?" << std::boolalpha << HeadReuseIssue(start) << "\n";
+    // }
+
+    //std::cout << "\n\n\n\n";
+
     if(start.OutOfBounds())
         return status_codes::OUT_OF_BOUNDS;
     else if ( player_sign * at(start) <= 0)
@@ -154,7 +166,7 @@ bool NardiBoard::Bad_RowChangeTo(bool er, bool player) const
     return (r == 0 || r == 1);
 }
 
-///////////// Coord and Distance Calculations /////////////
+///////////// Calculations /////////////
 
 NardiCoord NardiBoard::CoordAfterDistance(const NardiCoord& start, int d, bool player) const
 {
@@ -187,4 +199,12 @@ unsigned NardiBoard::GetDistance(const NardiCoord& start, const NardiCoord& end)
         return end.col - start.col; // sc >= ec is invalid, so this will be positive if called on well-defined move
     else
         return COL - start.col + end.col;
+}
+
+unsigned NardiBoard::MovablePieces(const NardiCoord& start)
+{
+    if(at(start) == 0)
+        return 0;
+    else
+        return IsPlayerHead(start) ? 1 : abs(at(start));
 }

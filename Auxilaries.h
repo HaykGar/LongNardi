@@ -38,7 +38,7 @@ enum class Actions
 struct NardiCoord
 {
     NardiCoord(int r, int c) : row(r), col(c) {}
-    NardiCoord() : row(-1), col(-1) {}  // -1 to emphasize uninitialized `
+    NardiCoord() : row(-1), col(-1) {} // initialize out of bounds to force explicit assignment before use
 
     bool operator==(const NardiCoord& rhs) const;
     bool OutOfBounds() const;
@@ -84,6 +84,6 @@ struct Command // considering making this std::variant or something...
     std::variant<std::monostate, NardiCoord, bool> payload;
 };
 
-void VisualToGameCoord(NardiCoord& coord);
-
+void VisualToGameCoord(NardiCoord& coord); // not needed currently, but for graphics later
 int BoolToSign(bool p_idx);
+void DispErrorCode(status_codes code);

@@ -16,18 +16,18 @@ class TerminalRW : public ReaderWriter
     public:
         TerminalRW(const Game& g, Controller& c);
         
-        virtual void AwaitUserCommand();
+        virtual void AwaitUserCommand() override;
         
-        virtual void ReAnimate() const;         // show the current state of the game
-        virtual void AnimateDice() const;
+        virtual void ReAnimate() const override;         // show the current state of the game
+        virtual void AnimateDice() const override;
 
-        virtual void InstructionMessage(std::string m) const;
-        virtual void ErrorMessage(std::string m) const;
+        virtual void InstructionMessage(std::string m) const override;
+        virtual void ErrorMessage(std::string m) const override;
         // game, controller inherited
 
     protected:
         std::string input;
-        virtual Command Input_to_Command() const;
+        virtual Command Input_to_Command() const override;
 
         std::vector<std::string> splitStringByWhitespace(const std::string& str) const;
         bool isNumeric(std::string s) const;

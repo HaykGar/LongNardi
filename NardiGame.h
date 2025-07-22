@@ -19,6 +19,8 @@ Pass ownership of goes_idx to board...
 
 Automate dice rolling from controller ?
 
+On select start, check forced moves from there, return this if valid start?
+
 undo move feature
 
 */
@@ -30,7 +32,8 @@ class Game
 {
     public:
         // construction and initialization:
-        Game(int seed = 1); 
+        Game(int seed);
+        Game();
         void AttachReaderWriter(ReaderWriter* r);
 
         // Gameplay
@@ -39,12 +42,13 @@ class Game
         status_codes TryFinishMove(const NardiCoord& start, const NardiCoord& end);     // No Removals
         status_codes TryMoveByDice(const NardiCoord& start, bool dice);                 // Removals and regular moves
         
+        void SwitchPlayer();
+
         // State Checks
         bool GameIsOver() const;
 
         // Getters
         int GetDice(bool idx) const;
-
         const NardiBoard& GetBoardRef() const;
         const ReaderWriter* GetConstRW();
 
@@ -56,6 +60,7 @@ class Game
 
         std::mt19937 rng;                           // Mersenne Twister engine
         std::uniform_int_distribution<int> dist;    // uniform distribution for dice
+
         std::array<int, 2> dice; 
         std::array<int, 2> times_dice_used;
         bool doubles_rolled;
@@ -91,13 +96,12 @@ class Game
                 const std::unordered_set<NardiCoord>& PlayerGoesByDice(bool dice_idx) const;
                 NardiCoord PlayerHead() const;
 
-
                 // Legality Helpers
                 std::pair<status_codes, NardiCoord> LegalMove_2step(const NardiCoord& start);
                 
                 bool CanUseDice(bool idx, int n_times = 1) const;
                 bool PreventsTurnCompletion(const NardiCoord& start, bool dice_idx) const;
-                bool MakesSecondStep(const NardiCoord& start) const;  // rename, rework, move to board `
+                bool MakesSecondStep(const NardiCoord& start) const;
 
                 // Forced Moves - implement handlers `
                 status_codes CheckForcedMoves();
@@ -116,10 +120,14 @@ class Game
         };
         
         Arbiter arbiter;
+
+        status_codes OnRoll();
+        void SetDice(int d1, int d2);
+        void UseDice(bool idx, int n = 1);
         
         status_codes MakeMove(const NardiCoord& start, const NardiCoord& end);
         status_codes RemovePiece(const NardiCoord& start);
-        void UseDice(bool idx, int n = 1);
+        
 };
 
 ///////////////////////////
@@ -141,6 +149,10 @@ void Game::UseDice(bool idx, int n)
 inline
 bool Game::GameIsOver() const 
 {   return (board.PiecesLeft().at(0) == 0 || board.PiecesLeft().at(1) == 0);   }
+
+inline 
+void Game::SwitchPlayer()
+{   board.SwitchPlayer();   }
 
 ///////////// Getters /////////////
 

@@ -3,7 +3,7 @@
 #include "Auxilaries.h"
 #include <unordered_set>
 
-struct NardiBoard 
+class NardiBoard 
 {
 public:
     // Constructor
@@ -43,11 +43,14 @@ public:
 
     bool CurrPlayerInEndgame() const;
 
-    // Coord and Distance Calculations
+    // Calculations
     NardiCoord CoordAfterDistance(const NardiCoord& start, int d, bool player) const;
     NardiCoord CoordAfterDistance(const NardiCoord& start, int d) const;
     unsigned GetDistance(const NardiCoord& start, const NardiCoord& end) const;
 
+    unsigned MovablePieces(const NardiCoord& start);
+
+    friend class TestBuilder;
 private:
     std::array<std::array<int, COL>, ROW> data;     // worth making private?
 
@@ -124,7 +127,6 @@ void NardiBoard::FlagHeadIfNeeded(const NardiCoord& start)
 }
 
 ///////////// Legality Helpers /////////////
-
 
 inline
 bool NardiBoard::IsPlayerHead(const NardiCoord& coord) const

@@ -11,24 +11,38 @@ Game::Game(int rseed) : board(),  rng(rseed), dist(1, 6), dice({0, 0}), times_di
                         doubles_rolled(false), rw(nullptr), arbiter(this)
 { } 
 
+Game::Game() :  board(),  rng(std::random_device{}()), dist(1, 6), dice({0, 0}), 
+                times_dice_used({0, 0}), doubles_rolled(false), rw(nullptr), arbiter(this)
+{}
+
 ///////////// Gameplay /////////////
 
 status_codes Game::RollDice() // important to force this only once per turn in controller, no explicit safeguard here
 {    
-    board.SwitchPlayer();
+    SetDice(dist(rng), dist(rng));
+    return OnRoll();
+}
+ 
+void Game::SetDice(int d1, int d2)
+{   
+    dice[0] = d1; 
+    dice[1] = d2;  
     times_dice_used[0] = 0;
     times_dice_used[1] = 0;
-    dice[0] = dist(rng);
-    dice[1] = dist(rng);
-    doubles_rolled = (dice[0] == dice[1]);
+    doubles_rolled = (dice[0] == dice[1]); 
+}
 
-    rw->AnimateDice();
+status_codes Game::OnRoll()
+{
+    if(rw)
+        rw->AnimateDice();
 
     return arbiter.OnRoll();
 }
 
 status_codes Game::TryStart(const NardiCoord& start) const
 {
+    //std::cout << "called TryStart\n";
     // During endgame, if it's a valid start just check if there's a forced move from here, will streamline play
     return board.ValidStart(start);
 }
@@ -47,6 +61,10 @@ status_codes Game::TryFinishMove(const NardiCoord& start, const NardiCoord& end)
 
 status_codes Game::TryMoveByDice(const NardiCoord& start, bool dice_idx)
 {
+    //std::cout << "\n\n start: " << start.row << ", " << start.col << "\n";
+    //std::cout << "dice: " << dice[dice_idx] << "\n";
+    //std::cout << "other dice: " << dice[!dice_idx] << "\n";
+    
     if(board.CurrPlayerInEndgame() && arbiter.CanRemovePiece(start, dice_idx))
     {
         UseDice(dice_idx);
@@ -54,6 +72,10 @@ status_codes Game::TryMoveByDice(const NardiCoord& start, bool dice_idx)
     }
     
     auto [result, dest]  = arbiter.CanMoveByDice(start, dice_idx);
+    
+    //std::cout << "res: \n";
+    DispErrorCode(result);
+
     if(result != status_codes::SUCCESS )
         return result;
     
@@ -67,7 +89,8 @@ status_codes Game::MakeMove(const NardiCoord& start, const NardiCoord& end)
 {
     board.Move(start, end);
 
-    rw->ReAnimate();
+    if(rw)
+        rw->ReAnimate();
 
     return arbiter.OnMove(start, end);
 }
@@ -75,7 +98,8 @@ status_codes Game::MakeMove(const NardiCoord& start, const NardiCoord& end)
 status_codes Game::RemovePiece(const NardiCoord& start)
 {
     board.Remove(start);
-    rw->ReAnimate();
+    if(rw)
+        rw->ReAnimate();
     if(GameIsOver())
         return status_codes::NO_LEGAL_MOVES_LEFT;
     
@@ -98,11 +122,19 @@ std::pair<status_codes, NardiCoord> Game::Arbiter::CanMoveByDice(const NardiCoor
     if(!CanUseDice(dice_idx))
         return {status_codes::DICE_USED_ALREADY, {} };
 
+    //std::cout << "dice usable\n";
+
     NardiCoord final_dest = g->board.CoordAfterDistance(start, g->dice[dice_idx]);
     status_codes result = g->board.WellDefinedEnd(start, final_dest);
 
+    //std::cout << "board legal?\n";
+    // DispErrorCode(result);
+    
     if (result == status_codes::SUCCESS && PreventsTurnCompletion(start, dice_idx))
+    {    
+        //std::cout << "bad prevention\n";
         return {status_codes::PREVENTS_COMPLETION, {} };
+    }
     else
         return {result, final_dest};
 }
@@ -115,21 +147,64 @@ bool Game::Arbiter::CanUseDice(bool idx, int n) const
 
 bool Game::Arbiter::PreventsTurnCompletion(const NardiCoord& start, bool dice_idx) const // only called by MoveByDice
 {
-    return (!g->doubles_rolled && CanUseDice(0) && CanUseDice(1) && min_options[0] >= 1 && min_options[1] >= 1 
-            &&  PlayerGoesByDice(!dice_idx).empty() && !MakesSecondStep(start));
-        /* 
-            no doubles, both dice useable, each dice had options at the start of turn, the 
-            other dice can only play via a 2step, no 2steps from here
-        */
+    // //std::cout << "doub roll: " << std::boolalpha << g->doubles_rolled << "\n";
+    // //std::cout << "dices usable: " << std::boolalpha << (CanUseDice(0) && CanUseDice(1)) << "\n";
+    // //std::cout << "options: " << min_options[0] << " " << min_options[1] << "\n";
+    // //std::cout << "steps twice: " << std::boolalpha << (MakesSecondStep(start)) << "\n";
+    // //std::cout << "contains start: " << std::boolalpha << (PlayerGoesByDice(!dice_idx).contains(start)) << "\n";
+    // //std::cout << "only 1 went: " << std::boolalpha << (PlayerGoesByDice(!dice_idx).size() == 1) << "\n"; 
+        
+    // //std::cout << "\n\n";
+    // for(const auto& coord : PlayerGoesByDice(!dice_idx))
+    // {
+    //     //std::cout << coord.row << ", " << coord.col << " goes by " << g->dice[!dice_idx] << "\n";
+    // }
+    // //std::cout << "\n\n";
+    
+    // //std::cout << "no piece went by other: " << std::boolalpha << (PlayerGoesByDice(!dice_idx).empty()) << "\n"; 
+    // //std::cout << "only 1 movable at start: " << std::boolalpha << (g->board.MovablePieces(start) == 1) << "\n"; 
+
+    // //std::cout << "return value " << (
+    //     !g->doubles_rolled && 
+    //     CanUseDice(0) && CanUseDice(1) && 
+    //     min_options[0] >= 1 && min_options[1] >= 1  &&  // could play both before
+    //     !MakesSecondStep(start) &&                      // cannot continue with this piece
+    //     ( 
+    //         PlayerGoesByDice(!dice_idx).empty() ||      // no pieces move first by other dice
+    //         (
+    //             PlayerGoesByDice(!dice_idx).size() == 1 && 
+    //             PlayerGoesByDice(!dice_idx).contains(start) && 
+    //             g->board.MovablePieces(start) == 1
+    //         )   // moving start prevents moving any other piece by other dice
+    //     )   
+    // ) << "\n"; // expect true here
+    // //std::cout << "\n\n\n\n";
+
+
+    
+    return 
+    (
+        !g->doubles_rolled && 
+        CanUseDice(0) && CanUseDice(1) && 
+        min_options[0] >= 1 && min_options[1] >= 1  &&  // could play both before
+        !MakesSecondStep(start) &&                      // cannot continue with this piece
+        ( 
+            PlayerGoesByDice(!dice_idx).empty() ||      // no pieces move first by other dice
+            (
+                PlayerGoesByDice(!dice_idx).size() == 1 && 
+                PlayerGoesByDice(!dice_idx).contains(start) && 
+                g->board.MovablePieces(start) == 1
+            )   // moving start prevents moving any other piece by other dice
+        )   
+    );
 }
 
 bool Game::Arbiter::MakesSecondStep(const NardiCoord& start) const
 {
-    return (g->board.WellDefinedEnd
-            (
+    return (g->board.WellDefinedEnd (
                 start, 
                 g->board.CoordAfterDistance(start, g->dice[0] + g->dice[1]) 
-            ) == status_codes::SUCCESS);
+            ) == status_codes::SUCCESS  );
 }
 
 bool Game::Arbiter::CanRemovePiece(const NardiCoord& start, bool dice_idx)
@@ -149,8 +224,8 @@ std::pair<status_codes, std::array<int, 2>> Game::Arbiter::LegalMove(const Nardi
 
     if(d == g->dice[0])
         return {CanMoveByDice(start, 0).first, {1, 0} };
-    else if (d == g->dice[1]) 
-        return {CanMoveByDice(start, 1).first, {0, 1} };
+    else if (d == g->dice[1]) { //std::cout << "moving by dice val: " << g->dice[1] << "\n";
+        return {CanMoveByDice(start, 1).first, {0, 1} }; }
     else if (d == g->dice[0] + g->dice[1])
         return {LegalMove_2step(start).first, {1, 1}};
     else if ( g->doubles_rolled && (d % g->dice[0] == 0)  )
@@ -254,7 +329,7 @@ status_codes Game::Arbiter::CheckForced_2Dice()
         {
             NardiCoord start = *PlayerGoesByDice(0).begin();
             if(start == *PlayerGoesByDice(1).begin() && 
-                (g->board.at(start) * g->board.PlayerSign() == 1 || g->board.IsPlayerHead(start)) )
+                g->board.MovablePieces(start) == 1 )
                 return HandleForced1Dice(max_dice); // Will make other forced move if possible
         }
     }
@@ -369,7 +444,7 @@ status_codes Game::Arbiter::CheckForced_Doubles()
         if (g->board.HeadReuseIssue(coord))
             continue;   // don't use this coord
 
-        int n_pieces = g->board.IsPlayerHead(coord) ? 1 : abs(g->board.at(coord));
+        int n_pieces = g->board.MovablePieces(coord);
         
         NardiCoord start = coord;
         auto [canGo, dest] = CanMoveByDice(start, 0);
@@ -411,7 +486,8 @@ void Game::Arbiter::Force_1stMoveException()
     g->board.Move(head, dest);
     g->board.Move(head, dest);
 
-    g->rw->ReAnimate(); 
+    if(g->rw)
+        g->rw->ReAnimate(); 
 }
 
 status_codes Game::Arbiter::ForceMove(const NardiCoord& start, bool dice_idx)  // only to be called when forced
