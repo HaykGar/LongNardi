@@ -47,9 +47,6 @@ void DispErrorCode(status_codes c)
     case status_codes::BACKWARDS_MOVE:
         std::cout << "BACKWARDS_MOVE";
         break;
-    case status_codes::BOARD_END_REACHED:
-        std::cout << "BOARD_END_REACHED";
-        break;
     case status_codes::NO_PATH:
         std::cout << "NO_PATH";
         break;

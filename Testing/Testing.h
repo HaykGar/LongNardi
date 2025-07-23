@@ -19,6 +19,9 @@ class TestBuilder : public testing::Test
         status_codes ReceiveCommand(const Command& c);
 
         void PrintBoard() const;
+
+        const int& GetBoardAt(const NardiCoord& coord) const;
+        const int& GetBoardAt(int r, int c) const;
         
     private:
         Game _game;
@@ -34,15 +37,14 @@ class TestBuilder : public testing::Test
         void ResetControllerState();
 };
 
-// class TestLoader
-// {
-//     public:
-//         std::vector<TestCase> operator() ();
+inline 
+const int& TestBuilder::GetBoardAt(const NardiCoord& coord) const
+{
+    return _game.board.at(coord);
+}
 
-//     private:
-//         void add_basic_move_cases();
-//         void add_dice_misuse_cases();
-//         void add_legality_cases();
-
-//         std::vector<TestCase> cases;
-// };
+inline 
+const int& TestBuilder::GetBoardAt(int r, int c) const
+{
+    return _game.board.at(r, c);
+}

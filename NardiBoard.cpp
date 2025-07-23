@@ -154,7 +154,7 @@ status_codes NardiBoard::WellDefinedEnd(const NardiCoord& start, const NardiCoor
         return status_codes::SUCCESS; // prevent unnecessary RowChangeCheck
     }
     else if (Bad_RowChangeTo(end.row, player_idx)) // sr != er
-        return status_codes::BOARD_END_REACHED;
+        return status_codes::OUT_OF_BOUNDS;
     else
         return status_codes::SUCCESS;
 }
@@ -193,7 +193,7 @@ NardiCoord NardiBoard::CoordAfterDistance(const NardiCoord& start, int d) const
     return CoordAfterDistance(start, d, player_idx);
 }
 
-unsigned NardiBoard::GetDistance(const NardiCoord& start, const NardiCoord& end) const    // well-defined move
+unsigned NardiBoard::GetDistance(const NardiCoord& start, const NardiCoord& end) const
 {
     if(start.row == end.row)
         return end.col - start.col; // sc >= ec is invalid, so this will be positive if called on well-defined move
@@ -201,7 +201,7 @@ unsigned NardiBoard::GetDistance(const NardiCoord& start, const NardiCoord& end)
         return COL - start.col + end.col;
 }
 
-unsigned NardiBoard::MovablePieces(const NardiCoord& start)
+unsigned NardiBoard::MovablePieces(const NardiCoord& start) const
 {
     if(at(start) == 0)
         return 0;

@@ -48,7 +48,7 @@ public:
     NardiCoord CoordAfterDistance(const NardiCoord& start, int d) const;
     unsigned GetDistance(const NardiCoord& start, const NardiCoord& end) const;
 
-    unsigned MovablePieces(const NardiCoord& start);
+    unsigned MovablePieces(const NardiCoord& start) const;
 
     friend class TestBuilder;
 private:

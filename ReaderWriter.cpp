@@ -23,9 +23,6 @@ void ReaderWriter::DispErrorCode(status_codes c) const
     case status_codes::BACKWARDS_MOVE:
         ErrorMessage("BACKWARDS_MOVE");
         break;
-    case status_codes::BOARD_END_REACHED:
-        ErrorMessage("BOARD_END_REACHED");
-        break;
     case status_codes::NO_PATH:
         ErrorMessage("NO_PATH");
         break;

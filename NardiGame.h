@@ -25,7 +25,6 @@ undo move feature
 
 */
 
-
 class ReaderWriter;
 
 class Game
@@ -64,21 +63,149 @@ class Game
         std::array<int, 2> dice; 
         std::array<int, 2> times_dice_used;
         bool doubles_rolled;
+        std::array<int, 2> turn_number;
         ReaderWriter* rw;
-       
+
+        std::array<size_t, 2> min_options;
+
+        class Arbiter;
+
+        // Exception Monitors
+        struct RuleExceptionMonitor 
+        {
+            public:
+                RuleExceptionMonitor(Game& g, Arbiter& a);
+                
+                bool IsFlagged() const;
+                virtual void Reset();
+                virtual bool PreConditions() = 0;  // conditions for this test to be needed - RENAME FIXME ` or simply make IsFlagged, then overload in first move
+                virtual bool Illegal(const NardiCoord& start, bool dice_idx) = 0; // Violation of rules
+            protected:
+                Game& _g;
+                Arbiter& _arb;
+                bool _flag; // rename or re-design `
+
+        };
+
+        struct FirstMoveException : public RuleExceptionMonitor
+        {
+            public:
+                FirstMoveException(Game& g, Arbiter& a);
+                virtual bool Illegal(const NardiCoord& start, bool dice_idx) override;    // parameters not needed here
+                virtual status_codes MakeForced();
+                virtual bool PreConditions() override;
+        };
+
+        struct PreventionMonitor : public RuleExceptionMonitor
+        {
+            public:
+                PreventionMonitor(Game& g, Arbiter& a);
+                virtual bool Illegal(const NardiCoord& start, bool dice_idx) override;
+                virtual bool PreConditions() override;
+            private:
+                bool MakesSecondStep(const NardiCoord& start) const;                
+        };
+
+        struct BadBlockMonitor : public RuleExceptionMonitor    // doubles change things somewhat - 
+                                                                // fixable() if we can move multiple pieces !!! fixme `
+                                                                // need to attach this logic to CanMoveByDice, legal2step needs to be careful
+        {
+            public:
+                BadBlockMonitor(Game& g, Arbiter& a);
+                virtual bool Illegal(const NardiCoord& start, bool dice_idx) override;
+                virtual bool PreConditions() override;
+
+                virtual void Reset() override;
+
+                enum class block_state
+                {
+                    CLEAR,
+                    FIXABLE_BLOCK,
+                    BAD_BLOCK
+                };
+
+                block_state State() const;
+                const std::unordered_set<NardiCoord>& Unblockers() const;
+
+                
+
+                // unblockers getter
+            private:
+                // _flag raised when Blockage with no pieces ahead, fixable or not
+                block_state _state;
+                unsigned _blockLength;
+                NardiCoord _blockStart;
+                bool _diceAttempting;
+                std::unordered_set<NardiCoord> _unblockers;
+
+                bool BlockageAt(const NardiCoord& end);
+                bool PieceAhead();
+                bool Fixable();
+        };
+
+        // Forced move handlers
+        struct ForcedHandler
+        {
+            public:
+                ForcedHandler(Game& g, Arbiter& a);
+
+                virtual bool Is() = 0;
+                virtual status_codes Check() = 0;
+
+            protected:
+                Arbiter& _arb;
+                Game& _g;
+        };
+
+        struct DoublesHandler : public ForcedHandler
+        {
+            public:
+                DoublesHandler(Game& g, Arbiter& a);
+
+                virtual bool Is() override;
+                virtual status_codes Check() override;
+            
+            private:
+                bool forcing_doubles;
+                FirstMoveException first_move_checker;
+        };
+
+        struct SingleDiceHandler : public ForcedHandler
+        {
+            public:
+                SingleDiceHandler(Game& g, Arbiter& a);
+
+                virtual bool Is() override;
+                virtual status_codes Check() override;
+            protected:
+                virtual status_codes ForceFromDice(bool dice_idx);
+        };
+
+        struct TwoDiceHandler : public SingleDiceHandler
+        {
+            public:
+                TwoDiceHandler(Game& g, Arbiter& a);
+
+                virtual bool Is() override;
+                virtual status_codes Check() override;
+            private:
+                status_codes HandleForced2Dice(bool dice_idx, const std::stack<NardiCoord>& two_step_starts);
+        };
+
+        // Arbiter, tying these together
         class Arbiter
         {
             public:
-                Arbiter(Game* gp);
+                Arbiter(Game& gm);
 
                 // Legality Checks
-                std::pair<status_codes, NardiCoord> CanMoveByDice   (const NardiCoord& start, bool dice_idx) const;
+                std::pair<status_codes, NardiCoord> CanMoveByDice   (const NardiCoord& start, bool dice_idx);
                 bool CanRemovePiece(const NardiCoord& start, bool d_idx);
                 std::pair<status_codes, std::array<int, 2>> LegalMove(const NardiCoord& start, const NardiCoord& end);
+                std::pair<status_codes, NardiCoord> LegalMove_2step(const NardiCoord& start);
+                bool CanUseDice(bool idx, int n_times = 1) const;
 
                 // Updates and Actions
-                void IncrementTurnNumber();
-
                 status_codes OnRoll();
                 status_codes OnMove(const NardiCoord& start, const NardiCoord& end);
                 status_codes OnRemoval(const NardiCoord& start);
@@ -87,46 +214,43 @@ class Game
                 friend class TestBuilder;
 
             private:
-                Game* g;
-                std::array<int, 2> turn_number;
-                bool forcing_doubles;
-                std::array<size_t, 2> min_options;
+                Game& _g;
 
-                // Getter
-                const std::unordered_set<NardiCoord>& PlayerGoesByDice(bool dice_idx) const;
-                NardiCoord PlayerHead() const;
+                DoublesHandler      _doubles;
+                TwoDiceHandler      _twoDice;
+                SingleDiceHandler   _singleDice;
 
-                // Legality Helpers
-                std::pair<status_codes, NardiCoord> LegalMove_2step(const NardiCoord& start);
-                
-                bool CanUseDice(bool idx, int n_times = 1) const;
-                bool PreventsTurnCompletion(const NardiCoord& start, bool dice_idx) const;
-                bool MakesSecondStep(const NardiCoord& start) const;
+                PreventionMonitor   _prevMonitor;
+                FirstMoveException  _firstMove;
+                BadBlockMonitor     _blockMonitor;
 
                 // Forced Moves - implement handlers `
                 status_codes CheckForcedMoves();
-
-                status_codes CheckForced_2Dice();
-                status_codes HandleForced2Dice(bool dice_idx, const std::stack<NardiCoord>& two_step_starts);
-                
-                status_codes CheckForced_1Dice();
-                status_codes HandleForced1Dice(bool dice_idx);
-                
-                status_codes CheckForced_Doubles();
-                void Force_1stMoveException();
-                
-                status_codes ForceMove(const NardiCoord& start, bool dice_idx);
-                status_codes ForceRemovePiece(const NardiCoord& start, bool dice_idx);
+                bool PreventsTurnCompletion(const NardiCoord& start, bool dice_idx) const;
         };
         
         Arbiter arbiter;
 
+        // Getters
+        const Game* GetConstSelfPtr() const;
+        const std::unordered_set<NardiCoord>& PlayerGoesByDice(bool dice_idx) const;
+        NardiCoord PlayerHead() const;
+
+        // Dice Actions
         status_codes OnRoll();
         void SetDice(int d1, int d2);
         void UseDice(bool idx, int n = 1);
+
+        // Updates
+        void IncrementTurnNumber();
+
         
+        // Moving
         status_codes MakeMove(const NardiCoord& start, const NardiCoord& end);
         status_codes RemovePiece(const NardiCoord& start);
+
+        status_codes ForceMove(const NardiCoord& start, bool dice_idx);
+        status_codes ForceRemovePiece(const NardiCoord& start, bool dice_idx);
         
 };
 
@@ -164,27 +288,26 @@ inline
 const NardiBoard& Game::GetBoardRef() const
 {   return board;   }
 
+inline
+const Game* Game::GetConstSelfPtr() const
+{   return this;   }
+
 inline const ReaderWriter* Game::GetConstRW() 
 {   return rw;   }
 
-//////////////////////////////
-////////   Arbiter   ////////
-////////////////////////////
-
-///////////// Getters /////////////
 
 inline
-const std::unordered_set<NardiCoord>& Game::Arbiter::PlayerGoesByDice(bool dice_idx) const
-{   return g->board.PlayerGoesByDist(g->dice[dice_idx]);   }
+const std::unordered_set<NardiCoord>& Game::PlayerGoesByDice(bool dice_idx) const
+{   return board.PlayerGoesByDist(dice[dice_idx]);   }
 
 inline
-NardiCoord Game::Arbiter::PlayerHead() const
-{   return {g->board.PlayerIdx(), 0};   }
+NardiCoord Game::PlayerHead() const
+{   return {board.PlayerIdx(), 0};   }
 
-///////////// Updates and Actions /////////////
+///////////// Updates /////////////
 
 inline 
-void Game::Arbiter::IncrementTurnNumber()
-{   ++turn_number[g->board.PlayerIdx()];  }
+void Game::IncrementTurnNumber()
+{   ++turn_number[board.PlayerIdx()];   }
 
 

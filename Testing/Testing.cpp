@@ -8,7 +8,7 @@
 
 TestBuilder::TestBuilder() : _game(1), _ctrl(_game)
 {
-    _game.arbiter.turn_number = {2, 2}; // avoiding first turn case unless explicitly requested
+    _game.turn_number = {2, 2}; // avoiding first turn case unless explicitly requested
 }
 
 void TestBuilder::StartPreRoll(bool p_idx, const std::array<std::array<int, COL>, ROW>& b)
@@ -141,7 +141,7 @@ void TestBuilder::ResetControllerState()
 
 void TestBuilder::withFirstTurn()
 {
-    _game.arbiter.turn_number = {0, 0};
+    _game.turn_number = {0, 0};
 }
 
 //////////////// Actions ////////////////
