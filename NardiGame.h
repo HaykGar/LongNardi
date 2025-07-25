@@ -8,8 +8,7 @@
 #include <random>
 
 /*
-Chi kareli chtoghel tun mtnel araji angam -- details:
-    Can't block >= 6 consecutive squares without at least 1 enemy piece ahead of the block
+touch up back block for doubles...
 
 Rule precedence: only available move creates block issue not allowed
 
@@ -37,7 +36,7 @@ class Game
 
         // Gameplay
         status_codes RollDice();
-        status_codes TryStart(const NardiCoord& s) const;
+        status_codes TryStart(const NardiCoord& s);
         status_codes TryFinishMove(const NardiCoord& start, const NardiCoord& end);     // No Removals
         status_codes TryMoveByDice(const NardiCoord& start, bool dice);                 // Removals and regular moves
         
@@ -56,17 +55,19 @@ class Game
 
     private:
         NardiBoard board;    // reminder: first row of board is reversed from view
+        NardiBoard mock_board;
 
         std::mt19937 rng;                           // Mersenne Twister engine
         std::uniform_int_distribution<int> dist;    // uniform distribution for dice
 
         std::array<int, 2> dice; 
         std::array<int, 2> times_dice_used;
+
+        std::array<int, 2> times_mockdice_used;
+
         bool doubles_rolled;
         std::array<int, 2> turn_number;
         ReaderWriter* rw;
-
-        std::array<size_t, 2> min_options;
 
         class Arbiter;
 
@@ -83,7 +84,7 @@ class Game
             protected:
                 Game& _g;
                 Arbiter& _arb;
-                bool _flag; // rename or re-design `
+                bool _preconditions; // rename or re-design `
 
         };
 
@@ -100,23 +101,25 @@ class Game
         {
             public:
                 PreventionMonitor(Game& g, Arbiter& a);
+
+                virtual void Reset() override;
                 virtual bool Illegal(const NardiCoord& start, bool dice_idx) override;
                 virtual bool PreConditions() override;
             private:
-                bool MakesSecondStep(const NardiCoord& start) const;                
+                bool _completable;
+                std::array<int, 2> turn_last_updated;
+
+                bool MakesSecondStep(const NardiCoord& start) const;   
+                bool TurnCompletable();
+             
         };
 
         struct BadBlockMonitor : public RuleExceptionMonitor    // doubles change things somewhat - 
                                                                 // fixable() if we can move multiple pieces !!! fixme `
-                                                                // need to attach this logic to CanMoveByDice, legal2step needs to be careful
+                                                                // need to attach this logic to CanFinishByDice, legal2step needs to be careful
         {
             public:
                 BadBlockMonitor(Game& g, Arbiter& a);
-                virtual bool Illegal(const NardiCoord& start, bool dice_idx) override;
-                virtual bool PreConditions() override;
-
-                virtual void Reset() override;
-
                 enum class block_state
                 {
                     CLEAR,
@@ -124,15 +127,21 @@ class Game
                     BAD_BLOCK
                 };
 
+                virtual bool Illegal(const NardiCoord& start, bool dice_idx) override;
+                virtual bool PreConditions() override;
+
+                virtual void Reset() override;
+                void Solidify();
+
                 block_state State() const;
                 const std::unordered_set<NardiCoord>& Unblockers() const;
 
-                
-
-                // unblockers getter
             private:
-                // _flag raised when Blockage with no pieces ahead, fixable or not
+                // _blocked true when Blockage with no pieces ahead, fixable or not
+                bool _blockedAll;
+                bool _isSolidified;
                 block_state _state;
+
                 unsigned _blockLength;
                 NardiCoord _blockStart;
                 bool _diceAttempting;
@@ -140,7 +149,9 @@ class Game
 
                 bool BlockageAt(const NardiCoord& end);
                 bool PieceAhead();
-                bool Fixable();
+                bool WillBeFixable();
+
+                bool BlockingAll();
         };
 
         // Forced move handlers
@@ -166,8 +177,10 @@ class Game
                 virtual status_codes Check() override;
             
             private:
-                bool forcing_doubles;
+                int steps_left;
                 FirstMoveException first_move_checker;
+
+                void MockFrom(NardiCoord start);
         };
 
         struct SingleDiceHandler : public ForcedHandler
@@ -178,18 +191,16 @@ class Game
                 virtual bool Is() override;
                 virtual status_codes Check() override;
             protected:
-                virtual status_codes ForceFromDice(bool dice_idx);
+                virtual status_codes ForceFromDice(bool idx);
         };
 
-        struct TwoDiceHandler : public SingleDiceHandler
+        struct TwoDiceHandler : public ForcedHandler
         {
             public:
                 TwoDiceHandler(Game& g, Arbiter& a);
 
                 virtual bool Is() override;
                 virtual status_codes Check() override;
-            private:
-                status_codes HandleForced2Dice(bool dice_idx, const std::stack<NardiCoord>& two_step_starts);
         };
 
         // Arbiter, tying these together
@@ -198,23 +209,37 @@ class Game
             public:
                 Arbiter(Game& gm);
 
-                // Legality Checks
-                std::pair<status_codes, NardiCoord> CanMoveByDice   (const NardiCoord& start, bool dice_idx);
-                bool CanRemovePiece(const NardiCoord& start, bool d_idx);
+                // Legality Checks and helpers
+                std::pair<status_codes, NardiCoord> CanMoveByDice(const NardiCoord& start, bool dice_idx);
+                std::pair<status_codes, NardiCoord> CanFinishByDice   (const NardiCoord& start, bool dice_idx);
                 std::pair<status_codes, std::array<int, 2>> LegalMove(const NardiCoord& start, const NardiCoord& end);
                 std::pair<status_codes, NardiCoord> LegalMove_2step(const NardiCoord& start);
+
+                bool CanRemovePiece(const NardiCoord& start, bool d_idx);
+
+                bool CanUseMockDice(bool idx, int n_times = 1) const;
                 bool CanUseDice(bool idx, int n_times = 1) const;
+
+                bool IllegalBlocking(const NardiCoord& start, bool d_idx);
+                
+                // Getters
+                const std::vector<NardiCoord>& GetMovables(bool idx);
+                std::unordered_set<NardiCoord> GetTwoSteppers(size_t max_qty, const std::array<std::vector<NardiCoord>, 2>& to_search);
+                std::unordered_set<NardiCoord> GetTwoSteppers(size_t max_qty);
 
                 // Updates and Actions
                 status_codes OnRoll();
-                status_codes OnMove(const NardiCoord& start, const NardiCoord& end);
-                status_codes OnRemoval(const NardiCoord& start);
+                status_codes OnMove();
+                status_codes OnRemoval();
+
+                void SolidifyBlockMonitor();
 
                 // friend class for testing
                 friend class TestBuilder;
 
             private:
                 Game& _g;
+                std::array< std::vector<NardiCoord>, 2 >  _movables;
 
                 DoublesHandler      _doubles;
                 TwoDiceHandler      _twoDice;
@@ -224,16 +249,19 @@ class Game
                 FirstMoveException  _firstMove;
                 BadBlockMonitor     _blockMonitor;
 
-                // Forced Moves - implement handlers `
+                // Forced Moves
                 status_codes CheckForcedMoves();
-                bool PreventsTurnCompletion(const NardiCoord& start, bool dice_idx) const;
+
+                void UpdateMovables();
         };
         
         Arbiter arbiter;
 
         // Getters
-        const Game* GetConstSelfPtr() const;
+        const std::unordered_set<NardiCoord>& PlayerGoesByMockDice(bool dice_idx) const;
         const std::unordered_set<NardiCoord>& PlayerGoesByDice(bool dice_idx) const;
+
+
         NardiCoord PlayerHead() const;
 
         // Dice Actions
@@ -243,10 +271,17 @@ class Game
 
         // Updates
         void IncrementTurnNumber();
+        void ResetMock();
+        void RealizeMock(); // implement me `
 
         
         // Moving
         status_codes MakeMove(const NardiCoord& start, const NardiCoord& end);
+
+        void MockMove(const NardiCoord& start, const NardiCoord& end);
+        void MockMoveByDice(const NardiCoord& start, bool dice_idx);
+
+
         status_codes RemovePiece(const NardiCoord& start);
 
         status_codes ForceMove(const NardiCoord& start, bool dice_idx);
@@ -268,7 +303,10 @@ void Game::AttachReaderWriter(ReaderWriter* r)
 
 inline 
 void Game::UseDice(bool idx, int n)
-{   times_dice_used[idx] += n;  }
+{   
+    times_dice_used[idx] += n;  
+    times_mockdice_used = times_dice_used;
+}
 
 inline
 bool Game::GameIsOver() const 
@@ -276,7 +314,10 @@ bool Game::GameIsOver() const
 
 inline 
 void Game::SwitchPlayer()
-{   board.SwitchPlayer();   }
+{   
+    board.SwitchPlayer();
+    mock_board.SwitchPlayer();
+}
 
 ///////////// Getters /////////////
 
@@ -288,21 +329,21 @@ inline
 const NardiBoard& Game::GetBoardRef() const
 {   return board;   }
 
-inline
-const Game* Game::GetConstSelfPtr() const
-{   return this;   }
-
 inline const ReaderWriter* Game::GetConstRW() 
 {   return rw;   }
 
-
 inline
+const std::unordered_set<NardiCoord>& Game::PlayerGoesByMockDice(bool dice_idx) const
+{   return mock_board.PlayerGoesByDist(dice[dice_idx]);   }
+
+inline 
 const std::unordered_set<NardiCoord>& Game::PlayerGoesByDice(bool dice_idx) const
 {   return board.PlayerGoesByDist(dice[dice_idx]);   }
 
 inline
 NardiCoord Game::PlayerHead() const
 {   return {board.PlayerIdx(), 0};   }
+
 
 ///////////// Updates /////////////
 

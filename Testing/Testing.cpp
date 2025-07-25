@@ -27,6 +27,7 @@ status_codes TestBuilder::StartOfTurn(bool p_idx, const std::array<std::array<in
 status_codes TestBuilder::withDice(int d1, int d2)
 {
     _game.SetDice(d1, d2);
+    _game.ResetMock();
     status_codes outcome = _game.OnRoll();
 
     // PrintBoard();
@@ -47,11 +48,13 @@ void TestBuilder::withPlayer(bool p_idx)
     _game.board.player_sign = p_idx ? -1 : 1;
 }
 
-
 void TestBuilder::withBoard(const std::array<std::array<int, COL>, ROW>& b)
 {
+    _game.board = NardiBoard();
     _game.board.data = b;
+
     SetDerived();
+    _game.ResetMock();
 }
 
 void TestBuilder::SetDerived()

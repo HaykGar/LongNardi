@@ -108,15 +108,18 @@ static std::array<std::array<int, COL>, ROW> SafeBoard() {
 // ───────────────────────── 1. invalid start selections ───────────────────────
 TEST_F(TestBuilder, StartSelect_InvalidStarts)
 {
-  auto brd = ZeroWhite1BlackBoard();
+  auto brd = SafeBoard();
   brd[0][3] = 4;      // white pile we can legally select later
   brd[1][0] = -5;     // black head (enemy pile)
 
   auto rc = StartOfTurn(white, brd, /*d1*/2, /*d2*/3);
-  ASSERT_EQ(rc, status_codes::SUCCESS)
-            << "StartOfTurn should succeed (no forced moves possible)";
+  PrintBoard();
 
-  // PrintBoard();
+  ASSERT_EQ(rc, status_codes::SUCCESS)
+            << "StartOfTurn should succeed, no forced moves";
+
+  DispErrorCode(rc);
+
 
   // 1-A  empty slot
   rc = ReceiveCommand(Command(Actions::SELECT_SLOT, {0,2} ));
@@ -216,13 +219,26 @@ TEST_F(TestBuilder, HeadReuse_NormalRoll)
 TEST_F(TestBuilder, HeadReuse_DoublesFourthMove)
 {
     auto brd = HeadScenarioBoard();
-
+    std::cout << "starting board... \n\n";
+    for(int i = 0; i < ROW; ++i)
+    {
+        for (int j = 0; j < COL; ++j)
+        {
+            std::cout << brd[i][j] << "\t";
+        }
+        std::cout<< "\n\n";
+    }
+    std::cout<< "\n\n\n\n";
+    
+    auto rc = StartOfTurn(white, brd, 4, 4);
+    PrintBoard();
+    DispErrorCode(rc);
     // doubles 4-4 → 4 moves this turn
-    ASSERT_EQ(StartOfTurn(white, brd, 4, 4), status_codes::SUCCESS)
+    ASSERT_EQ(rc, status_codes::SUCCESS)
         << "StartOfTurn (4,4) should succeed";
 
     /* -- Move #1 : head piece from 0 to 4 (die idx 0) ---------------------- */
-    auto rc = ReceiveCommand(Command(Actions::SELECT_SLOT, {0,0}));
+    rc = ReceiveCommand(Command(Actions::SELECT_SLOT, {0,0}));
     ASSERT_EQ(rc, status_codes::SUCCESS) << "Cannot select head for move #1";
 
     rc = ReceiveCommand(Command(Actions::MOVE_BY_DICE, 0));   // use first 4
@@ -362,14 +378,29 @@ TEST_F(TestBuilder, Legality_ForcedMoves_Doubles)
 TEST_F(TestBuilder, Legality_MovePreventsCompletion)
 {
     auto brd = ZeroWhite1BlackBoard();
-    brd[0][0] = 1;  // A
+    brd[0][0] = 5;  // A
     brd[0][11] = -1; // no 6-5 for A
     brd[0][3] = 1;  // B
     brd[0][8] = -1; // B can't go 5, but 6-5 works
     brd[0][5] = 1;  // C
-    brd[0][10] = -1;    // C no 5, but 6-5 works
+    brd[0][10] = -1;    // C no 5 or 6
 
-    ASSERT_EQ(StartOfTurn(white, brd, 5, 6), status_codes::SUCCESS);
+    std::cout << "starting board... \n\n";
+    for(int i = 0; i < ROW; ++i)
+    {
+        for (int j = 0; j < COL; ++j)
+        {
+            std::cout << brd[i][j] << "\t";
+        }
+        std::cout<< "\n\n";
+    }
+    std::cout<< "\n\n\n\n";
+
+    auto rc = StartOfTurn(white, brd, 5, 6);
+    PrintBoard();
+    DispErrorCode(rc);
+
+    ASSERT_EQ(rc, status_codes::SUCCESS);
 
     ASSERT_EQ(ReceiveCommand({Actions::SELECT_SLOT, {0,0}}), status_codes::SUCCESS);
     EXPECT_EQ(ReceiveCommand({Actions::MOVE_BY_DICE, 1}),     status_codes::PREVENTS_COMPLETION)

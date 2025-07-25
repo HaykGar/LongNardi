@@ -16,8 +16,8 @@ NardiBoard::NardiBoard() :      data {{ { PIECES_PER_PLAYER, 0, 0, 0, 0, 0, 0, 0
 
 void NardiBoard::Move(const NardiCoord& start, const NardiCoord& end)
 {
-    data[start.row][start.col]  -= player_sign;
-    data[end.row][end.col]      += player_sign;
+    data.at(start.row).at(start.col)  -= player_sign;
+    data.at(end.row).at(end.col)      += player_sign;
     OnMove(start, end);
 }
 
@@ -33,7 +33,7 @@ void NardiBoard::OnMove(const NardiCoord& start, const NardiCoord& end)
 
 void NardiBoard::Remove(const NardiCoord& to_remove)
 {
-    data[to_remove.row][to_remove.col] -= player_sign;
+    data.at(to_remove.row).at(to_remove.col) -= player_sign;
     --pieces_left.at(player_idx);
     OnRemove(to_remove);
 }
@@ -207,4 +207,11 @@ unsigned NardiBoard::MovablePieces(const NardiCoord& start) const
         return 0;
     else
         return IsPlayerHead(start) ? 1 : abs(at(start));
+}
+
+// operators
+
+bool NardiBoard::operator== (const NardiBoard& other) const
+{
+    return (this->data == other.data && this->player_idx == other.player_idx && this->head_used == other.head_used);
 }

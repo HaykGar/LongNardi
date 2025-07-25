@@ -50,6 +50,9 @@ public:
 
     unsigned MovablePieces(const NardiCoord& start) const;
 
+    // operators
+    bool operator==(const NardiBoard& other) const;
+
     friend class TestBuilder;
 private:
     std::array<std::array<int, COL>, ROW> data;     // worth making private?
