@@ -2,6 +2,9 @@
 
 Controller::Controller(Game& game) : g(game), start(), start_selected(false), dice_rolled(false), quit_requested(false)  {}
 
+Controller::~Controller()
+{}
+
 void Controller::SwitchTurns()
 {
     g.SwitchPlayer();

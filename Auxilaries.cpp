@@ -2,6 +2,28 @@
 
 // View treats board as it sees it, but board reverses row 1. Command makes sure this is consistent upon delivery to controller
 
+///////////// Coord /////////////
+
+bool NardiCoord::operator==(const NardiCoord& rhs) const
+{   return (this->row == rhs.row && this->col == rhs.col);   }
+ 
+bool NardiCoord::OutOfBounds() const
+{   return (row < 0 || row >= ROW || col < 0 || col >= COL);    }
+
+bool NardiCoord::InBounds() const
+{   return !OutOfBounds();   }
+
+void NardiCoord::Print() const
+{
+    std::cout << "(" << row << ", " << col << ")\n";
+}
+
+std::string NardiCoord::AsStr() const
+{   return "(" + std::to_string(row) + ", " + std::to_string(col) + ")";   }
+
+
+///////////// Command /////////////
+
 Command::Command(Actions a, NardiCoord coord) : action(a)
 {
     payload.emplace<NardiCoord>( coord );
@@ -13,6 +35,9 @@ Command::Command(Actions a, int r, int c) : action(a)
 }
 
 Command::Command(Actions a, bool dice_idx) : action(a), payload(dice_idx) {}
+
+
+///////////// Misc Utilities /////////////
 
 
 void VisualToGameCoord(NardiCoord& coord)
@@ -59,9 +84,26 @@ void DispErrorCode(status_codes c)
     case status_codes::MISC_FAILURE:
         std::cout << "MISC_FAILURE";
         break;
+    case status_codes::BAD_BLOCK:
+        std::cout << "BAD_BLOCK";
+        break;        
     default:
+        std::cout << "did not recognize code";
         break;
     }
 
     std::cout << "\n\n";
+}
+
+void DisplayBoard(const std::array<std::array<int, COL>, ROW>& brd)
+{
+    for(int i = 0; i < ROW; ++i)
+    {
+        for (int j = 0; j < COL; ++j)
+        {
+            std::cout << brd[i][j] << "\t";
+        }
+        std::cout<< "\n\n";
+    }
+    std::cout<< "\n\n\n\n";
 }

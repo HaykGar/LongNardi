@@ -5,7 +5,9 @@
 
 #include <array>
 #include <stack>
+#include <unordered_set>
 #include <random>
+#include <memory>
 
 /*
 touch up back block for doubles...
@@ -46,31 +48,17 @@ class Game
         bool GameIsOver() const;
 
         // Getters
-        int GetDice(bool idx) const;
         const NardiBoard& GetBoardRef() const;
+
+        int GetDice(bool idx) const;
         const ReaderWriter* GetConstRW();
 
         // Friend class for testing
         friend class TestBuilder;
 
     private:
-        NardiBoard board;    // reminder: first row of board is reversed from view
-        NardiBoard mock_board;
-
-        std::mt19937 rng;                           // Mersenne Twister engine
-        std::uniform_int_distribution<int> dist;    // uniform distribution for dice
-
-        std::array<int, 2> dice; 
-        std::array<int, 2> times_dice_used;
-
-        std::array<int, 2> times_mockdice_used;
-
-        bool doubles_rolled;
-        std::array<int, 2> turn_number;
-        ReaderWriter* rw;
-
         class Arbiter;
-
+        
         // Exception Monitors
         struct RuleExceptionMonitor 
         {
@@ -108,10 +96,9 @@ class Game
             private:
                 bool _completable;
                 std::array<int, 2> turn_last_updated;
-
+                                
                 bool MakesSecondStep(const NardiCoord& start) const;   
                 bool TurnCompletable();
-             
         };
 
         struct BadBlockMonitor : public RuleExceptionMonitor    // doubles change things somewhat - 
@@ -128,6 +115,9 @@ class Game
                 };
 
                 virtual bool Illegal(const NardiCoord& start, bool dice_idx) override;
+                
+                bool Illegal(const NardiCoord& start, const NardiCoord& end);
+                
                 virtual bool PreConditions() override;
 
                 virtual void Reset() override;
@@ -147,10 +137,11 @@ class Game
                 bool _diceAttempting;
                 std::unordered_set<NardiCoord> _unblockers;
 
-                bool BlockageAt(const NardiCoord& end);
+                bool GeneralCase(const NardiCoord& start, const NardiCoord& end);
+
+                bool CreatesBlockageAt(const NardiCoord& end);
                 bool PieceAhead();
                 bool WillBeFixable();
-
                 bool BlockingAll();
         };
 
@@ -218,7 +209,6 @@ class Game
                 bool CanRemovePiece(const NardiCoord& start, bool d_idx);
 
                 bool CanUseMockDice(bool idx, int n_times = 1) const;
-                bool CanUseDice(bool idx, int n_times = 1) const;
 
                 bool IllegalBlocking(const NardiCoord& start, bool d_idx);
                 
@@ -231,6 +221,9 @@ class Game
                 status_codes OnRoll();
                 status_codes OnMove();
                 status_codes OnRemoval();
+
+                void OnMockChange();
+                void OnChange();
 
                 void SolidifyBlockMonitor();
 
@@ -254,7 +247,99 @@ class Game
 
                 void UpdateMovables();
         };
-        
+
+        class BoardWithMocker
+        {
+            public:
+                BoardWithMocker(Game& g);
+
+                // Getters
+                const NardiBoard& ViewReal() const;
+
+                const int& at(const NardiCoord& s) const;
+                const int& at(size_t r, size_t c) const;
+
+                const int& Mock_at(const NardiCoord& s) const;
+                const int& Mock_at(size_t r, size_t c) const;
+
+                bool PlayerIdx() const;
+                int PlayerSign() const;
+
+                bool IsPlayerHead(const NardiCoord& c) const;
+
+                bool HeadUsed() const;
+                bool Mock_HeadUsed() const;
+
+                const std::array<int, 2>& MaxNumOcc() const;
+                const std::array<int, 2>& ReachedEnemyHome() const;
+                const std::array<int, 2>& PiecesLeft() const;
+                const std::array< std::array< std::unordered_set<NardiCoord>, 6 >, 2 >& GoesIdxPlusOne() const; 
+                const std::unordered_set<NardiCoord>& PlayerGoesByDist(size_t dist) const;
+
+                const std::array<int, 2>& Mock_MaxNumOcc() const;
+                const std::array<int, 2>& Mock_ReachedEnemyHome() const;
+                const std::array<int, 2>& Mock_PiecesLeft() const;
+                const std::array< std::array< std::unordered_set<NardiCoord>, 6 >, 2 >& Mock_GoesIdxPlusOne() const;
+                const std::unordered_set<NardiCoord>& Mock_PlayerGoesByDist(size_t dist) const;
+
+                unsigned MovablePieces(const NardiCoord& start) const;
+                unsigned Mock_MovablePieces(const NardiCoord& start) const;
+
+                bool MisMatch() const;
+
+                // Updates and Actions
+                void ResetMock();
+                void RealizeMock();
+            
+                void Move(const NardiCoord& start, const NardiCoord& end);
+                void Remove(const NardiCoord& to_remove);
+
+                void Mock_Move(const NardiCoord& start, const NardiCoord& end);
+                void Mock_Remove(const NardiCoord& to_remove);
+
+                void SwitchPlayer();
+
+                // Legality Checks
+                status_codes ValidStart(const NardiCoord& s) const;
+                status_codes Mock_ValidStart(const NardiCoord& s) const;
+
+                status_codes WellDefinedEnd(const NardiCoord& start, const NardiCoord& end) const;  // check that move end from start is friendly or empty
+                status_codes Mock_WellDefinedEnd(const NardiCoord& start, const NardiCoord& end) const;  // check that move end from start is friendly or empty
+            
+                bool HeadReuseIssue(const NardiCoord& c) const;
+                bool Mock_HeadReuseIssue(const NardiCoord& c) const;
+
+                bool CurrPlayerInEndgame() const;
+                bool Mock_CurrPlayerInEndgame() const;
+
+                // Calculations
+                NardiCoord CoordAfterDistance(const NardiCoord& start, int d, bool player) const;
+                NardiCoord CoordAfterDistance(const NardiCoord& start, int d) const;
+                unsigned GetDistance(const NardiCoord& start, const NardiCoord& end) const;
+
+                friend class TestBuilder;
+            private:
+                NardiBoard _realBoard;
+                NardiBoard _mockBoard;
+                Game& _game;
+
+                // testing
+                void SetPlayer(bool player);
+        };
+
+        BoardWithMocker board;     // contains real and mock boards
+
+        std::mt19937 rng;                           // Mersenne Twister engine
+        std::uniform_int_distribution<int> dist;    // uniform distribution for dice
+
+        std::array<int, 2> dice; 
+        std::array<int, 2> times_dice_used;
+
+        std::array<int, 2> times_mockdice_used;
+
+        bool doubles_rolled;
+        std::array<int, 2> turn_number;
+        ReaderWriter* rw;
         Arbiter arbiter;
 
         // Getters
@@ -271,15 +356,14 @@ class Game
 
         // Updates
         void IncrementTurnNumber();
-        void ResetMock();
-        void RealizeMock(); // implement me `
-
         
         // Moving
         status_codes MakeMove(const NardiCoord& start, const NardiCoord& end);
 
         void MockMove(const NardiCoord& start, const NardiCoord& end);
         void MockMoveByDice(const NardiCoord& start, bool dice_idx);
+        void RealizeMock();
+        void ResetMock();
 
 
         status_codes RemovePiece(const NardiCoord& start);
@@ -288,67 +372,3 @@ class Game
         status_codes ForceRemovePiece(const NardiCoord& start, bool dice_idx);
         
 };
-
-///////////////////////////
-////////   Game   ////////
-/////////////////////////
-
-///////////// Initialization /////////////
-
-inline
-void Game::AttachReaderWriter(ReaderWriter* r)
-{   rw = r;   }
-
-///////////// Gameplay /////////////
-
-inline 
-void Game::UseDice(bool idx, int n)
-{   
-    times_dice_used[idx] += n;  
-    times_mockdice_used = times_dice_used;
-}
-
-inline
-bool Game::GameIsOver() const 
-{   return (board.PiecesLeft().at(0) == 0 || board.PiecesLeft().at(1) == 0);   }
-
-inline 
-void Game::SwitchPlayer()
-{   
-    board.SwitchPlayer();
-    mock_board.SwitchPlayer();
-}
-
-///////////// Getters /////////////
-
-inline 
-int Game::GetDice(bool idx) const
-{   return dice[idx];   }
-
-inline
-const NardiBoard& Game::GetBoardRef() const
-{   return board;   }
-
-inline const ReaderWriter* Game::GetConstRW() 
-{   return rw;   }
-
-inline
-const std::unordered_set<NardiCoord>& Game::PlayerGoesByMockDice(bool dice_idx) const
-{   return mock_board.PlayerGoesByDist(dice[dice_idx]);   }
-
-inline 
-const std::unordered_set<NardiCoord>& Game::PlayerGoesByDice(bool dice_idx) const
-{   return board.PlayerGoesByDist(dice[dice_idx]);   }
-
-inline
-NardiCoord Game::PlayerHead() const
-{   return {board.PlayerIdx(), 0};   }
-
-
-///////////// Updates /////////////
-
-inline 
-void Game::IncrementTurnNumber()
-{   ++turn_number[board.PlayerIdx()];   }
-
-

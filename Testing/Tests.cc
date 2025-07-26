@@ -1,91 +1,50 @@
 #include <gtest/gtest.h>
 #include "Testing.h"
 
+/*
+
+Need unit tests for following functions:
+    - LegalMove_2step:
+        -   does NOT modify mock board
+    - CanMoveByDice && CanFinishByDice
+
+    - TurnCompletable
+        - works as needed
+        - does NOT modify mock
+    Prevention illegal()
+
+    bad blocks
+
+    twosteppers()
+
+    updatemovables()
+
+    all board functions
+
+*/
+
 // globals
 
-std::array< std::array<int, COL>, ROW> start_brd = {{ { PIECES_PER_PLAYER, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}, 
-                                                      {-PIECES_PER_PLAYER, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0} }};
+using board = std::array< std::array<int, COL>, ROW>;
 
-bool white = 0;
-bool black = 1;
+                   //         0              1  2  3  4. 5. 6. 7. 8. 9. 10 11   
+board start_brd = {{    { PIECES_PER_PLAYER, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}, 
+                        {-PIECES_PER_PLAYER, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0} }};
 
-// TEST_F(TestBuilder, StartSelectCheck)
-// {
-//   std::array<int, 2> dice = {6, 5};
-//   status_codes outcome = StartOfTurn(white, start_brd, dice[0], dice[1]);
-//   ASSERT_EQ(outcome, status_codes::NO_LEGAL_MOVES_LEFT) << "did not force all - white first move\n";
+                       //     0  1  2  3  4. 5. 6. 7. 8. 9. 10 11   
+board starts_check = {{     { 0, 0, 0, 4, 0, 0, 0, 0, 0, 0, 0, 0}, 
+                            {-5, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0} }};
 
-//   outcome = ReceiveCommand(Command(Actions::SELECT_SLOT, {0, 0}));  // player changed to black, dice not rolled
-//   EXPECT_NE(outcome, status_codes::SUCCESS) << "selected white despite black turn pre roll";
-//   EXPECT_EQ(outcome, status_codes::MISC_FAILURE) << "failed with unexpected return val";
+                       //         0              1  2  3  4. 5. 6. 7. 8. 9. 10 11   
+board preventions1 = {{ { PIECES_PER_PLAYER - 2, 0, 0,-1, 0, 0, 1,-1, 0, 0, 0, 1}, 
+                        {-(PIECES_PER_PLAYER-2), 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0} }};
 
-//   outcome = ReceiveCommand(Command(Actions::ROLL_DICE));  // will complete all legal moves, pass turn to white
-//   ASSERT_EQ(outcome, status_codes::NO_LEGAL_MOVES_LEFT) << "did not force all - black first move\n";
-
-//   outcome = withDice(1, 2);
-//   ASSERT_EQ(outcome, status_codes::SUCCESS) << "unexpected forced on second move";
-
-//   outcome = ReceiveCommand(Command(Actions::MOVE_BY_DICE, 0));
-//   EXPECT_EQ(outcome, status_codes::MISC_FAILURE) << "no start selected incorrectly handled"; 
-
-//   // PrintBoard();
-//   outcome = ReceiveCommand(Command(Actions::SELECT_SLOT, {0, 0})); // white select head
-//   ASSERT_EQ(outcome, status_codes::SUCCESS) << "failure to select white head";
-
-//   outcome = ReceiveCommand(Command(Actions::MOVE_BY_DICE, 0));  // move by first dice from head
-//   ASSERT_EQ(outcome, status_codes::SUCCESS) << "failure to move from head on second move";
-
-//   outcome = ReceiveCommand(Command(Actions::SELECT_SLOT, {0, 0})); // white select head
-//   EXPECT_EQ(outcome, status_codes::HEAD_PLAYED_ALREADY) << "Reusing head";           // head already used, should not work
-// }
-
-// TEST_F(TestBuilder, FirstMoveDouble4Or6)
-// {
-//   withFirstTurn();
-//   status_codes outcome = StartOfTurn(white, start_brd, 4, 4);
-//   ASSERT_EQ(outcome, status_codes::NO_LEGAL_MOVES_LEFT) << "4 4 first move failed";
-//   // PrintBoard();
-
-//   ASSERT_NE(status_codes::SUCCESS, ReceiveCommand(Command(Actions::SELECT_SLOT, {0, 0})));
-//   outcome = withDice(6, 6);
-//   ASSERT_EQ(outcome, status_codes::NO_LEGAL_MOVES_LEFT) << "6 6 first move failed";
-//   // PrintBoard();
-// }
-//                                                          //       0                1  2  3  4. 5. 6. 7. 8. 9. 10 11   
-// std::array< std::array<int, COL>, ROW> preventions1 = {{  { PIECES_PER_PLAYER - 2, 0, 0,-1, 0, 0, 1,-1, 0, 0, 0, 1}, 
-//                                                           {-(PIECES_PER_PLAYER-2), 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0} }};
-
-//                                                          //       0                1  2  3  4. 5. 6. 7. 8. 9. 10 11   
-// std::array< std::array<int, COL>, ROW> preventions2 = {{  { PIECES_PER_PLAYER - 3,-1, 0, 1, 0, 0,-1, 1,-1, 0, 0, 1}, 
-//                                                           {-(PIECES_PER_PLAYER-3), 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0} }};                                                          
+                       //         0              1  2  3  4. 5. 6. 7. 8. 9. 10 11   
+board preventions2 = {{ { PIECES_PER_PLAYER - 3,-1, 0, 1, 0, 0,-1, 1,-1, 0, 0, 1}, 
+                        {-(PIECES_PER_PLAYER-3), 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0} }};  
 
 
-// TEST_F(TestBuilder, PreventsCompletion)
-// {
-//   status_codes outcome = StartOfTurn(white, preventions1, 1, 2);
-//   ASSERT_EQ(outcome, status_codes::SUCCESS) << "forced on roll - preventions";
 
-//   outcome = ReceiveCommand(Command(Actions::SELECT_SLOT, {0, 0}));
-//   ASSERT_EQ(outcome, status_codes::SUCCESS) << "unable to select head - preventions1";
-
-//   outcome = ReceiveCommand(Command(Actions::SELECT_SLOT, {0, 2}));
-//   EXPECT_EQ(outcome, status_codes::PREVENTS_COMPLETION);
-
-//   outcome = StartOfTurn(white, preventions2, 1, 2);
-//   ASSERT_EQ(outcome, status_codes::SUCCESS) << "forced on roll - preventions2";
-
-//   outcome = ReceiveCommand(Command(Actions::SELECT_SLOT, {0, 3}));
-//   ASSERT_EQ(outcome, status_codes::SUCCESS) << "unable to select start - preventions2";
-
-//   outcome = ReceiveCommand(Command(Actions::SELECT_SLOT, {0, 5}));
-//   EXPECT_EQ(outcome, status_codes::PREVENTS_COMPLETION) << "should be no available 1 moves";
-// }
-
-/*──────────────────────────────────────────────────────────────────────────────
-  TESTS – Start-coordinate validation (model coordinates: (row,col) with 0,0
-          = white head).  Each test uses StartOfTurn(), which *immediately*
-          applies onRoll() and any forced moves, then returns that status.
-──────────────────────────────────────────────────────────────────────────────*/
 
 // helper: build an all-zero board with 1 black piece at its head
 static std::array<std::array<int, COL>, ROW> ZeroWhite1BlackBoard() {
@@ -104,42 +63,51 @@ static std::array<std::array<int, COL>, ROW> SafeBoard() {
     return b;
 }
 
+bool white = 0;
+bool black = 1;
+
+/*──────────────────────────────────────────────────────────────────────────────
+  TESTS – Start-coordinate validation (model coordinates: (row,col) with 0,0
+          = white head).  Each test uses StartOfTurn(), which *immediately*
+          applies onRoll() and any forced moves, then returns that status.
+──────────────────────────────────────────────────────────────────────────────*/
+
 
 // ───────────────────────── 1. invalid start selections ───────────────────────
 TEST_F(TestBuilder, StartSelect_InvalidStarts)
 {
-  auto brd = SafeBoard();
-  brd[0][3] = 4;      // white pile we can legally select later
-  brd[1][0] = -5;     // black head (enemy pile)
+    auto brd = starts_check;
 
-  auto rc = StartOfTurn(white, brd, /*d1*/2, /*d2*/3);
-  PrintBoard();
+    DisplayBoard(brd);
 
-  ASSERT_EQ(rc, status_codes::SUCCESS)
-            << "StartOfTurn should succeed, no forced moves";
+    auto rc = StartOfTurn(white, brd, /*d1*/2, /*d2*/3);
+    PrintBoard();
 
-  DispErrorCode(rc);
+    ASSERT_EQ(rc, status_codes::SUCCESS)
+                << "StartOfTurn should succeed, no forced moves";
+
+    DispErrorCode(rc);
 
 
-  // 1-A  empty slot
-  rc = ReceiveCommand(Command(Actions::SELECT_SLOT, {0,2} ));
-  EXPECT_EQ(rc, status_codes::START_EMPTY_OR_ENEMY)
-      << "Selecting empty slot (0,2) did not return START_EMPTY_OR_ENEMY";
+    // 1-A  empty slot
+    rc = ReceiveCommand(Command(Actions::SELECT_SLOT, {0,2} ));
+    EXPECT_EQ(rc, status_codes::START_EMPTY_OR_ENEMY)
+        << "Selecting empty slot (0,2) did not return START_EMPTY_OR_ENEMY";
 
-  // 1-B  enemy pile
-  rc = ReceiveCommand(Command(Actions::SELECT_SLOT, {1,0}));
-  EXPECT_EQ(rc, status_codes::START_EMPTY_OR_ENEMY)
-      << "Enemy pile (black head) should be rejected";
+    // 1-B  enemy pile
+    rc = ReceiveCommand(Command(Actions::SELECT_SLOT, {1,0}));
+    EXPECT_EQ(rc, status_codes::START_EMPTY_OR_ENEMY)
+        << "Enemy pile (black head) should be rejected";
 
-  // 1-C  column out of range
-  rc = ReceiveCommand(Command(Actions::SELECT_SLOT, {0, COL}));
-  EXPECT_EQ(rc, status_codes::OUT_OF_BOUNDS)
-      << "Column == COL should yield OUT_OF_BOUNDS";
+    // 1-C  column out of range
+    rc = ReceiveCommand(Command(Actions::SELECT_SLOT, {0, COL}));
+    EXPECT_EQ(rc, status_codes::OUT_OF_BOUNDS)
+        << "Column == COL should yield OUT_OF_BOUNDS";
 
-  // 1-D  row out of range
-  rc = ReceiveCommand(Command(Actions::SELECT_SLOT, {2, 0}));
-  EXPECT_EQ(rc, status_codes::OUT_OF_BOUNDS)
-      << "Row 2 should yield OUT_OF_BOUNDS (only 0 & 1 valid)";
+    // 1-D  row out of range
+    rc = ReceiveCommand(Command(Actions::SELECT_SLOT, {2, 0}));
+    EXPECT_EQ(rc, status_codes::OUT_OF_BOUNDS)
+        << "Row 2 should yield OUT_OF_BOUNDS (only 0 & 1 valid)";
 }
 
 // ───────────────────────── 2. multiple valid starts ──────────────────────────
@@ -220,15 +188,8 @@ TEST_F(TestBuilder, HeadReuse_DoublesFourthMove)
 {
     auto brd = HeadScenarioBoard();
     std::cout << "starting board... \n\n";
-    for(int i = 0; i < ROW; ++i)
-    {
-        for (int j = 0; j < COL; ++j)
-        {
-            std::cout << brd[i][j] << "\t";
-        }
-        std::cout<< "\n\n";
-    }
-    std::cout<< "\n\n\n\n";
+    DisplayBoard(brd);
+
     
     auto rc = StartOfTurn(white, brd, 4, 4);
     PrintBoard();
@@ -262,6 +223,40 @@ TEST_F(TestBuilder, HeadReuse_DoublesFourthMove)
     rc = ReceiveCommand(Command(Actions::SELECT_SLOT, {0,0}));
     EXPECT_EQ(rc, status_codes::HEAD_PLAYED_ALREADY)
         << "Head reused on 4-th move (doubles) but not flagged";
+}
+
+// ───────────────────────── 4. Misc start and force - mini-game ──────────────────────────
+
+TEST_F(TestBuilder, StartSelectCheck)
+{
+  DisplayBoard(start_brd);
+  status_codes outcome = StartOfTurn(white, start_brd, 6, 5);
+  PrintBoard();
+  ASSERT_EQ(outcome, status_codes::NO_LEGAL_MOVES_LEFT) << "did not force all - white first move\n";
+  ASSERT_EQ(GetBoardAt(0, 11), 1);
+  ASSERT_EQ(GetBoardAt(0, 5), 0);
+  (GetBoardAt(0, 6), 0);
+
+  outcome = ReceiveCommand(Command(Actions::SELECT_SLOT, {0, 0}));  // player changed to black, dice not rolled
+  EXPECT_NE(outcome, status_codes::SUCCESS) << "selected white despite black turn pre roll";
+
+  outcome = withDice(5, 6);  // will complete all legal moves, pass turn to white
+  ASSERT_EQ(outcome, status_codes::NO_LEGAL_MOVES_LEFT) << "did not force all - black first move\n";
+
+  outcome = withDice(2, 2);
+  ASSERT_EQ(outcome, status_codes::SUCCESS) << "unexpected forced on second move";
+
+  outcome = ReceiveCommand(Command(Actions::MOVE_BY_DICE, 0));
+  ASSERT_NE(outcome, status_codes::SUCCESS) << "no start selected incorrectly handled"; 
+
+  outcome = ReceiveCommand(Command(Actions::SELECT_SLOT, {0, 0})); // white select head
+  ASSERT_EQ(outcome, status_codes::SUCCESS) << "failure to select white head";
+
+  outcome = ReceiveCommand(Command(Actions::MOVE_BY_DICE, 0));  // move by first dice from head
+  ASSERT_EQ(outcome, status_codes::SUCCESS) << "failure to move from head on second move";
+
+  outcome = ReceiveCommand(Command(Actions::SELECT_SLOT, {0, 0})); // white select head
+  EXPECT_EQ(outcome, status_codes::HEAD_PLAYED_ALREADY) << "Reusing head";           // head already used, should not work
 }
 
 /*──────────────────────────────────────────────────────────────────────────────
@@ -373,7 +368,24 @@ TEST_F(TestBuilder, Legality_ForcedMoves_Doubles)
 }
 
 /*──────────────────────────────────────────────────────────────────────────────
-  7. Move that appears legal but leaves no options → PREVENTS_COMPLETION
+  7. Doubles first move weirdness
+──────────────────────────────────────────────────────────────────────────────*/
+
+TEST_F(TestBuilder, FirstMoveDouble4Or6)
+{
+  withFirstTurn();
+  status_codes outcome = StartOfTurn(white, start_brd, 4, 4);
+  ASSERT_EQ(outcome, status_codes::NO_LEGAL_MOVES_LEFT) << "4 4 first move failed";
+  // PrintBoard();
+
+  ASSERT_NE(status_codes::SUCCESS, ReceiveCommand(Command(Actions::SELECT_SLOT, {0, 0})));
+  outcome = withDice(6, 6);
+  ASSERT_EQ(outcome, status_codes::NO_LEGAL_MOVES_LEFT) << "6 6 first move failed";
+  // PrintBoard();
+}
+
+/*──────────────────────────────────────────────────────────────────────────────
+  8. Move that appears legal but leaves no options → PREVENTS_COMPLETION
 ──────────────────────────────────────────────────────────────────────────────*/
 TEST_F(TestBuilder, Legality_MovePreventsCompletion)
 {
@@ -386,25 +398,25 @@ TEST_F(TestBuilder, Legality_MovePreventsCompletion)
     brd[0][10] = -1;    // C no 5 or 6
 
     std::cout << "starting board... \n\n";
-    for(int i = 0; i < ROW; ++i)
-    {
-        for (int j = 0; j < COL; ++j)
-        {
-            std::cout << brd[i][j] << "\t";
-        }
-        std::cout<< "\n\n";
-    }
-    std::cout<< "\n\n\n\n";
+    DisplayBoard(brd);
 
     auto rc = StartOfTurn(white, brd, 5, 6);
     PrintBoard();
     DispErrorCode(rc);
 
-    ASSERT_EQ(rc, status_codes::SUCCESS);
+    ASSERT_EQ(rc, status_codes::SUCCESS);   // not forced to the end, but partially forced
+    ASSERT_EQ(GetBoardAt(0, 9), 1) << "did not force only 6 that doesn't prevent completion";
+    ASSERT_EQ(GetBoardAt(0, 3), 0);
+
 
     ASSERT_EQ(ReceiveCommand({Actions::SELECT_SLOT, {0,0}}), status_codes::SUCCESS);
-    EXPECT_EQ(ReceiveCommand({Actions::MOVE_BY_DICE, 1}),     status_codes::PREVENTS_COMPLETION)
-        << "A by 6 should be blocked as PREVENTS_COMPLETION";
+    EXPECT_NE(ReceiveCommand({Actions::MOVE_BY_DICE, 1}),    status_codes::SUCCESS)
+        << "dice 6 should not be re-usable ";
+
+    ASSERT_EQ(ReceiveCommand({Actions::SELECT_SLOT, {0,0}}), status_codes::SUCCESS);
+    rc = ReceiveCommand({Actions::MOVE_BY_DICE, 0});
+    EXPECT_EQ(rc, status_codes::NO_LEGAL_MOVES_LEFT) << "couldn't move from head";
+    ASSERT_GE(GetBoardAt(0, 5), 1);
 
     brd = ZeroWhite1BlackBoard();
     brd[0][0] = 3;  // 2, 1, NOT both
@@ -416,14 +428,46 @@ TEST_F(TestBuilder, Legality_MovePreventsCompletion)
     brd[0][11] = 1; // 2 -> 1 ONLY
     brd[1][0] = -2;
 
+    std::cout << "pre roll: \n";
+    DisplayBoard(brd);
+
     ASSERT_EQ(StartOfTurn(white, brd, 1, 2), status_codes::SUCCESS);
 
+    StatusReport();
+
     ASSERT_EQ(ReceiveCommand({Actions::SELECT_SLOT, {0,0}}), status_codes::SUCCESS);
-    EXPECT_EQ(ReceiveCommand({Actions::SELECT_SLOT, {0,2}}),     status_codes::PREVENTS_COMPLETION);
+    EXPECT_EQ(ReceiveCommand({Actions::SELECT_SLOT, {0,2}}), status_codes::PREVENTS_COMPLETION);
 }
 
+TEST_F(TestBuilder, PreventsCompletion)
+{
+  status_codes outcome = StartOfTurn(white, preventions1, 1, 2);
+  ASSERT_EQ(outcome, status_codes::SUCCESS) << "forced all on roll - preventions1";
+
+  outcome = ReceiveCommand(Command(Actions::SELECT_SLOT, {0, 0}));
+  ASSERT_EQ(outcome, status_codes::SUCCESS) << "unable to select head - preventions1";
+
+  outcome = ReceiveCommand(Command(Actions::SELECT_SLOT, {0, 2}));
+  EXPECT_EQ(outcome, status_codes::PREVENTS_COMPLETION);
+
+  preventions1[0][6] = 0;
+  outcome = StartOfTurn(white, preventions1, 1, 2);
+  EXPECT_EQ(outcome, status_codes::SUCCESS);
+  EXPECT_EQ(GetBoardAt(1, 1), 1) << "did not partially force move, head->2 will prevent";
+
+  outcome = StartOfTurn(white, preventions2, 1, 2);
+  ASSERT_EQ(outcome, status_codes::SUCCESS) << "forced on roll - preventions2";
+
+  outcome = ReceiveCommand(Command(Actions::SELECT_SLOT, {0, 3}));
+  ASSERT_EQ(outcome, status_codes::SUCCESS) << "unable to select start - preventions2";
+
+  outcome = ReceiveCommand(Command(Actions::SELECT_SLOT, {0, 5}));
+  EXPECT_EQ(outcome, status_codes::PREVENTS_COMPLETION) << "should be no available 1 moves";
+}
+
+
 /*──────────────────────────────────────────────────────────────────────────────
-  8. Happy-path: two legal moves consume both dice cleanly
+  9. Happy-path: two legal moves consume both dice cleanly
 ──────────────────────────────────────────────────────────────────────────────*/
 TEST_F(TestBuilder, Legality_AllGood)
 {
@@ -444,4 +488,110 @@ TEST_F(TestBuilder, Legality_AllGood)
     // further move should yield NO_LEGAL_MOVES_LEFT
     EXPECT_NE(ReceiveCommand({Actions::MOVE_BY_DICE, 0}),      status_codes::SUCCESS)
         << "after both dice used, turn over";
+}
+
+// ──────────────────────────────────────────────────────────────────────────────
+// BLOCKADE RULE TESTS – manual 2-step moves that would create a 6-point blockade
+// (no enemy piece beyond point 6 in a row), EXPECT_NE(status, SUCCESS)
+// ──────────────────────────────────────────────────────────────────────────────
+
+/*
+  Case 1: Simple front-row blockade.
+    – Dice = (2,4) → sum = 6.
+    – Board has white checkers at points 1,2,3,4,5 (five in a row).
+    – A head checker at 0 (so start = {0,0}) can move 6 to {0,6}, which would make points 1–6 all white
+      with no enemy at 7.
+*/
+TEST_F(TestBuilder, Blockade_FrontRowSix)
+{
+    auto b = ZeroWhite1BlackBoard();
+    // place a checker at head
+    b[0][0] = 1;
+    // occupy points 1–5
+    for (int c = 1; c <= 5; ++c) b[0][c] = 1;
+
+    ASSERT_EQ(StartOfTurn(white, b, /*d1*/2, /*d2*/4), status_codes::SUCCESS)
+        << "Nothing should be forced on roll (2,4)";
+
+    // select head
+    ASSERT_EQ(ReceiveCommand(Command(Actions::SELECT_SLOT, {0,0})),
+              status_codes::SUCCESS)
+        << "Must be able to pick head";
+
+    // attempt two-step to 0,6 (creates a 6-point blockade at 1–6)
+    auto status = ReceiveCommand(Command(Actions::SELECT_SLOT, {0,6}));
+    EXPECT_NE(status, status_codes::SUCCESS)
+        << "Manually creating 6-point blockade (1–6) must be rejected";
+}
+
+/*
+  Case 2: Blockade that wraps to second row.
+    – Dice = (3,3) doubles → sum = 6 (two-step allowed).
+    – Board has white at 0,9;0,10;0,11;1,0;1,1 (five in a row across the wrap).
+    – Start from 0,8 (another checker), two-step to 1,2 makes points 9,10,11,0,1,2 all white
+      with no enemy beyond 1,2.
+*/
+TEST_F(TestBuilder, Blockade_WrapRowSix)
+{
+    auto b = ZeroWhite1BlackBoard();
+    // place checkers to form five-in-a-row across the wrap for black
+    b[1][0]  = -4;
+    b[1][1]  = -1;
+    b[1][2]  = -1;
+    b[1][3]  = -1;
+    b[0][11] = -1;
+    
+    // piece that will move to block
+    b[0][5]  = -1;
+
+    // extra pieces for no force
+    b[1][7]  = -2;  
+
+    // pieces getting blocked
+    b[0][7]  = 4;
+
+    DisplayBoard(b);
+
+    auto rc = StartOfTurn(black, b, /*d1*/3, /*d2*/2);
+
+    PrintBoard();
+    DispErrorCode(rc);
+    ASSERT_EQ(rc, status_codes::SUCCESS)
+        << "Doubles (3,3) should not force a move when many options exist";
+
+    ASSERT_EQ(ReceiveCommand(Command(Actions::SELECT_SLOT, {0,5})),
+              status_codes::SUCCESS)
+        << "Must be able to pick start (0,5)";
+
+    // two-step to (1,2) wraps around; that creates 9–11,0–2 all white
+    auto status = ReceiveCommand(Command(Actions::SELECT_SLOT, {0, 10}));
+    EXPECT_NE(status, status_codes::SUCCESS)
+        << "Wrapping blockade of 6 across rows must be rejected";
+}
+
+/*
+  Case 3: Mid-board blockade with dice sum.
+    – Dice = (1,5) → sum = 6.
+    – Board has white at points 2,3,4,5,6 (five in a row).
+    – Checker at 1 can two-step to 7 → points 2–7 all white, no enemy at 8.
+*/
+TEST_F(TestBuilder, Blockade_MidBoardSix)
+{
+    auto b = ZeroWhite1BlackBoard();
+    // occupy points 2–6
+    for (int c = 2; c <= 6; ++c) b[0][c] = 1;
+    // extra checker at 1 for start
+    b[0][1] = 1;
+
+    ASSERT_EQ(StartOfTurn(white, b, /*d1*/1, /*d2*/5), status_codes::SUCCESS)
+        << "Nothing forced on roll (1,5)";
+
+    ASSERT_EQ(ReceiveCommand(Command(Actions::SELECT_SLOT, {0,1})),
+              status_codes::SUCCESS)
+        << "Must pick start (0,1)";
+
+    // two-step to 0,7
+    auto status = ReceiveCommand(Command(Actions::SELECT_SLOT, {0,7}));
+    EXPECT_NE(status, status_codes::SUCCESS)
+        << "Creating mid-board blockade at 2–7 must be rejected";
 }

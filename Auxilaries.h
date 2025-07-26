@@ -1,7 +1,8 @@
 #pragma once 
 
-#include<iostream>
+#include <iostream>
 #include <variant>
+#include <string>
 
 constexpr int ROW = 2;
 constexpr int COL = 12;
@@ -42,20 +43,14 @@ struct NardiCoord
 
     bool operator==(const NardiCoord& rhs) const;
     bool OutOfBounds() const;
+    bool InBounds() const;
+
+    void Print() const;
+    std::string AsStr() const;
 
     int row;
     int col;
 };
-
-inline
-bool NardiCoord::operator==(const NardiCoord& rhs) const
-{
-    return (this->row == rhs.row && this->col == rhs.col);
-}
-
-inline 
-bool NardiCoord::OutOfBounds() const
-{   return (row < 0 || row >= ROW || col < 0 || col >= COL);    }
 
 namespace std 
 {
@@ -87,3 +82,5 @@ struct Command // considering making this std::variant or something...
 void VisualToGameCoord(NardiCoord& coord); // not needed currently, but for graphics later
 int BoolToSign(bool p_idx);
 void DispErrorCode(status_codes code);
+
+void DisplayBoard(const std::array<std::array<int, COL>, ROW>& b);

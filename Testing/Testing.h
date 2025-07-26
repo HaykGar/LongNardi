@@ -22,29 +22,28 @@ class TestBuilder : public testing::Test
 
         const int& GetBoardAt(const NardiCoord& coord) const;
         const int& GetBoardAt(int r, int c) const;
+
+        void StatusReport() const;
         
     private:
-        Game _game;
-        Controller _ctrl;
+        std::unique_ptr<Game> _game;
+        std::unique_ptr<Controller> _ctrl;
 
         void StartPreRoll(bool p_idx, const std::array<std::array<int, COL>, ROW>& b );
 
         void withPlayer(bool p_idx);
         void withBoard(const std::array<std::array<int, COL>, ROW>& b);
-        void SetDerived();
-        void CalcPiecesLeftandReached();
-        void ConstructAvailabilitySets();
         void ResetControllerState();
 };
 
 inline 
 const int& TestBuilder::GetBoardAt(const NardiCoord& coord) const
 {
-    return _game.board.at(coord);
+    return _game->board.at(coord);
 }
 
 inline 
 const int& TestBuilder::GetBoardAt(int r, int c) const
 {
-    return _game.board.at(r, c);
+    return _game->board.at(r, c);
 }

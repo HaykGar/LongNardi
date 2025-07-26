@@ -35,7 +35,11 @@ void ReaderWriter::DispErrorCode(status_codes c) const
     case status_codes::MISC_FAILURE:
         ErrorMessage("MISC_FAILURE");
         break;
+    case status_codes::BAD_BLOCK:
+        ErrorMessage("BAD_BLOCK");
+        break;        
     default:
+        ErrorMessage("did not recognize code");
         break;
     }
 }

@@ -8,6 +8,8 @@ class Controller
 {
     public:
         Controller(Game& game);
+        virtual ~Controller();
+        
         virtual status_codes ReceiveCommand(const Command& cmd);
         bool QuitRequested() const;
 
