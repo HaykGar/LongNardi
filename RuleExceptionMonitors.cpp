@@ -167,8 +167,8 @@ bool Game::PreventionMonitor::MakesSecondStep(const NardiCoord& start) const
 
 ///////////// Bad Block /////////////
 
-Game::BadBlockMonitor::BadBlockMonitor(Game& g, Arbiter& a) : RuleExceptionMonitor(g, a), _isSolidified(false),  _state(block_state::CLEAR)  
-{}
+Game::BadBlockMonitor::BadBlockMonitor(Game& g, Arbiter& a) :   RuleExceptionMonitor(g, a), _isSolidified(false),  
+                                                                _state(block_state::CLEAR) {}
 
 void Game::BadBlockMonitor::Reset()
 {
@@ -176,14 +176,18 @@ void Game::BadBlockMonitor::Reset()
     _blockedAll = false;
     _isSolidified = false;
     _blockLength = 0;
-    _unblockers.clear();
     _state = block_state::CLEAR;
 }
 
 void Game::BadBlockMonitor::Solidify()
 {
+    std::cout << "solidifying \n\n\n";
+
     _blockedAll =  BlockingAll();
     _isSolidified = true;
+
+    std::cout << "blocking all? " << std::boolalpha << _blockedAll << "\n";
+    std::cout << "block length? " << _blockLength << "\n";
 }
 
 bool Game::BadBlockMonitor::BlockingAll()
@@ -195,14 +199,14 @@ bool Game::BadBlockMonitor::BlockingAll()
     int player_sign = _g.board.PlayerSign();
     NardiCoord coord(_g.board.PlayerIdx(), COL - 1);
     unsigned streak = 0;
-
-    for(; coord.OutOfBounds(); coord = _g.board.CoordAfterDistance(coord, -1, other_player))
+    
+    for(; coord.InBounds(); coord = _g.board.CoordAfterDistance(coord, -1, other_player))
     {
         if(_g.board.Mock_at(coord) * player_sign > 0)
         {
             ++streak;
             if(streak == 6)
-                return (CreatesBlockageAt(coord) && !PieceAhead());    // CreatesBlockageAt will go over this location and set vars accordingly
+                return (BlockageAround(coord) && !PieceAhead());    // CreatesBlockageAt will go over this location and set vars accordingly
         }
         else
             streak = 0;
@@ -219,42 +223,72 @@ bool Game::BadBlockMonitor::PreConditions()
 
 bool Game::BadBlockMonitor::Illegal(const NardiCoord& start, bool dice_idx)
 {
+    // std::cout << "checking " << start.AsStr() << "\n";
     NardiCoord end = _g.board.CoordAfterDistance(start, _g.dice[dice_idx]);
     _diceAttempting = dice_idx;
-    return GeneralCase(start, end);
+    return IllegalEndpoints(start, end);
 }
 
 bool Game::BadBlockMonitor::Illegal(const NardiCoord& start, const NardiCoord& end)
 {
-    if(PreConditions() && CreatesBlockageAt(end) && !PieceAhead())
-    {
-        unsigned d = _g.board.GetDistance(start, end);
-        if(d == _g.dice[0])
-            _diceAttempting = 0;
-        else if (d == _g.dice[1])
-            _diceAttempting = 1;
-        else
-            return false;   // doubles case later `
 
-        return WillBeFixable();
-    }
+    int d = _g.board.GetDistance(start, end);
+    if(d == _g.dice[0])
+        _diceAttempting = 0;
+    else if (d == _g.dice[1])
+        _diceAttempting = 1;
+    else if (d == _g.dice[0] + _g.dice[1])
+        return (PreConditions() && CreatesBlockageAt(end) && !PieceAhead());
     else
-        return false;
+        std::cout << "unexpected input to block illegal(start, end)\n";
+    
+    return IllegalEndpoints(start, end);
+
 }
 
-bool Game::BadBlockMonitor::GeneralCase(const NardiCoord& start, const NardiCoord& end)
+bool Game::BadBlockMonitor::IllegalEndpoints(const NardiCoord& start, const NardiCoord& end)
 {
     if(_isSolidified && _blockedAll)
-        return !(_unblockers.contains(start) && abs( _g.board.Mock_at(start) )== 1 && 
-                _g.board.Mock_WellDefinedEnd(start, end) == status_codes::SUCCESS);
-    
-    return (PreConditions() && CreatesBlockageAt(end) && !PieceAhead() && !WillBeFixable() );
+    {
+        std::cout << "checking unblock\n";
+        return !Unblocks(start, end);
+    }
+        
+    else
+    {
+        // std::cout << "checking for new blockage\n";
+        return (PreConditions() && CreatesBlockageAt(end) && !PieceAhead() && !WillBeFixable() );
+    }
+}
+
+bool Game::BadBlockMonitor::Unblocks(const NardiCoord& start, const NardiCoord& end)
+{
+    std::cout << "checking if " << start.AsStr() << " unblocks\n";
+    auto dist = _g.board.GetDistance(_blockStart, start); 
+    std::cout << "dist into block: " << dist <<"\n\n";
+    if(dist >= 0 && dist < 6)   // start is a blocking piece, at most the 6th one
+    {
+        unsigned blocked_after = _blockLength - dist - 1;
+
+        if(end == _g.board.CoordAfterDistance(_blockStart, _blockLength) )
+            ++blocked_after;    // start piece blocks at the end, doesn't actually get subtracted
+
+        return (blocked_after < 6);
+    }
+    else
+        return false;   // start is not one of the blockers, or it's after the 6th so we still have blockage
 }
 
 bool Game::BadBlockMonitor::CreatesBlockageAt(const NardiCoord& end)
 {
     if(_g.board.Mock_at(end) != 0)
         return false;
+    else
+        return BlockageAround(end);
+}
+
+bool Game::BadBlockMonitor::BlockageAround(const NardiCoord& end)
+{
     _blockLength = 1;   // end coord itself
     
     unsigned n_ahead = 0;
@@ -275,7 +309,7 @@ bool Game::BadBlockMonitor::CreatesBlockageAt(const NardiCoord& end)
     
     _blockStart = _g.board.CoordAfterDistance(end, -n_behind, other_player);
     _blockLength += n_ahead + n_behind;
-
+    
     return (_blockLength > 6);
 }
 
@@ -286,42 +320,25 @@ bool Game::BadBlockMonitor::PieceAhead()
     for(; !after_block.OutOfBounds(); after_block = _g.board.CoordAfterDistance(after_block, 1, !_g.board.PlayerIdx()))
     {
         if(_g.board.Mock_at(after_block) * _g.board.PlayerSign() < 0){
-            _blockedAll = false;
             return true;
         }
     }
 
-    _blockedAll = true;
     return false;
 }
 
 bool Game::BadBlockMonitor::WillBeFixable()
-{
+{    
+    // std::cout << "checking if block is fixable\n";
     if(_blockLength < 6)
         return true;    // should never be called in this condition
 
     if( !_arb.CanUseMockDice(!_diceAttempting) )
-        return false;
-
-    unsigned d = _g.dice[_diceAttempting];
-    int i = _blockLength - 6;
-    NardiCoord to_move = _g.board.CoordAfterDistance(_blockStart, i, !_g.board.PlayerIdx());
-
-    for(; i < 6; ++i, to_move = _g.board.CoordAfterDistance(to_move, 1, !_g.board.PlayerIdx()))
-    {
-        if(_g.board.Mock_WellDefinedEnd( to_move, _g.board.CoordAfterDistance(to_move, d) ) == status_codes::SUCCESS
-            && abs(_g.board.Mock_at(to_move)) <= 1 && !_g.board.Mock_HeadReuseIssue(to_move)  )
-        {
-            _unblockers.insert(to_move);
-        }
-    }
-
-    if(_unblockers.empty())
     {
         _state = block_state::BAD_BLOCK;
         return false;
     }
-    else
+    else 
     {
         _state = block_state::FIXABLE_BLOCK;
         return true;
@@ -331,9 +348,4 @@ bool Game::BadBlockMonitor::WillBeFixable()
 Game::BadBlockMonitor::block_state Game::BadBlockMonitor::State() const
 {
     return _state;
-}
-
-const std::unordered_set<NardiCoord>& Game::BadBlockMonitor::Unblockers() const
-{
-    return _unblockers;
 }

@@ -83,7 +83,10 @@ status_codes Game::TryStart(const NardiCoord& start)
     board.ResetMock();
     //std::cout << "called TryStart\n";
     // During endgame, if it's a valid start just check if there's a forced move from here, will streamline play
-    return board.ValidStart(start);
+    auto s = board.ValidStart(start);
+    std::cout << "start valid?\n";
+    DispErrorCode(s);
+    return s;
 }
 
 status_codes Game::TryFinishMove(const NardiCoord& start, const NardiCoord& end) // assumes start already checked
@@ -97,15 +100,17 @@ status_codes Game::TryFinishMove(const NardiCoord& start, const NardiCoord& end)
     else
     {
         UseDice(0, times_used[0]); UseDice(1, times_used[1]);
-        return MakeMove(start, end);    // checks for further forced moves internally
+        auto s = MakeMove(start, end);    // checks for further forced moves internally
+        std::cout << "could move? \n";
+        DispErrorCode(s);
+        return s;
     }
 }
 
 status_codes Game::TryMoveByDice(const NardiCoord& start, bool dice_idx)
 {
-    //std::cout << "\n\n start: " << start.row << ", " << start.col << "\n";
-    //std::cout << "dice: " << dice[dice_idx] << "\n";
-    //std::cout << "other dice: " << dice[!dice_idx] << "\n";
+
+    std::cout << "trying to move by dice " << dice[dice_idx] << " from " << start.AsStr() << "\n";
 
     board.ResetMock(); // could be redundant, but safe
     
@@ -117,8 +122,8 @@ status_codes Game::TryMoveByDice(const NardiCoord& start, bool dice_idx)
     
     auto [result, dest]  = arbiter.CanFinishByDice(start, dice_idx);
     
-    //std::cout << "res: \n";
-    // // DispErorrCode(result);
+    std::cout << "res: \n";
+    DispErrorCode(result);
 
     if(result != status_codes::SUCCESS )
         return result;
@@ -245,7 +250,11 @@ std::pair<status_codes, NardiCoord> Game::Arbiter::CanFinishByDice(const NardiCo
     if (result == status_codes::SUCCESS)
     {
         if (_blockMonitor.Illegal(start, dice_idx))
+        {
+            std::cout << "illegal block\n";
             return {status_codes::BAD_BLOCK, {} };
+        }
+            
         else if(_prevMonitor.Illegal(start, dice_idx))
             return {status_codes::PREVENTS_COMPLETION, {} }; 
     }   
@@ -273,7 +282,7 @@ bool Game::Arbiter::CanUseMockDice(bool idx, int n) const
 std::pair<status_codes, std::array<int, 2>> Game::Arbiter::LegalMove(const NardiCoord& start, const NardiCoord& end)    
 // array represents how many times each dice is used, 0 or 1 usually, in case of doubles can be up to 4
 {    
-    unsigned d = _g.board.GetDistance(start, end);
+    int d = _g.board.GetDistance(start, end);
 
     if(d == _g.dice[0])
         return {CanFinishByDice(start, 0).first, {1, 0} };
@@ -344,9 +353,11 @@ void Game::Arbiter::UpdateMovables()
 
     if(CanUseMockDice(0))
     {
+        std::cout << "updating movables for dice: " << _g.dice[0] << "\n";
+
         for(const auto& coord : _g.PlayerGoesByDice(0))
         {
-            // std::cout << "coord considered: " << coord.row << ", " << coord.col << "\n";
+            std::cout << "coord considered: " << coord.row << ", " << coord.col << "\n";
 
             if(CanMoveByDice(coord, 0).first == status_codes::SUCCESS )   // checks prevention as well
             {
@@ -364,8 +375,10 @@ void Game::Arbiter::UpdateMovables()
     }
     if(CanUseMockDice(1))
     {
+        std::cout << "updating movables for dice: " << _g.dice[1] << "\n";
         for(const auto& coord : _g.PlayerGoesByDice(1))
         {
+            std::cout << "coord considered: " << coord.row << ", " << coord.col << "\n";
             if(CanMoveByDice(coord, 1).first == status_codes::SUCCESS )
                 _movables.at(1).push_back(coord);
         }
@@ -439,7 +452,6 @@ status_codes Game::Arbiter::OnRoll()
     // std::cout << "called onchange from OnR\n";
 
     OnChange();
-
 
     return CheckForcedMoves();
 }

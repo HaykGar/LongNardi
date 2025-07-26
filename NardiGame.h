@@ -124,7 +124,6 @@ class Game
                 void Solidify();
 
                 block_state State() const;
-                const std::unordered_set<NardiCoord>& Unblockers() const;
 
             private:
                 // _blocked true when Blockage with no pieces ahead, fixable or not
@@ -135,14 +134,16 @@ class Game
                 unsigned _blockLength;
                 NardiCoord _blockStart;
                 bool _diceAttempting;
-                std::unordered_set<NardiCoord> _unblockers;
 
-                bool GeneralCase(const NardiCoord& start, const NardiCoord& end);
+                bool IllegalEndpoints(const NardiCoord& start, const NardiCoord& end);
 
                 bool CreatesBlockageAt(const NardiCoord& end);
+                bool BlockageAround(const NardiCoord& end);
                 bool PieceAhead();
                 bool WillBeFixable();
                 bool BlockingAll();
+
+                bool Unblocks(const NardiCoord& start, const NardiCoord& end);
         };
 
         // Forced move handlers
@@ -315,7 +316,7 @@ class Game
                 // Calculations
                 NardiCoord CoordAfterDistance(const NardiCoord& start, int d, bool player) const;
                 NardiCoord CoordAfterDistance(const NardiCoord& start, int d) const;
-                unsigned GetDistance(const NardiCoord& start, const NardiCoord& end) const;
+                int GetDistance(const NardiCoord& start, const NardiCoord& end) const;
 
                 friend class TestBuilder;
             private:

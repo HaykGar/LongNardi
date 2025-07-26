@@ -193,10 +193,10 @@ NardiCoord NardiBoard::CoordAfterDistance(const NardiCoord& start, int d) const
     return CoordAfterDistance(start, d, player_idx);
 }
 
-unsigned NardiBoard::GetDistance(const NardiCoord& start, const NardiCoord& end) const
+int NardiBoard::GetDistance(const NardiCoord& start, const NardiCoord& end) const
 {
     if(start.row == end.row)
-        return end.col - start.col; // sc >= ec is invalid, so this will be positive if called on well-defined move
+        return end.col - start.col;
     else
         return COL - start.col + end.col;
 }

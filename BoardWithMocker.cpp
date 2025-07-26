@@ -216,7 +216,7 @@ NardiCoord Game::BoardWithMocker::CoordAfterDistance(const NardiCoord& start, in
 {
     return _realBoard.CoordAfterDistance(start, d);
 }
-unsigned Game::BoardWithMocker::GetDistance(const NardiCoord& start, const NardiCoord& end) const
+int Game::BoardWithMocker::GetDistance(const NardiCoord& start, const NardiCoord& end) const
 {
     return _realBoard.GetDistance(start, end);
 }

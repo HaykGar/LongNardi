@@ -41,7 +41,7 @@ public:
     // Calculations
     NardiCoord CoordAfterDistance(const NardiCoord& start, int d, bool player) const;
     NardiCoord CoordAfterDistance(const NardiCoord& start, int d) const;
-    unsigned GetDistance(const NardiCoord& start, const NardiCoord& end) const;
+    int GetDistance(const NardiCoord& start, const NardiCoord& end) const;
 
     unsigned MovablePieces(const NardiCoord& start) const;
 

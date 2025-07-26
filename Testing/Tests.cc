@@ -43,6 +43,9 @@ board preventions1 = {{ { PIECES_PER_PLAYER - 2, 0, 0,-1, 0, 0, 1,-1, 0, 0, 0, 1
 board preventions2 = {{ { PIECES_PER_PLAYER - 3,-1, 0, 1, 0, 0,-1, 1,-1, 0, 0, 1}, 
                         {-(PIECES_PER_PLAYER-3), 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0} }};  
 
+                   //     0  1  2  3  4. 5. 6. 7. 8. 9. 10 11   
+board block_check1 = {{ {14, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}, 
+                        {-8, 0, 0,-1, 1,-1,-1,-1,-1, 0,-1,-1} }};
 
 
 
@@ -65,6 +68,9 @@ static std::array<std::array<int, COL>, ROW> SafeBoard() {
 
 bool white = 0;
 bool black = 1;
+
+bool first = 0;
+bool second = 1;
 
 /*──────────────────────────────────────────────────────────────────────────────
   TESTS – Start-coordinate validation (model coordinates: (row,col) with 0,0
@@ -174,7 +180,7 @@ TEST_F(TestBuilder, HeadReuse_NormalRoll)
     auto rc = ReceiveCommand(Command(Actions::SELECT_SLOT, {0,0}));
     ASSERT_EQ(rc, status_codes::SUCCESS) << "Unable to select head for first move";
 
-    rc = ReceiveCommand(Command(Actions::MOVE_BY_DICE, 0));   // use die 0 (=1)
+    rc = ReceiveCommand(Command(Actions::MOVE_BY_DICE, first));   // use die 0 (=1)
     ASSERT_EQ(rc, status_codes::SUCCESS) << "Head move failed with die 1";
 
     // --- Attempt to select head again (should be blocked) -------------------
@@ -202,7 +208,7 @@ TEST_F(TestBuilder, HeadReuse_DoublesFourthMove)
     rc = ReceiveCommand(Command(Actions::SELECT_SLOT, {0,0}));
     ASSERT_EQ(rc, status_codes::SUCCESS) << "Cannot select head for move #1";
 
-    rc = ReceiveCommand(Command(Actions::MOVE_BY_DICE, 0));   // use first 4
+    rc = ReceiveCommand(Command(Actions::MOVE_BY_DICE, first));   // use first 4
     ASSERT_EQ(rc, status_codes::SUCCESS) << "Move #1 from head failed";
 
     /* -- Move #2 : other pile (0,3 → 0,7) (die idx 1) ---------------------- */
@@ -216,7 +222,7 @@ TEST_F(TestBuilder, HeadReuse_DoublesFourthMove)
     rc = ReceiveCommand(Command(Actions::SELECT_SLOT, {0,5}));
     ASSERT_EQ(rc, status_codes::SUCCESS) << "Cannot select pile (0,5)";
 
-    rc = ReceiveCommand(Command(Actions::MOVE_BY_DICE, 0));   // third 4
+    rc = ReceiveCommand(Command(Actions::MOVE_BY_DICE, first));   // third 4
     ASSERT_EQ(rc, status_codes::SUCCESS) << "Move #3 failed";
 
     /* -- Move #4 : try head again → should be blocked ---------------------- */
@@ -246,13 +252,13 @@ TEST_F(TestBuilder, StartSelectCheck)
   outcome = withDice(2, 2);
   ASSERT_EQ(outcome, status_codes::SUCCESS) << "unexpected forced on second move";
 
-  outcome = ReceiveCommand(Command(Actions::MOVE_BY_DICE, 0));
+  outcome = ReceiveCommand(Command(Actions::MOVE_BY_DICE, first));
   ASSERT_NE(outcome, status_codes::SUCCESS) << "no start selected incorrectly handled"; 
 
   outcome = ReceiveCommand(Command(Actions::SELECT_SLOT, {0, 0})); // white select head
   ASSERT_EQ(outcome, status_codes::SUCCESS) << "failure to select white head";
 
-  outcome = ReceiveCommand(Command(Actions::MOVE_BY_DICE, 0));  // move by first dice from head
+  outcome = ReceiveCommand(Command(Actions::MOVE_BY_DICE, first));  // move by first dice from head
   ASSERT_EQ(outcome, status_codes::SUCCESS) << "failure to move from head on second move";
 
   outcome = ReceiveCommand(Command(Actions::SELECT_SLOT, {0, 0})); // white select head
@@ -310,11 +316,11 @@ TEST_F(TestBuilder, Move_ReusingSameDieTwice)
 
     // move #1 with die-0
     ASSERT_EQ(ReceiveCommand({Actions::SELECT_SLOT, {0,1}}), status_codes::SUCCESS);
-    ASSERT_EQ(ReceiveCommand({Actions::MOVE_BY_DICE, 0}),     status_codes::SUCCESS);
+    ASSERT_EQ(ReceiveCommand({Actions::MOVE_BY_DICE, first}),     status_codes::SUCCESS);
 
     // try to re-use die-0 on another piece
     ASSERT_EQ(ReceiveCommand({Actions::SELECT_SLOT, {0,1}}), status_codes::SUCCESS);
-    EXPECT_NE(ReceiveCommand({Actions::MOVE_BY_DICE, 0}),     status_codes::SUCCESS)
+    EXPECT_NE(ReceiveCommand({Actions::MOVE_BY_DICE, first}),     status_codes::SUCCESS)
         << "re-using exhausted die should yield DICE_USED_ALREADY";
 }
 
@@ -330,7 +336,7 @@ TEST_F(TestBuilder, Move_OntoEnemyPiece)
     ASSERT_EQ(StartOfTurn(white, brd, 4, 5), status_codes::SUCCESS);
 
     ASSERT_EQ(ReceiveCommand({Actions::SELECT_SLOT, {0,0}}), status_codes::SUCCESS);
-    EXPECT_EQ(ReceiveCommand({Actions::MOVE_BY_DICE, 0}),     status_codes::DEST_ENEMY)
+    EXPECT_EQ(ReceiveCommand({Actions::MOVE_BY_DICE, first}),     status_codes::DEST_ENEMY)
         << "landing on enemy pile must be DEST_ENEMY";
 }
 
@@ -346,7 +352,7 @@ TEST_F(TestBuilder, Move_PastEndOfBoard)
     ASSERT_EQ(StartOfTurn(white, brd, 3, 5), status_codes::SUCCESS);
 
     ASSERT_EQ(ReceiveCommand({Actions::SELECT_SLOT, {1,10}}), status_codes::SUCCESS);
-    auto rc = ReceiveCommand({Actions::MOVE_BY_DICE, 0});
+    auto rc = ReceiveCommand({Actions::MOVE_BY_DICE, first});
 
     DispErrorCode(rc);
     EXPECT_NE(rc, status_codes::SUCCESS) << "move that crosses board end should be OUT_OF_BOUNDS or BOARD_END_REACHED";
@@ -414,7 +420,7 @@ TEST_F(TestBuilder, Legality_MovePreventsCompletion)
         << "dice 6 should not be re-usable ";
 
     ASSERT_EQ(ReceiveCommand({Actions::SELECT_SLOT, {0,0}}), status_codes::SUCCESS);
-    rc = ReceiveCommand({Actions::MOVE_BY_DICE, 0});
+    rc = ReceiveCommand({Actions::MOVE_BY_DICE, first});
     EXPECT_EQ(rc, status_codes::NO_LEGAL_MOVES_LEFT) << "couldn't move from head";
     ASSERT_GE(GetBoardAt(0, 5), 1);
 
@@ -479,14 +485,14 @@ TEST_F(TestBuilder, Legality_AllGood)
 
     // move head by 2
     ASSERT_EQ(ReceiveCommand({Actions::SELECT_SLOT, {0,0}}), status_codes::SUCCESS);
-    ASSERT_EQ(ReceiveCommand({Actions::MOVE_BY_DICE, 0}),     status_codes::SUCCESS);
+    ASSERT_EQ(ReceiveCommand({Actions::MOVE_BY_DICE, first}),     status_codes::SUCCESS);
 
     // move second pile by 3
     ASSERT_EQ(ReceiveCommand({Actions::SELECT_SLOT, {0,2}}), status_codes::SUCCESS);
     ASSERT_EQ(ReceiveCommand({Actions::MOVE_BY_DICE, 1}),     status_codes::NO_LEGAL_MOVES_LEFT);
 
     // further move should yield NO_LEGAL_MOVES_LEFT
-    EXPECT_NE(ReceiveCommand({Actions::MOVE_BY_DICE, 0}),      status_codes::SUCCESS)
+    EXPECT_NE(ReceiveCommand({Actions::MOVE_BY_DICE, first}),      status_codes::SUCCESS)
         << "after both dice used, turn over";
 }
 
@@ -575,23 +581,44 @@ TEST_F(TestBuilder, Blockade_WrapRowSix)
     – Board has white at points 2,3,4,5,6 (five in a row).
     – Checker at 1 can two-step to 7 → points 2–7 all white, no enemy at 8.
 */
-TEST_F(TestBuilder, Blockade_MidBoardSix)
+
+TEST_F(TestBuilder, BlockadeHomeEntry)
 {
-    auto b = ZeroWhite1BlackBoard();
-    // occupy points 2–6
-    for (int c = 2; c <= 6; ++c) b[0][c] = 1;
-    // extra checker at 1 for start
-    b[0][1] = 1;
+    auto brd = block_check1;
 
-    ASSERT_EQ(StartOfTurn(white, b, /*d1*/1, /*d2*/5), status_codes::SUCCESS)
-        << "Nothing forced on roll (1,5)";
+    DisplayBoard(brd);
 
-    ASSERT_EQ(ReceiveCommand(Command(Actions::SELECT_SLOT, {0,1})),
-              status_codes::SUCCESS)
-        << "Must pick start (0,1)";
+    auto rc = StartOfTurn(black, brd, 3, 6);
+    DispErrorCode(rc);
+    ASSERT_EQ(rc, status_codes::SUCCESS);
 
-    // two-step to 0,7
-    auto status = ReceiveCommand(Command(Actions::SELECT_SLOT, {0,7}));
-    EXPECT_NE(status, status_codes::SUCCESS)
-        << "Creating mid-board blockade at 2–7 must be rejected";
+    PrintBoard();
+    ASSERT_EQ( ReceiveCommand(Command(Actions::SELECT_SLOT, {1,3})) , status_codes::SUCCESS ) << "can't get start";
+
+    rc = ReceiveCommand(Command(Actions::SELECT_SLOT, {1,9}));
+
+    ASSERT_EQ( rc , status_codes::SUCCESS ) << "temporary blockage should be ok";
+
+    StatusReport();
+
+    rc =  ReceiveCommand(Command(Actions::SELECT_SLOT, {1,0}));
+
+    StatusReport();
+
+    ASSERT_EQ( rc, status_codes::SUCCESS ); 
+
+    ASSERT_NE( ReceiveCommand(Command(Actions::MOVE_BY_DICE,  0  )) , status_codes::SUCCESS ) << "need to lift blockage";
+
+    ASSERT_EQ( ReceiveCommand(Command(Actions::SELECT_SLOT, {1,6})) , status_codes::SUCCESS ) << "can't get start";
+    ASSERT_EQ( ReceiveCommand(Command(Actions::MOVE_BY_DICE,  0  )) , status_codes::NO_LEGAL_MOVES_LEFT ) << "should lift blockage and end turn";
+
+    DisplayBoard(brd);
+    rc = StartOfTurn(black, brd, 3, 6);
+    ASSERT_EQ(rc, status_codes::SUCCESS);
+
+    ASSERT_EQ( ReceiveCommand(Command(Actions::SELECT_SLOT, {1,3})) , status_codes::SUCCESS ) << "can't get start";
+    ASSERT_EQ( ReceiveCommand(Command(Actions::MOVE_BY_DICE, 1)) , status_codes::SUCCESS ) << "temporary blockage should be ok";
+
+    ASSERT_EQ( ReceiveCommand(Command(Actions::SELECT_SLOT, {1, 6})) , status_codes::SUCCESS ) << "can't get start";
+    ASSERT_EQ( ReceiveCommand(Command(Actions::MOVE_BY_DICE,  first  )) , status_codes::NO_LEGAL_MOVES_LEFT ) << "should lift blockage and end turn";
 }

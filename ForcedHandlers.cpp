@@ -100,7 +100,7 @@ bool Game::SingleDiceHandler::Is()
 
 status_codes Game::SingleDiceHandler::Check()
 {
-    // std::cout << "1 dice is\n";
+    std::cout << "1 dice is\n";
 
     bool active_dice = _arb.CanUseMockDice(1);
     return ForceFromDice(active_dice);
@@ -109,7 +109,7 @@ status_codes Game::SingleDiceHandler::Check()
 status_codes Game::SingleDiceHandler::ForceFromDice(bool active_dice)
 {
     auto movables = _arb.GetMovables(active_dice);
-    // std::cout << "movables size " << movables.size() << "\n";
+    std::cout << "movables size " << movables.size() << "\n";
     if(movables.size() == 0)
         return status_codes::NO_LEGAL_MOVES_LEFT;
     else if(movables.size() == 1)
