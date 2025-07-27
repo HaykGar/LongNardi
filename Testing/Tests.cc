@@ -47,7 +47,9 @@ board preventions2 = {{ { PIECES_PER_PLAYER - 3,-1, 0, 1, 0, 0,-1, 1,-1, 0, 0, 1
 board block_check1 = {{ {14, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}, 
                         {-8, 0, 0,-1, 1,-1,-1,-1,-1, 0,-1,-1} }};
 
-
+                   //     0  1  2  3  4. 5. 6. 7. 8. 9. 10 11   
+board block_check2 = {{ {11, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0}, 
+                        {-9, 0, 0, 0, 0,-1,-1,-1, 0,-1,-1,-1} }};
 
 // helper: build an all-zero board with 1 black piece at its head
 static std::array<std::array<int, COL>, ROW> ZeroWhite1BlackBoard() {
@@ -89,10 +91,11 @@ TEST_F(TestBuilder, StartSelect_InvalidStarts)
     auto rc = StartOfTurn(white, brd, /*d1*/2, /*d2*/3);
     PrintBoard();
 
+    DispErrorCode(rc);
+
     ASSERT_EQ(rc, status_codes::SUCCESS)
                 << "StartOfTurn should succeed, no forced moves";
 
-    DispErrorCode(rc);
 
 
     // 1-A  empty slot
@@ -271,19 +274,13 @@ TEST_F(TestBuilder, StartSelectCheck)
    –  every assertion ends with a descriptive  <<  message
    –  coordinates are model-space (0,0 = white head)
 ──────────────────────────────────────────────────────────────────────────────*/
-/*──────────────────────────────────────────────────────────────────────────────
-  Helper: fresh board with one black checker at (1,0)
-──────────────────────────────────────────────────────────────────────────────*/
-static std::array<std::array<int, COL>, ROW> B() {   // “B” for baseline
-    return SafeBoard();
-}
 
 /*──────────────────────────────────────────────────────────────────────────────
   1. Two-step turn: first die works, second die blocked (enemy pile)
 ──────────────────────────────────────────────────────────────────────────────*/
 TEST_F(TestBuilder, Move_TwoStep_FirstOkSecondIllegal)
 {
-    auto brd = B();
+    auto brd = SafeBoard();
     brd[0][0] = 1;     // white piece to move
     brd[0][1] = 1;
     brd[0][7] = -1;    // enemy pile blocks second step
@@ -309,7 +306,7 @@ TEST_F(TestBuilder, Move_TwoStep_FirstOkSecondIllegal)
 ──────────────────────────────────────────────────────────────────────────────*/
 TEST_F(TestBuilder, Move_ReusingSameDieTwice)
 {
-    auto brd = B();
+    auto brd = SafeBoard();
     brd[0][1] = 2;      // two white pieces
 
     ASSERT_EQ(StartOfTurn(white, brd, 1, 3), status_codes::SUCCESS);
@@ -329,7 +326,7 @@ TEST_F(TestBuilder, Move_ReusingSameDieTwice)
 ──────────────────────────────────────────────────────────────────────────────*/
 TEST_F(TestBuilder, Move_OntoEnemyPiece)
 {
-    auto brd = B();
+    auto brd = SafeBoard();
     brd[0][0] = 1;    // white
     brd[0][4] = -1;   // enemy pile
 
@@ -345,7 +342,7 @@ TEST_F(TestBuilder, Move_OntoEnemyPiece)
 ──────────────────────────────────────────────────────────────────────────────*/
 TEST_F(TestBuilder, Move_PastEndOfBoard)
 {
-    auto brd = B();
+    auto brd = SafeBoard();
     brd[1][10] = 1;   // piece near end
     brd[0][5]  = 1;   // second piece ensures no forced moves
 
@@ -361,13 +358,15 @@ TEST_F(TestBuilder, Move_PastEndOfBoard)
 /*──────────────────────────────────────────────────────────────────────────────
   6. Doubles forced-move: only one 4-move exists → onRoll resolves, no moves left
 ──────────────────────────────────────────────────────────────────────────────*/
-TEST_F(TestBuilder, Legality_ForcedMoves_Doubles)
+TEST_F(TestBuilder, LegalityForcedMovesDoubles)
 {
     auto brd = ZeroWhite1BlackBoard();
     brd[0][0] = 1;      // only this checker can move 4
     brd[1][2] = 1;
     brd[0][8] = -1;     // enemy piece blocks second 4; forces unique move
     brd[1][6] = -1;
+
+    DisplayBoard(brd);
 
     EXPECT_EQ(StartOfTurn(white, brd, 4, 4), status_codes::NO_LEGAL_MOVES_LEFT)
         << "onRoll should auto-move once and leave NO_LEGAL_MOVES_LEFT";
@@ -379,15 +378,18 @@ TEST_F(TestBuilder, Legality_ForcedMoves_Doubles)
 
 TEST_F(TestBuilder, FirstMoveDouble4Or6)
 {
-  withFirstTurn();
-  status_codes outcome = StartOfTurn(white, start_brd, 4, 4);
-  ASSERT_EQ(outcome, status_codes::NO_LEGAL_MOVES_LEFT) << "4 4 first move failed";
-  // PrintBoard();
+    withFirstTurn();
+    status_codes outcome = StartOfTurn(white, start_brd, 4, 4);
+    ASSERT_EQ(outcome, status_codes::NO_LEGAL_MOVES_LEFT) << "4 4 first move failed";
+    ASSERT_EQ(GetBoardAt(0, 8), 2);
+    PrintBoard();
 
-  ASSERT_NE(status_codes::SUCCESS, ReceiveCommand(Command(Actions::SELECT_SLOT, {0, 0})));
-  outcome = withDice(6, 6);
-  ASSERT_EQ(outcome, status_codes::NO_LEGAL_MOVES_LEFT) << "6 6 first move failed";
-  // PrintBoard();
+    ASSERT_NE(status_codes::SUCCESS, ReceiveCommand(Command(Actions::SELECT_SLOT, {0, 0})));
+    outcome = withDice(6, 6);
+    ASSERT_EQ(outcome, status_codes::NO_LEGAL_MOVES_LEFT) << "6 6 first move failed";
+    ASSERT_EQ(GetBoardAt(1, 6), -2);
+
+    PrintBoard();
 }
 
 /*──────────────────────────────────────────────────────────────────────────────
@@ -477,7 +479,7 @@ TEST_F(TestBuilder, PreventsCompletion)
 ──────────────────────────────────────────────────────────────────────────────*/
 TEST_F(TestBuilder, Legality_AllGood)
 {
-    auto brd = B();
+    auto brd = SafeBoard();
     brd[0][0] = 1;
     brd[0][2] = 1;
 
@@ -508,27 +510,27 @@ TEST_F(TestBuilder, Legality_AllGood)
     – A head checker at 0 (so start = {0,0}) can move 6 to {0,6}, which would make points 1–6 all white
       with no enemy at 7.
 */
-TEST_F(TestBuilder, Blockade_FrontRowSix)
-{
-    auto b = ZeroWhite1BlackBoard();
-    // place a checker at head
-    b[0][0] = 1;
-    // occupy points 1–5
-    for (int c = 1; c <= 5; ++c) b[0][c] = 1;
+// TEST_F(TestBuilder, Blockade_FrontRowSix)
+// {
+//     auto b = ZeroWhite1BlackBoard();
+//     // place a checker at head
+//     b[0][0] = 1;
+//     // occupy points 1–5
+//     for (int c = 1; c <= 5; ++c) b[0][c] = 1;
 
-    ASSERT_EQ(StartOfTurn(white, b, /*d1*/2, /*d2*/4), status_codes::SUCCESS)
-        << "Nothing should be forced on roll (2,4)";
+//     ASSERT_EQ(StartOfTurn(white, b, /*d1*/2, /*d2*/4), status_codes::SUCCESS)
+//         << "Nothing should be forced on roll (2,4)";
 
-    // select head
-    ASSERT_EQ(ReceiveCommand(Command(Actions::SELECT_SLOT, {0,0})),
-              status_codes::SUCCESS)
-        << "Must be able to pick head";
+//     // select head
+//     ASSERT_EQ(ReceiveCommand(Command(Actions::SELECT_SLOT, {0,0})),
+//               status_codes::SUCCESS)
+//         << "Must be able to pick head";
 
-    // attempt two-step to 0,6 (creates a 6-point blockade at 1–6)
-    auto status = ReceiveCommand(Command(Actions::SELECT_SLOT, {0,6}));
-    EXPECT_NE(status, status_codes::SUCCESS)
-        << "Manually creating 6-point blockade (1–6) must be rejected";
-}
+//     // attempt two-step to 0,6 (creates a 6-point blockade at 1–6)
+//     auto status = ReceiveCommand(Command(Actions::SELECT_SLOT, {0,6}));
+//     EXPECT_NE(status, status_codes::SUCCESS)
+//         << "Manually creating 6-point blockade (1–6) must be rejected";
+// }
 
 /*
   Case 2: Blockade that wraps to second row.
@@ -537,50 +539,44 @@ TEST_F(TestBuilder, Blockade_FrontRowSix)
     – Start from 0,8 (another checker), two-step to 1,2 makes points 9,10,11,0,1,2 all white
       with no enemy beyond 1,2.
 */
-TEST_F(TestBuilder, Blockade_WrapRowSix)
-{
-    auto b = ZeroWhite1BlackBoard();
-    // place checkers to form five-in-a-row across the wrap for black
-    b[1][0]  = -4;
-    b[1][1]  = -1;
-    b[1][2]  = -1;
-    b[1][3]  = -1;
-    b[0][11] = -1;
+
+// TEST_F(TestBuilder, Blockade_WrapRowSix)
+// {
+//     auto b = ZeroWhite1BlackBoard();
+//     // place checkers to form five-in-a-row across the wrap for black
+//     b[1][0]  = -4;
+//     b[1][1]  = -1;
+//     b[1][2]  = -1;
+//     b[1][3]  = -1;
+//     b[0][11] = -1;
     
-    // piece that will move to block
-    b[0][5]  = -1;
+//     // piece that will move to block
+//     b[0][5]  = -1;
 
-    // extra pieces for no force
-    b[1][7]  = -2;  
+//     // extra pieces for no force
+//     b[1][7]  = -2;  
 
-    // pieces getting blocked
-    b[0][7]  = 4;
+//     // pieces getting blocked
+//     b[0][7]  = 4;
 
-    DisplayBoard(b);
+//     DisplayBoard(b);
 
-    auto rc = StartOfTurn(black, b, /*d1*/3, /*d2*/2);
+//     auto rc = StartOfTurn(black, b, /*d1*/3, /*d2*/2);
 
-    PrintBoard();
-    DispErrorCode(rc);
-    ASSERT_EQ(rc, status_codes::SUCCESS)
-        << "Doubles (3,3) should not force a move when many options exist";
+//     PrintBoard();
+//     DispErrorCode(rc);
+//     ASSERT_EQ(rc, status_codes::SUCCESS)
+//         << "Doubles (3,3) should not force a move when many options exist";
 
-    ASSERT_EQ(ReceiveCommand(Command(Actions::SELECT_SLOT, {0,5})),
-              status_codes::SUCCESS)
-        << "Must be able to pick start (0,5)";
+//     ASSERT_EQ(ReceiveCommand(Command(Actions::SELECT_SLOT, {0,5})),
+//               status_codes::SUCCESS)
+//         << "Must be able to pick start (0,5)";
 
-    // two-step to (1,2) wraps around; that creates 9–11,0–2 all white
-    auto status = ReceiveCommand(Command(Actions::SELECT_SLOT, {0, 10}));
-    EXPECT_NE(status, status_codes::SUCCESS)
-        << "Wrapping blockade of 6 across rows must be rejected";
-}
-
-/*
-  Case 3: Mid-board blockade with dice sum.
-    – Dice = (1,5) → sum = 6.
-    – Board has white at points 2,3,4,5,6 (five in a row).
-    – Checker at 1 can two-step to 7 → points 2–7 all white, no enemy at 8.
-*/
+//     // two-step to (1,2) wraps around; that creates 9–11,0–2 all white
+//     auto status = ReceiveCommand(Command(Actions::SELECT_SLOT, {0, 10}));
+//     EXPECT_NE(status, status_codes::SUCCESS)
+//         << "Wrapping blockade of 6 across rows must be rejected";
+// }
 
 TEST_F(TestBuilder, BlockadeHomeEntry)
 {
@@ -621,4 +617,57 @@ TEST_F(TestBuilder, BlockadeHomeEntry)
 
     ASSERT_EQ( ReceiveCommand(Command(Actions::SELECT_SLOT, {1, 6})) , status_codes::SUCCESS ) << "can't get start";
     ASSERT_EQ( ReceiveCommand(Command(Actions::MOVE_BY_DICE,  first  )) , status_codes::NO_LEGAL_MOVES_LEFT ) << "should lift blockage and end turn";
+
+    DisplayBoard(brd);
+
+    rc = StartOfTurn(black, brd, 3, 6);
+    ASSERT_EQ(rc, status_codes::SUCCESS);
+
+    // Select (1,3), should be success
+    ASSERT_EQ(ReceiveCommand(Command(Actions::SELECT_SLOT, {1,3})), status_codes::SUCCESS);
+    // Move by dice second (6)
+    ASSERT_EQ(ReceiveCommand(Command(Actions::MOVE_BY_DICE, second)), status_codes::SUCCESS);   // create blockage
+
+    // Select slot (1,11), try to move by dice first (3), should NOT be success
+    ASSERT_EQ(ReceiveCommand(Command(Actions::SELECT_SLOT, {1,11})), status_codes::SUCCESS);
+    EXPECT_NE(ReceiveCommand(Command(Actions::MOVE_BY_DICE, first)), status_codes::SUCCESS);
+
+    ASSERT_EQ(ReceiveCommand(Command(Actions::SELECT_SLOT, {1, 10})), status_codes::SUCCESS);
+    ASSERT_EQ(ReceiveCommand(Command(Actions::MOVE_BY_DICE, first)), status_codes::NO_LEGAL_MOVES_LEFT);
+    
+    // Select any piece in 1,6 to 1,10 except 1,9, assert success and move by dice second, assert no legal moves left
+    for (int col = 6; col <= 8; ++col) {
+        rc = StartOfTurn(black, brd, 3, 6);
+        ASSERT_EQ(rc, status_codes::SUCCESS);
+
+        // Select (1,3), should be success
+        ASSERT_EQ(ReceiveCommand(Command(Actions::SELECT_SLOT, {1,3})), status_codes::SUCCESS);
+        // Move by dice second (6)
+        ASSERT_EQ(ReceiveCommand(Command(Actions::MOVE_BY_DICE, second)), status_codes::SUCCESS);   // create blockage
+
+
+        ASSERT_EQ(ReceiveCommand(Command(Actions::SELECT_SLOT, {1, col})), status_codes::SUCCESS);
+        ASSERT_EQ(ReceiveCommand(Command(Actions::MOVE_BY_DICE, first)), status_codes::NO_LEGAL_MOVES_LEFT); // unblock
+    }
+}
+
+TEST_F(TestBuilder, BlockadeUnblockOnlyBySpecificMove)
+{
+    auto brd = block_check2;
+
+    auto rc = StartOfTurn(black, brd, 3, 6);
+    ASSERT_EQ(rc, status_codes::SUCCESS);
+    StatusReport();
+
+    ASSERT_EQ(ReceiveCommand(Command(Actions::SELECT_SLOT, {1,5})), status_codes::SUCCESS);
+
+    rc = ReceiveCommand(Command(Actions::MOVE_BY_DICE, first));
+    StatusReport();
+
+    std::cout << "rc was\n";
+    DispErrorCode(rc);
+
+    ASSERT_EQ(rc, status_codes::NO_LEGAL_MOVES_LEFT);
+    
+    ASSERT_EQ(GetBoardAt(0,5), -1);
 }

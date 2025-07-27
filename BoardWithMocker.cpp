@@ -154,9 +154,20 @@ void Game::BoardWithMocker::Mock_Move(const NardiCoord& start, const NardiCoord&
 {
     _mockBoard.Move(start, end);
 }
+
+void Game::BoardWithMocker::Mock_UndoMove(const NardiCoord& start, const NardiCoord& end)
+{
+    _mockBoard.UndoMove(start, end);
+}
+
 void Game::BoardWithMocker::Mock_Remove(const NardiCoord& to_remove)
 {
     _mockBoard.Remove(to_remove);
+}
+
+void Game::BoardWithMocker::Mock_UndoRemove(const NardiCoord& to_remove)
+{
+    _mockBoard.UndoRemove(to_remove);
 }
 
 void Game::BoardWithMocker::SwitchPlayer()

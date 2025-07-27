@@ -72,8 +72,7 @@ void Game::DoublesHandler::MockFrom(NardiCoord start)
             return;   // nothing forced
         
         // mock move
-        ++_g.times_mockdice_used[_g.board.PlayerIdx()];
-        _g.MockMove(start, dest);
+        _g.MockAndUpdate(start, dest);
 
         // updatge start and dest
         start = dest;
@@ -110,6 +109,10 @@ status_codes Game::SingleDiceHandler::ForceFromDice(bool active_dice)
 {
     auto movables = _arb.GetMovables(active_dice);
     std::cout << "movables size " << movables.size() << "\n";
+    for(const auto& coord : movables)
+        coord.Print();
+
+
     if(movables.size() == 0)
         return status_codes::NO_LEGAL_MOVES_LEFT;
     else if(movables.size() == 1)

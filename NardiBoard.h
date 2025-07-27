@@ -25,7 +25,10 @@ public:
 
     // Updates and Actions    
     void Move(const NardiCoord& start, const NardiCoord& end);
+    void UndoMove(const NardiCoord& start, const NardiCoord& end);
+
     void Remove(const NardiCoord& to_remove);
+    void UndoRemove(const NardiCoord& to_remove);
 
     void SwitchPlayer();
 
@@ -62,10 +65,14 @@ private:
 
     // Updates and Actions
     void OnMove(const NardiCoord& start, const NardiCoord& end);
+    void OnUndoMove(const NardiCoord& start, const NardiCoord& end);
+
     void OnRemove(const NardiCoord& to_remove);
+    void OnUndoRemove(const NardiCoord& to_remove);
 
     void UpdateAvailabilitySets(const NardiCoord& start, const NardiCoord& end);
-    void UpdateAvailabilitySets(const NardiCoord start);
+    void UpdateAvailabilityStart(const NardiCoord start);
+    void UpdateAvailabilityDest(const NardiCoord& dest);
     void SetMaxOcc();
 
     void FlagHeadIfNeeded(const NardiCoord& start);

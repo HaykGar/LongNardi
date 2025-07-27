@@ -74,7 +74,9 @@ status_codes TestBuilder::ReceiveCommand(const Command& cmd)
     // std::cout << "\n\n\n\n";
     // std::cout << "received command: " << static_cast<int>(cmd.action) << "\n";
 
-    return _ctrl->ReceiveCommand(cmd);
+    auto rc = _ctrl->ReceiveCommand(cmd);
+    DispErrorCode(rc);
+    return rc;
 }
 
 void TestBuilder::PrintBoard() const
@@ -92,11 +94,12 @@ void TestBuilder::PrintBoard() const
 
 void TestBuilder::StatusReport() const
 {
-    std::cout << "board: \n";
-    PrintBoard();
-
     std::cout << "player: " << _game->board.PlayerIdx() << "\n";
 
     std::cout << "dice: " << _game->dice[0] << " " << _game->dice[1] << "\n";
 
+    std::cout << "dice used: " << _game->times_dice_used[0] << ", " << _game->times_dice_used[1] << "\n";
+
+    std::cout << "board: \n";
+    PrintBoard();
 }

@@ -12,6 +12,8 @@
 /*
 touch up back block for doubles...
 
+first move exception is Forced handler... NOT rule exception
+
 Rule precedence: only available move creates block issue not allowed
 
 Pass ownership of goes_idx to board... 
@@ -99,6 +101,7 @@ class Game
                                 
                 bool MakesSecondStep(const NardiCoord& start) const;   
                 bool TurnCompletable();
+                void SetCompletable();
         };
 
         struct BadBlockMonitor : public RuleExceptionMonitor    // doubles change things somewhat - 
@@ -133,11 +136,9 @@ class Game
 
                 unsigned _blockLength;
                 NardiCoord _blockStart;
-                bool _diceAttempting;
 
                 bool IllegalEndpoints(const NardiCoord& start, const NardiCoord& end);
 
-                bool CreatesBlockageAt(const NardiCoord& end);
                 bool BlockageAround(const NardiCoord& end);
                 bool PieceAhead();
                 bool WillBeFixable();
@@ -296,7 +297,10 @@ class Game
                 void Remove(const NardiCoord& to_remove);
 
                 void Mock_Move(const NardiCoord& start, const NardiCoord& end);
+                void Mock_UndoMove(const NardiCoord& start, const NardiCoord& end);
+
                 void Mock_Remove(const NardiCoord& to_remove);
+                void Mock_UndoRemove(const NardiCoord& to_remove);
 
                 void SwitchPlayer();
 
@@ -361,8 +365,9 @@ class Game
         // Moving
         status_codes MakeMove(const NardiCoord& start, const NardiCoord& end);
 
-        void MockMove(const NardiCoord& start, const NardiCoord& end);
-        void MockMoveByDice(const NardiCoord& start, bool dice_idx);
+        void MockAndUpdate(const NardiCoord& start, const NardiCoord& end);
+        void UndoMockAndUpdate(const NardiCoord& start, const NardiCoord& end);
+        void MockAndUpdateByDice(const NardiCoord& start, bool dice_idx);
         void RealizeMock();
         void ResetMock();
 

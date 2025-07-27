@@ -31,6 +31,24 @@ void NardiBoard::OnMove(const NardiCoord& start, const NardiCoord& end)
     UpdateAvailabilitySets(start, end);
 }
 
+void NardiBoard::UndoMove(const NardiCoord& start, const NardiCoord& end)
+{
+    data.at(start.row).at(start.col)  += player_sign;
+    data.at(end.row).at(end.col)      -= player_sign;
+    OnUndoMove(start, end);
+}
+
+void NardiBoard::OnUndoMove(const NardiCoord& start, const NardiCoord& end)
+{
+    if(end.row != player_idx && end.col >= 6 && (start.col < 6 || start.row != end.row) )  // moved to home from outside
+        --reached_enemy_home[player_idx];
+
+    if(IsPlayerHead(start))
+        head_used = false;
+
+    UpdateAvailabilitySets(end, start);
+}
+
 void NardiBoard::Remove(const NardiCoord& to_remove)
 {
     data.at(to_remove.row).at(to_remove.col) -= player_sign;
@@ -38,43 +56,30 @@ void NardiBoard::Remove(const NardiCoord& to_remove)
     OnRemove(to_remove);
 }
 
+void NardiBoard::UndoRemove(const NardiCoord& to_remove)
+{
+    data.at(to_remove.row).at(to_remove.col) += player_sign;
+    ++pieces_left.at(player_idx);
+    OnUndoRemove(to_remove);
+}
+
+void NardiBoard::OnUndoRemove(const NardiCoord& to_remove)
+{
+    UpdateAvailabilityDest(to_remove);
+}
+
 void NardiBoard::OnRemove(const NardiCoord& to_remove)
 {
-    UpdateAvailabilitySets(to_remove);
+    UpdateAvailabilityStart(to_remove);
 }
 
 void NardiBoard::UpdateAvailabilitySets(const NardiCoord& start, const NardiCoord& dest)
 {   // only to be called within MakeMove()
-    UpdateAvailabilitySets(start);
-    
-    if ( at(dest) * player_sign == 1 )  // dest newly filled, note both ifs can be true
-    {
-        // update player's options - can now possibly move from dest square
-        int d = 1;
-        NardiCoord coord = CoordAfterDistance(dest, d);
-        while( !coord.OutOfBounds() && d <= 6 )
-        {
-            if(at(coord) * player_sign >= 0) // square empty or occupied by player already
-                goes_idx_plusone[player_idx][d-1].insert(dest);
-            
-            ++d;
-            coord = CoordAfterDistance(dest, d);
-        }
-        // update other player's options - can no longer move to dest square
-        d = 1;
-        coord = CoordAfterDistance(dest, -d, !player_idx);
-        while( !coord.OutOfBounds() && d <= 6 )
-        {
-            if(at(coord) * player_sign < 0) // other player occupies coord
-                goes_idx_plusone[!player_idx][d-1].erase(coord);   // pieces at coord can no longer travel here
-
-            ++d;
-            coord = CoordAfterDistance(dest, -d, !player_idx);
-        }
-    }
+    UpdateAvailabilityStart(start);
+    UpdateAvailabilityDest(dest);
 }
 
-void NardiBoard::UpdateAvailabilitySets(const NardiCoord start)  // not reference since we destroy stuff
+void NardiBoard::UpdateAvailabilityStart(const NardiCoord start)  // not reference since we destroy stuff
 {
     if (at(start) == 0) // start square vacated
     {
@@ -104,6 +109,35 @@ void NardiBoard::UpdateAvailabilitySets(const NardiCoord start)  // not referenc
         for(int i = 1; i < max_num_occ.at(player_idx); ++i)
             if(at(!player_idx, COL - i) * player_sign  > 0)
                 goes_idx_plusone[player_idx][i-1].insert({!player_idx, COL - i});
+    }
+}
+
+void NardiBoard::UpdateAvailabilityDest(const NardiCoord& dest)
+{
+    if ( at(dest) * player_sign == 1 )  // dest newly filled, note both ifs can be true
+    {
+        // update player's options - can now possibly move from dest square
+        int d = 1;
+        NardiCoord coord = CoordAfterDistance(dest, d);
+        while( !coord.OutOfBounds() && d <= 6 )
+        {
+            if(at(coord) * player_sign >= 0) // square empty or occupied by player already
+                goes_idx_plusone[player_idx][d-1].insert(dest);
+            
+            ++d;
+            coord = CoordAfterDistance(dest, d);
+        }
+        // update other player's options - can no longer move to dest square
+        d = 1;
+        coord = CoordAfterDistance(dest, -d, !player_idx);
+        while( !coord.OutOfBounds() && d <= 6 )
+        {
+            if(at(coord) * player_sign < 0) // other player occupies coord
+                goes_idx_plusone[!player_idx][d-1].erase(coord);   // pieces at coord can no longer travel here
+
+            ++d;
+            coord = CoordAfterDistance(dest, -d, !player_idx);
+        }
     }
 }
 

@@ -144,17 +144,55 @@ status_codes Game::MakeMove(const NardiCoord& start, const NardiCoord& end)
     return arbiter.OnMove();
 }
 
-void Game::MockMove(const NardiCoord& start, const NardiCoord& end)
+void Game::MockAndUpdate(const NardiCoord& start, const NardiCoord& end)
 {
+    int d = board.GetDistance(start, end);
+    if(d == dice[0])
+        ++times_mockdice_used[0];
+    else if(d == dice[1])
+        ++times_mockdice_used[1];
+    else if(d == dice[0] + dice[1])
+    {
+        ++times_mockdice_used[0];
+        ++times_mockdice_used[1];
+    }
+    else if(doubles_rolled && d % dice[0] == 0 && arbiter.CanUseMockDice(0, d / dice[0]) )
+        times_mockdice_used[0] += d / dice[0];
+    else
+        std::cout << "!!!!\nunexpected input to MockAndUpdate\n";
+    
+    
     board.Mock_Move(start, end);
+    arbiter.OnMockChange();  // not sure if this is needed
+}
+
+void Game::UndoMockAndUpdate(const NardiCoord& start, const NardiCoord& end)
+{
+    int d = board.GetDistance(start, end);
+    if(d == dice[0])
+        --times_mockdice_used[0];
+    else if(d == dice[1])
+        --times_mockdice_used[1];
+    else if(d == dice[0] + dice[1])
+    {
+        --times_mockdice_used[0];
+        --times_mockdice_used[1];
+    }
+    else if(doubles_rolled && d % dice[0] == 0 && arbiter.CanUseMockDice(0, d / dice[0]) )
+        times_mockdice_used[0] -= d / dice[0];
+    else
+        std::cout << "!!!!\nunexpected input to MockAndUpdate\n";
+
+    board.Mock_UndoMove(start, end);
     arbiter.OnMockChange();
 }
 
-void Game::MockMoveByDice(const NardiCoord& start, bool dice_idx)
+
+void Game::MockAndUpdateByDice(const NardiCoord& start, bool dice_idx)
 {
     ++times_mockdice_used.at(board.PlayerIdx());
     NardiCoord dest = board.CoordAfterDistance(start, dice[dice_idx]);
-    MockMove(start, dest);
+    MockAndUpdate(start, dest);
 }
 
 void Game::ResetMock()
@@ -353,11 +391,11 @@ void Game::Arbiter::UpdateMovables()
 
     if(CanUseMockDice(0))
     {
-        std::cout << "updating movables for dice: " << _g.dice[0] << "\n";
+        // std::cout << "updating movables for dice: " << _g.dice[0] << "\n";
 
         for(const auto& coord : _g.PlayerGoesByDice(0))
         {
-            std::cout << "coord considered: " << coord.row << ", " << coord.col << "\n";
+            // std::cout << "coord considered: " << coord.row << ", " << coord.col << "\n";
 
             if(CanMoveByDice(coord, 0).first == status_codes::SUCCESS )   // checks prevention as well
             {
@@ -375,10 +413,10 @@ void Game::Arbiter::UpdateMovables()
     }
     if(CanUseMockDice(1))
     {
-        std::cout << "updating movables for dice: " << _g.dice[1] << "\n";
+        // std::cout << "updating movables for dice: " << _g.dice[1] << "\n";
         for(const auto& coord : _g.PlayerGoesByDice(1))
         {
-            std::cout << "coord considered: " << coord.row << ", " << coord.col << "\n";
+            // std::cout << "coord considered: " << coord.row << ", " << coord.col << "\n";
             if(CanMoveByDice(coord, 1).first == status_codes::SUCCESS )
                 _movables.at(1).push_back(coord);
         }
@@ -392,14 +430,15 @@ const std::vector<NardiCoord>& Game::Arbiter::GetMovables(bool idx)
 
 std::unordered_set<NardiCoord> Game::Arbiter::GetTwoSteppers(size_t max_qty, const std::array<std::vector<NardiCoord>, 2>& to_search)
 {
-    // std::cout << "in 2steppers, searching among: \n";
-    // for (const auto& c : to_search.at(0))
-    //     c.Print();
-
-    // for (const auto& c : to_search.at(1))
-    //     c.Print();
-
     std::unordered_set<NardiCoord> two_steppers;
+
+    // std::cout << "in 2steppers, searching among: \n";
+    for (const auto& c : to_search.at(0))
+        c.Print();
+
+    for (const auto& c : to_search.at(1))
+        c.Print();
+
 
     for(const auto& start : to_search.at(0))
     {
