@@ -25,6 +25,9 @@ status_codes Game::DoublesHandler::Check()
 {
     std::cout << "doubles is\n";
 
+    std::cout << "mock dice used: " << _g.times_mockdice_used.at(0) << " " 
+                    << _g.times_mockdice_used.at(1) << "\n";
+
     if(!Is())
         return status_codes::MISC_FAILURE;
 
@@ -72,11 +75,11 @@ void Game::DoublesHandler::MockFrom(NardiCoord start)
             return;   // nothing forced
         
         // mock move
-        _g.MockAndUpdate(start, dest);
+        _g.MockAndUpdateByDice(start, 0);
 
         // updatge start and dest
         start = dest;
-        std::tie(can_go, dest) = _arb.CanFinishByDice(start, 0);
+        std::tie(can_go, dest) = _arb.CanMoveByDice(start, 0);
     }
 }
 
@@ -112,11 +115,10 @@ status_codes Game::SingleDiceHandler::ForceFromDice(bool active_dice)
     for(const auto& coord : movables)
         coord.Print();
 
-
     if(movables.size() == 0)
         return status_codes::NO_LEGAL_MOVES_LEFT;
     else if(movables.size() == 1)
-        return _g.ForceMove(movables.at(0), active_dice);
+        return _g.MakeMove(movables.at(0), active_dice);
     else
         return status_codes::SUCCESS;   // not forced to move, at least two choices
 }
@@ -153,7 +155,7 @@ status_codes Game::TwoDiceHandler::Check()
     else if( dice_movables.at(0).size() + dice_movables.at(1).size() == 1 )       // one has no options, other has only 1,  0-1
     {
         bool moving_by = dice_movables.at(1).size() == 1;
-        return _g.ForceMove(dice_movables.at(moving_by).at(0), moving_by);
+        return _g.MakeMove(dice_movables.at(moving_by).at(0), moving_by);
     }
     
     else if( dice_movables.at(0).size() == 1 && dice_movables.at(1).size() == 1)
@@ -165,7 +167,7 @@ status_codes Game::TwoDiceHandler::Check()
         // std::cout << "movable pieces each: " << _g.board.Mock_MovablePieces(max_start) << " and " <<_g.board.Mock_MovablePieces(min_start) << "\n";
 
         if( min_start == max_start && _g.board.Mock_MovablePieces(max_start) == 1 )
-            return _g.ForceMove(max_start, max_dice);
+            return _g.MakeMove(max_start, max_dice);
     }
 
     // std::cout << "need to get two steppers\n";
@@ -177,9 +179,9 @@ status_codes Game::TwoDiceHandler::Check()
     if(two_steppers.size() == 0)
     {
         if(dice_movables.at(max_dice).size() == 1)  // max start has  1 choice
-            return _g.ForceMove(dice_movables.at(max_dice).at(0), max_dice);
+            return _g.MakeMove(dice_movables.at(max_dice).at(0), max_dice);
         else if(dice_movables.at(!max_dice).size() == 1)    // other has only 1 choice
-            return _g.ForceMove(dice_movables.at(!max_dice).at(0), !max_dice);
+            return _g.MakeMove(dice_movables.at(!max_dice).at(0), !max_dice);
         else
             return status_codes::SUCCESS;   // impossible to complete turn, but nothing to force for possible dice
     }
@@ -188,7 +190,7 @@ status_codes Game::TwoDiceHandler::Check()
         if( dice_movables.at(0).size() == 0 || dice_movables.at(1).size() == 0) // one not movable without 2step
         {
             bool must_move = dice_movables.at(1).size() > 0;    // can't be both 0
-            return _g.ForceMove(*two_steppers.begin(), must_move);
+            return _g.MakeMove(*two_steppers.begin(), must_move);
         }
         else
         {
@@ -196,10 +198,10 @@ status_codes Game::TwoDiceHandler::Check()
             bool one_choice = (dice_movables.at(1).size() == 1);
 
             if( dice_movables.at(one_choice).at(0) == *two_steppers.begin() )   // no new choices for this dice
-                return _g.ForceMove(dice_movables.at(one_choice).at(0), one_choice);   
+                return _g.MakeMove(dice_movables.at(one_choice).at(0), one_choice);   
     
             else if ( dice_movables.at(!one_choice).size() == 1 && dice_movables.at(!one_choice).at(0) == *two_steppers.begin() )
-                return _g.ForceMove(dice_movables.at(!one_choice).at(0), !one_choice);   
+                return _g.MakeMove(dice_movables.at(!one_choice).at(0), !one_choice);   
             else
                 return status_codes::SUCCESS;
         }        

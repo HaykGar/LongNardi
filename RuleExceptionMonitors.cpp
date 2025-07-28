@@ -104,24 +104,24 @@ void Game::PreventionMonitor::SetCompletable()
     if( turn_last_updated.at(_g.board.PlayerIdx()) != _g.turn_number.at(_g.board.PlayerIdx()) )
     {
         auto two_steps = _arb.GetTwoSteppers(1);    // blocking checked
-        if(two_steps.size() >= 1)
+        if(two_steps.size() > 0)
             _completable = true;
 
         else
         {
-            std::array<size_t, 2> options = { _g.PlayerGoesByMockDice(0).size(), _g.PlayerGoesByMockDice(1).size() };
+            std::array<size_t, 2> options = { _g.PlayerGoesByDice(0).size(), _g.PlayerGoesByDice(1).size() };
             bool share_1piece_slot = false;
-            for(const auto& coord : _g.PlayerGoesByMockDice(0))
+            for(const auto& coord : _g.PlayerGoesByDice(0))
             {
                 if(_arb.IllegalBlocking(coord, 0))
                     --options.at(0);
             }
-            for(const auto& coord : _g.PlayerGoesByMockDice(1))
+            for(const auto& coord : _g.PlayerGoesByDice(1))
             {
                 if(_arb.IllegalBlocking(coord, 1))
                     --options.at(1);
 
-                else if( _g.PlayerGoesByMockDice(0).contains(coord) && _g.board. Mock_MovablePieces(coord) == 1 )
+                else if( _g.PlayerGoesByDice(0).contains(coord) && _g.board. MovablePieces(coord) == 1 )
                     share_1piece_slot = true;
             }
 
@@ -192,6 +192,7 @@ void Game::BadBlockMonitor::Solidify()
 {
     // std::cout << "solidifying \n\n\n";
 
+    PreConditions();
     _blockedAll =  BlockingAll();
     _isSolidified = true;
 

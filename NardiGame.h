@@ -12,6 +12,10 @@
 /*
 touch up back block for doubles...
 
+Logging services... log everything in files `
+
+TryFinishMove, legal move checkers, etc, need to be integrated with hanel in endgame...
+
 first move exception is Forced handler... NOT rule exception
 
 Rule precedence: only available move creates block issue not allowed
@@ -208,7 +212,7 @@ class Game
                 std::pair<status_codes, std::array<int, 2>> LegalMove(const NardiCoord& start, const NardiCoord& end);
                 std::pair<status_codes, NardiCoord> LegalMove_2step(const NardiCoord& start);
 
-                bool CanRemovePiece(const NardiCoord& start, bool d_idx);
+                bool DiceRemovesPiece(const NardiCoord& start, bool d_idx);
 
                 bool CanUseMockDice(bool idx, int n_times = 1) const;
 
@@ -332,14 +336,13 @@ class Game
                 void SetPlayer(bool player);
         };
 
-        BoardWithMocker board;     // contains real and mock boards
+        BoardWithMocker board;                      // contains real and mock boards
 
         std::mt19937 rng;                           // Mersenne Twister engine
         std::uniform_int_distribution<int> dist;    // uniform distribution for dice
 
         std::array<int, 2> dice; 
         std::array<int, 2> times_dice_used;
-
         std::array<int, 2> times_mockdice_used;
 
         bool doubles_rolled;
@@ -364,17 +367,15 @@ class Game
         
         // Moving
         status_codes MakeMove(const NardiCoord& start, const NardiCoord& end);
+        status_codes MakeMove(const NardiCoord& start, bool dice_idx);
 
+        status_codes RemovePiece(const NardiCoord& start);
+
+        // Mocking
         void MockAndUpdate(const NardiCoord& start, const NardiCoord& end);
         void UndoMockAndUpdate(const NardiCoord& start, const NardiCoord& end);
         void MockAndUpdateByDice(const NardiCoord& start, bool dice_idx);
         void RealizeMock();
         void ResetMock();
 
-
-        status_codes RemovePiece(const NardiCoord& start);
-
-        status_codes ForceMove(const NardiCoord& start, bool dice_idx);
-        status_codes ForceRemovePiece(const NardiCoord& start, bool dice_idx);
-        
 };

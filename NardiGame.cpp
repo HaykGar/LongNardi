@@ -16,7 +16,6 @@ Game::Game() :  board(*this), rng(std::random_device{}()), dist(1, 6), dice({0, 
                 doubles_rolled(false), turn_number({0, 0}), rw(nullptr), arbiter(*this)
 {}
 
-
 void Game::AttachReaderWriter(ReaderWriter* r)
 {   rw = r;   }
 
@@ -84,8 +83,8 @@ status_codes Game::TryStart(const NardiCoord& start)
     //std::cout << "called TryStart\n";
     // During endgame, if it's a valid start just check if there's a forced move from here, will streamline play
     auto s = board.ValidStart(start);
-    std::cout << "start valid?\n";
-    DispErrorCode(s);
+    // std::cout << "start valid?\n";
+    // DispErrorCode(s);
     return s;
 }
 
@@ -100,25 +99,14 @@ status_codes Game::TryFinishMove(const NardiCoord& start, const NardiCoord& end)
     else
     {
         UseDice(0, times_used[0]); UseDice(1, times_used[1]);
-        auto s = MakeMove(start, end);    // checks for further forced moves internally
-        std::cout << "could move? \n";
-        DispErrorCode(s);
-        return s;
+        return MakeMove(start, end);    // checks for further forced moves internally
     }
 }
 
 status_codes Game::TryMoveByDice(const NardiCoord& start, bool dice_idx)
 {
-
     std::cout << "trying to move by dice " << dice[dice_idx] << " from " << start.AsStr() << "\n";
-
     board.ResetMock(); // could be redundant, but safe
-    
-    if(arbiter.CanRemovePiece(start, dice_idx))
-    {
-        UseDice(dice_idx);
-        RemovePiece(start);     // change to remove piece start, dice_idx `
-    }
     
     auto [result, dest]  = arbiter.CanFinishByDice(start, dice_idx);
     
@@ -128,10 +116,8 @@ status_codes Game::TryMoveByDice(const NardiCoord& start, bool dice_idx)
     if(result != status_codes::SUCCESS )
         return result;
     
-    else{
-        UseDice(dice_idx);
-        return MakeMove(start, dest);
-    }
+    else
+        return MakeMove(start, dice_idx);
 }
 
 status_codes Game::MakeMove(const NardiCoord& start, const NardiCoord& end)
@@ -187,12 +173,15 @@ void Game::UndoMockAndUpdate(const NardiCoord& start, const NardiCoord& end)
     arbiter.OnMockChange();
 }
 
-
 void Game::MockAndUpdateByDice(const NardiCoord& start, bool dice_idx)
 {
-    ++times_mockdice_used.at(board.PlayerIdx());
-    NardiCoord dest = board.CoordAfterDistance(start, dice[dice_idx]);
-    MockAndUpdate(start, dest);
+    ++times_mockdice_used[dice_idx];
+    if(board.CurrPlayerInEndgame() && arbiter.DiceRemovesPiece(start, dice_idx))
+        board.Mock_Remove(start);
+    else
+        board.Mock_Move(start, board.CoordAfterDistance(start, dice[dice_idx]));
+    
+    arbiter.OnMockChange();
 }
 
 void Game::ResetMock()
@@ -209,12 +198,11 @@ void Game::RealizeMock()
     arbiter.OnMockChange();
 }
 
-status_codes Game::ForceMove(const NardiCoord& start, bool dice_idx)  // only to be called when forced
+status_codes Game::MakeMove(const NardiCoord& start, bool dice_idx)
 {
-    std::cout << "forcing move from " << start.AsStr() << " by " << dice[dice_idx] << "\n";
-    
+    std::cout << "moving from " << start.AsStr() << " by " << dice[dice_idx] << "\n";
     UseDice(dice_idx);
-    if(arbiter.CanRemovePiece(start, dice_idx))
+    if(arbiter.DiceRemovesPiece(start, dice_idx))
         return RemovePiece(start);
     else
         return MakeMove(start, board.CoordAfterDistance(start, dice[dice_idx]) );
@@ -230,12 +218,6 @@ status_codes Game::RemovePiece(const NardiCoord& start)
         return status_codes::NO_LEGAL_MOVES_LEFT;
 
     return arbiter.OnRemoval();
-}
-
-status_codes Game::ForceRemovePiece(const NardiCoord& start, bool dice_idx)
-{
-    UseDice(dice_idx);
-    return RemovePiece(start);
 }
 
 bool Game::GameIsOver() const 
@@ -295,14 +277,16 @@ std::pair<status_codes, NardiCoord> Game::Arbiter::CanFinishByDice(const NardiCo
             
         else if(_prevMonitor.Illegal(start, dice_idx))
             return {status_codes::PREVENTS_COMPLETION, {} }; 
-    }   
+    }
+    else if( DiceRemovesPiece(start, dice_idx) )
+        return {status_codes::SUCCESS, {}};
     
     return {result, final_dest};
 }
 
-bool Game::Arbiter::CanRemovePiece(const NardiCoord& start, bool dice_idx)
+bool Game::Arbiter::DiceRemovesPiece(const NardiCoord& start, bool dice_idx)
 {
-    if(!CanUseMockDice(dice_idx) || !_g.board.Mock_CurrPlayerInEndgame())
+    if(!_g.board.Mock_CurrPlayerInEndgame())
         return false;
     
     int pos_from_end = COL - start.col;
