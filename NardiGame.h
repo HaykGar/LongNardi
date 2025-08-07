@@ -12,6 +12,8 @@
 /*
 touch up back block for doubles...
 
+// need to be checking block illegality... case: move prevented because all second sequences create block... `
+
 Logging services... log everything in files `
 
 TryFinishMove, legal move checkers, etc, need to be integrated with hanel in endgame...
@@ -217,6 +219,7 @@ class Game
                 bool CanUseMockDice(bool idx, int n_times = 1) const;
 
                 bool IllegalBlocking(const NardiCoord& start, bool d_idx);
+                bool IllegalBlocking(const NardiCoord& start, const NardiCoord& end);
                 
                 // Getters
                 const std::vector<NardiCoord>& GetMovables(bool idx);
@@ -229,7 +232,6 @@ class Game
                 status_codes OnRemoval();
 
                 void OnMockChange();
-                void OnChange();
 
                 void SolidifyBlockMonitor();
 

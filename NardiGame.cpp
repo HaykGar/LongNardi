@@ -73,6 +73,8 @@ status_codes Game::OnRoll()
         rw->AnimateDice();
 
     IncrementTurnNumber();  // starts at 0
+
+    board.ResetMock();
     
     return arbiter.OnRoll();
 }
@@ -260,6 +262,13 @@ std::pair<status_codes, NardiCoord> Game::Arbiter::CanFinishByDice(const NardiCo
     if(!CanUseMockDice(dice_idx))
         return {status_codes::DICE_USED_ALREADY, {} };
 
+    for( const auto& coord : _movables.at(dice_idx))
+    {
+        if(coord == start)
+            return { status_codes::SUCCESS, _g.board.CoordAfterDistance(start, _g.dice[dice_idx]) };
+    }
+
+    std::cout << "not found in movables, tried " << start.AsStr() << " with dice " << _g.dice[dice_idx] << "\n";
     //std::cout << "dice usable\n";
 
     NardiCoord final_dest = _g.board.CoordAfterDistance(start, _g.dice[dice_idx]);
@@ -369,15 +378,21 @@ bool Game::Arbiter::IllegalBlocking(const NardiCoord& start, bool idx)
     return _blockMonitor.Illegal(start, idx);
 }
 
+bool Game::Arbiter::IllegalBlocking(const NardiCoord& start, const NardiCoord& end)
+{
+    return _blockMonitor.Illegal(start, end);
+}
+
 void Game::Arbiter::UpdateMovables()
 {
     _movables = {};
 
     if(CanUseMockDice(0))
     {
+        std::vector<NardiCoord> candidates(_g.PlayerGoesByMockDice(0).begin(), _g.PlayerGoesByMockDice(0).end());
         // std::cout << "updating movables for dice: " << _g.dice[0] << "\n";
 
-        for(const auto& coord : _g.PlayerGoesByDice(0))
+        for(const auto& coord : candidates)
         {
             // std::cout << "coord considered: " << coord.row << ", " << coord.col << "\n";
 
@@ -386,19 +401,20 @@ void Game::Arbiter::UpdateMovables()
                 _movables.at(0).push_back(coord);
                 // std::cout << "works with dice 0\n";
             }
-            else
-            {
-                continue;
-                // DispErorrCode(CanMoveByDice(coord, 0).first);
-                // std::cout << "doesn't work\n";
-            }
+            // else
+            // {
+            //     continue;
+            //     // DispErorrCode(CanMoveByDice(coord, 0).first);
+            //     // std::cout << "doesn't work\n";
+            // }
                 
         }
     }
     if(CanUseMockDice(1))
     {
+        std::vector<NardiCoord> candidates(_g.PlayerGoesByMockDice(1).begin(), _g.PlayerGoesByMockDice(1).end());
         // std::cout << "updating movables for dice: " << _g.dice[1] << "\n";
-        for(const auto& coord : _g.PlayerGoesByDice(1))
+        for( const auto& coord : candidates )
         {
             // std::cout << "coord considered: " << coord.row << ", " << coord.col << "\n";
             if(CanMoveByDice(coord, 1).first == status_codes::SUCCESS )
@@ -472,9 +488,7 @@ status_codes Game::Arbiter::OnRoll()
     _blockMonitor.Reset();
     _prevMonitor.Reset();
 
-    // std::cout << "called onchange from OnR\n";
-
-    OnChange();
+    UpdateMovables();
 
     return CheckForcedMoves();
 }
@@ -483,7 +497,7 @@ status_codes Game::Arbiter::OnMove()
 {
     // std::cout << "called onchange from OnMove\n";
 
-    OnChange();
+    _g.ResetMock();
     return CheckForcedMoves();
 }
 
@@ -491,7 +505,7 @@ status_codes Game::Arbiter::OnMove()
 status_codes Game::Arbiter::OnRemoval()
 {
     // std::cout << "called onchange from OnRemoval\n";
-    OnChange();
+    _g.ResetMock();
     return CheckForcedMoves();
 }
 
@@ -499,11 +513,6 @@ void Game::Arbiter::OnMockChange()
 {
     _blockMonitor.Solidify();
     UpdateMovables();
-}
-
-void Game::Arbiter::OnChange()
-{
-    _g.ResetMock();
 }
 
 void Game::Arbiter::SolidifyBlockMonitor()

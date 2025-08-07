@@ -76,21 +76,45 @@ bool Game::PreventionMonitor::PreConditions()
 
 bool Game::PreventionMonitor::Illegal(const NardiCoord& start, bool dice_idx)
 {
-    return
-    (
-        PreConditions() &&
-        (
-            !MakesSecondStep(start) &&                      // cannot continue with this piece
-            ( 
-                _g.PlayerGoesByMockDice(!dice_idx).empty() ||      // no pieces move first by other dice
-                (
-                    _g.PlayerGoesByMockDice(!dice_idx).size() == 1 && 
-                    _g.PlayerGoesByMockDice(!dice_idx).contains(start) && 
-                    _g.board.Mock_MovablePieces(start) == 1
-                )   // moving start prevents moving any other piece by other dice
-            )   
-        )
-    );
+    // need to be checking block illegality... case: move prevented because all second sequences create block... `
+
+    if(PreConditions() && !MakesSecondStep(start))
+    {
+        std::unordered_set<NardiCoord> other_dice_options = _g.PlayerGoesByMockDice(!dice_idx);
+
+        std::unordered_set<NardiCoord>::iterator it = other_dice_options.begin();
+        while(it != other_dice_options.end())
+        {
+            if(_arb.IllegalBlocking(*it, !dice_idx))    // illegalblocking modifies mock board... careful of dangling references
+            {
+                std::unordered_set<NardiCoord>::iterator old = it;
+                ++it;
+                other_dice_options.erase(*old);
+            }
+            else
+                ++it;
+        }
+
+        return  ( other_dice_options.empty() || ( other_dice_options.size() == 1 && other_dice_options.contains(start) &&  _g.board.Mock_MovablePieces(start) == 1 ) );
+    }
+    
+    return false;
+
+    // return
+    // (
+    //     PreConditions() &&
+    //     (
+    //         !MakesSecondStep(start) &&                              // cannot continue with this piece (includes block check)
+    //         ( 
+    //             _g.PlayerGoesByMockDice(!dice_idx).empty() ||      // no pieces move first by other dice
+    //             (
+    //                 _g.PlayerGoesByMockDice(!dice_idx).size() == 1 && 
+    //                 _g.PlayerGoesByMockDice(!dice_idx).contains(start) && 
+    //                 _g.board.Mock_MovablePieces(start) == 1
+    //             )   // moving start prevents moving any other piece by other dice
+    //         )   
+    //     )
+    // );
 }
 
 bool Game::PreventionMonitor::TurnCompletable()
@@ -109,25 +133,26 @@ void Game::PreventionMonitor::SetCompletable()
 
         else
         {
-            std::array<size_t, 2> options = { _g.PlayerGoesByDice(0).size(), _g.PlayerGoesByDice(1).size() };
-            bool share_1piece_slot = false;
+            std::array<std::unordered_set<NardiCoord>, 2> options = { _g.PlayerGoesByDice(0), _g.PlayerGoesByDice(1) };
+
             for(const auto& coord : _g.PlayerGoesByDice(0))
             {
                 if(_arb.IllegalBlocking(coord, 0))
-                    --options.at(0);
+                    options.at(0).erase(coord);
             }
             for(const auto& coord : _g.PlayerGoesByDice(1))
             {
                 if(_arb.IllegalBlocking(coord, 1))
-                    --options.at(1);
-
-                else if( _g.PlayerGoesByDice(0).contains(coord) && _g.board. MovablePieces(coord) == 1 )
-                    share_1piece_slot = true;
+                    options.at(1).erase(coord);
             }
 
-            if(options.at(0) == 0 || options.at(1) == 0 || (options.at(0) == 1 && options.at(1) == 1 && share_1piece_slot))
+            if( options.at(0).empty() || options.at(1).empty() )
                 _completable = false;
-            
+            else if (options.at(0).size() == 1 && options.at(1).size() == 1)
+            {
+                NardiCoord start = *options.at(0).begin();
+                _completable = !(start == *options.at(1).begin() && _g.board.MovablePieces(start) == 1);
+            }            
             else
                 _completable = true;
         }
@@ -137,42 +162,9 @@ void Game::PreventionMonitor::SetCompletable()
 
 bool Game::PreventionMonitor::MakesSecondStep(const NardiCoord& start) const
 {
-    return (_g.board.Mock_WellDefinedEnd(start, _g.board.CoordAfterDistance(start, _g.dice[0] + _g.dice[1]) ) == status_codes::SUCCESS);
+    NardiCoord end = _g.board.CoordAfterDistance(start, _g.dice[0] + _g.dice[1]);
+    return (_g.board.Mock_WellDefinedEnd(start, end) == status_codes::SUCCESS && !_arb.IllegalBlocking(start, end) );
 }
-
-    // //std::cout << "doub roll: " << std::boolalpha << _g.doubles_rolled << "\n";
-    // //std::cout << "dices usable: " << std::boolalpha << (CanUseMockDice(0) && CanUseMockDice(1)) << "\n";
-    // //std::cout << "options: " << options[0] << " " << options[1] << "\n";
-    // //std::cout << "steps twice: " << std::boolalpha << (MakesSecondStep(start)) << "\n";
-    // //std::cout << "contains start: " << std::boolalpha << (_g.PlayerGoesByMockDice(!dice_idx).contains(start)) << "\n";
-    // //std::cout << "only 1 went: " << std::boolalpha << (_g.PlayerGoesByMockDice(!dice_idx).size() == 1) << "\n"; 
-        
-    // //std::cout << "\n\n";
-    // for(const auto& coord : _g.PlayerGoesByMockDice(!dice_idx))
-    // {
-    //     //std::cout << coord.row << ", " << coord.col << " goes by " << _g.dice[!dice_idx] << "\n";
-    // }
-    // //std::cout << "\n\n";
-    
-    // //std::cout << "no piece went by other: " << std::boolalpha << (_g.PlayerGoesByMockDice(!dice_idx).empty()) << "\n"; 
-    // //std::cout << "only 1 movable at start: " << std::boolalpha << (_g.board.MovablePieces(start) == 1) << "\n"; 
-
-    // //std::cout << "return value " << (
-    //     !_g.doubles_rolled && 
-    //     CanUseMockDice(0) && CanUseMockDice(1) && 
-    //     options[0] >= 1 && options[1] >= 1  &&  // could play both before
-    //     !MakesSecondStep(start) &&                      // cannot continue with this piece
-    //     ( 
-    //         _g.PlayerGoesByMockDice(!dice_idx).empty() ||      // no pieces move first by other dice
-    //         (
-    //             _g.PlayerGoesByMockDice(!dice_idx).size() == 1 && 
-    //             _g.PlayerGoesByMockDice(!dice_idx).contains(start) && 
-    //             _g.board.MovablePieces(start) == 1
-    //         )   // moving start prevents moving any other piece by other dice
-    //     )   
-    // ) << "\n"; // expect true here
-    // //std::cout << "\n\n\n\n";
-
 
 ///////////// Bad Block /////////////
 
@@ -190,14 +182,13 @@ void Game::BadBlockMonitor::Reset()
 
 void Game::BadBlockMonitor::Solidify()
 {
-    // std::cout << "solidifying \n\n\n";
+    std::cout << "solidifying \n\n\n";
 
-    PreConditions();
     _blockedAll =  BlockingAll();
     _isSolidified = true;
 
-    // std::cout << "blocking all? " << std::boolalpha << _blockedAll << "\n";
-    // std::cout << "block length? " << _blockLength << "\n";
+    std::cout << "blocking all? " << std::boolalpha << _blockedAll << "\n";
+    std::cout << "block length? " << _blockLength << "\n";
 }
 
 bool Game::BadBlockMonitor::BlockingAll()
@@ -251,20 +242,26 @@ bool Game::BadBlockMonitor::IllegalEndpoints(const NardiCoord& start, const Nard
     else
     {
         _g.board.Mock_Move(start, end);
-        bool result = ( PreConditions() && BlockageAround(end) && !PieceAhead() && !WillBeFixable() );
-
+        _blockedAll = ( PreConditions() && BlockageAround(end) && !PieceAhead() && !WillBeFixable() );
         _g.board.Mock_UndoMove(start, end);
-        return result;
+
+        return _blockedAll;
     }
 }
 
 bool Game::BadBlockMonitor::Unblocks(const NardiCoord& start, const NardiCoord& end)
 {
-    // std::cout << "checking if " << start.AsStr() << " unblocks\n";
+    if( _g.board.PlayerSign() * _g.board.at(start) != 1 )
+        return false;   // not even vacating square
+
+    std::cout << "checking if " << start.AsStr() << " unblocks\n";
     auto dist = _g.board.GetDistance(_blockStart, start); 
+
+    std::cout << "dist: " << dist << "\n";
     if(dist >= 0 && dist < 6)   // start is a blocking piece, at most the 6th one
     {
         unsigned blocked_after = _blockLength - dist - 1;
+        std::cout << "blocked after: " << blocked_after << "\n";
 
         if(end == _g.board.CoordAfterDistance(_blockStart, _blockLength) )
             ++blocked_after;    // start piece blocks at the end, doesn't actually get subtracted
