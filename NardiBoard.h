@@ -8,6 +8,7 @@ class NardiBoard
 public:
     // Constructor
     NardiBoard();
+    NardiBoard(const std::array<std::array<int, COL>, ROW>& d);
 
     // Getters
     const int& at(const NardiCoord& s) const;

@@ -1,8 +1,12 @@
 #pragma once
+
 #include "../NardiGame.h"
 #include "../Controller.h"
+#include "TestGlobals.h"
 
 #include <gtest/gtest.h>
+
+using namespace TestGlobals;
 
 class TestBuilder : public testing::Test 
 {

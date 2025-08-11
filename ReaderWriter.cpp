@@ -1,4 +1,5 @@
 #include "ReaderWriter.h"
+#include <string>
 
 void ReaderWriter::DispErrorCode(status_codes c) const
 {
@@ -37,9 +38,12 @@ void ReaderWriter::DispErrorCode(status_codes c) const
         break;
     case status_codes::BAD_BLOCK:
         ErrorMessage("BAD_BLOCK");
-        break;        
+        break;     
+    case status_codes::PREVENTS_COMPLETION:
+        ErrorMessage("PREVENTS_COMPLETION");
+        break;    
     default:
-        ErrorMessage("did not recognize code");
+        ErrorMessage("did not recognize code" + std::to_string(static_cast<int>(c)));
         break;
     }
 }

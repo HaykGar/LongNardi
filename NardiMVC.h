@@ -18,7 +18,8 @@ using ReaderWriterFactory = std::function<std::unique_ptr<ReaderWriter>(Game&, C
 class NardiMVC
 {
     public:
-        NardiMVC(ReaderWriterFactory factory, int seed = 1);
+        NardiMVC(ReaderWriterFactory factory, int seed);
+        NardiMVC(ReaderWriterFactory factory);
 
         void AwaitUserCommand();
 

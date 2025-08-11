@@ -87,8 +87,11 @@ void DispErrorCode(status_codes c)
     case status_codes::BAD_BLOCK:
         std::cout << "BAD_BLOCK";
         break;        
+    case status_codes::PREVENTS_COMPLETION:
+        std::cout << "PREVENTS_COMPLETION";
+        break;  
     default:
-        std::cout << "did not recognize code";
+        std::cout << "did not recognize code" << static_cast<int>(c);
         break;
     }
 

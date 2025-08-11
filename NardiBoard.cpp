@@ -12,6 +12,11 @@ NardiBoard::NardiBoard() :      data {{ { PIECES_PER_PLAYER, 0, 0, 0, 0, 0, 0, 0
             goes_idx_plusone[p][i].emplace(p, 0);   // "head" can move any of the numbers initially
 }
 
+NardiBoard::NardiBoard(const std::array<std::array<int, COL>, ROW>& d) : player_idx(0), player_sign(BoolToSign(player_idx)), head_used(false)
+{
+    SetData(d);
+}
+
 ///////////// Updates and Actions /////////////
 
 void NardiBoard::Move(const NardiCoord& start, const NardiCoord& end)
