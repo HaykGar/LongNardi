@@ -234,10 +234,17 @@ NardiCoord NardiBoard::CoordAfterDistance(const NardiCoord& start, int d) const
 
 int NardiBoard::GetDistance(const NardiCoord& start, const NardiCoord& end) const
 {
+    return GetDistance(start, end, player_idx);
+}
+
+int NardiBoard::GetDistance(const NardiCoord& start, const NardiCoord& end, bool player) const
+{
     if(start.row == end.row)
         return end.col - start.col;
-    else
-        return COL - start.col + end.col;
+    else if(end.row != player)  // row change forward
+        return COL - start.col + end.col;   
+    else                            // row change backward
+        return -(COL - end.col + start.col);
 }
 
 unsigned NardiBoard::MovablePieces(const NardiCoord& start) const
@@ -329,8 +336,6 @@ void NardiBoard::ConstructAvailabilitySets()
 }
 
 
-
-
 ///////////// Getters /////////////
 
 
@@ -388,7 +393,6 @@ void NardiBoard::FlagHeadIfNeeded(const NardiCoord& start)
 }
 
 ///////////// Legality Helpers /////////////
-
 
 bool NardiBoard::IsPlayerHead(const NardiCoord& coord) const
 {   return (coord.row == player_idx && coord.col == 0);   }

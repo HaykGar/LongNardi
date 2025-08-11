@@ -164,9 +164,9 @@ status_codes Game::TwoDiceHandler::Check()
         NardiCoord min_start = dice_movables.at(!max_dice).at(0);
 
         // std::cout << "moving from " << max_start.AsStr() << " and " << min_start.AsStr() << "\n";
-        // std::cout << "movable pieces each: " << _g.board.Mock_MovablePieces(max_start) << " and " <<_g.board.Mock_MovablePieces(min_start) << "\n";
+        // std::cout << "movable pieces each: " << _g.board._mockBoard.MovablePieces(max_start) << " and " <<_g.board._mockBoard.MovablePieces(min_start) << "\n";
 
-        if( min_start == max_start && _g.board.Mock_MovablePieces(max_start) == 1 )
+        if( min_start == max_start && _g.board._mockBoard.MovablePieces(max_start) == 1 )
             return _g.MakeMove(max_start, max_dice);
     }
 

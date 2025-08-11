@@ -23,7 +23,7 @@ void Game::AttachReaderWriter(ReaderWriter* r)
 
 const NardiBoard& Game::GetBoardRef() const
 {
-    return board.ViewReal();
+    return board._realBoard;
 }
 
 
@@ -34,11 +34,11 @@ const ReaderWriter* Game::GetConstRW()
 {   return rw;   }
 
 const std::unordered_set<NardiCoord>& Game::PlayerGoesByMockDice(bool dice_idx) const
-{   return board.Mock_PlayerGoesByDist(dice[dice_idx]);   }
+{   return board._mockBoard.PlayerGoesByDist(dice[dice_idx]);   }
 
 const std::unordered_set<NardiCoord>& Game::PlayerGoesByDice(bool dice_idx) const
 {   
-    return board.PlayerGoesByDist(dice[dice_idx]);   
+    return board._realBoard.PlayerGoesByDist(dice[dice_idx]);   
 }
 
 NardiCoord Game::PlayerHead() const
@@ -84,7 +84,7 @@ status_codes Game::TryStart(const NardiCoord& start)
     board.ResetMock();
     //std::cout << "called TryStart\n";
     // During endgame, if it's a valid start just check if there's a forced move from here, will streamline play
-    auto s = board.ValidStart(start);
+    auto s = board._realBoard.ValidStart(start);
     // std::cout << "start valid?\n";
     // DispErrorCode(s);
     return s;
@@ -134,7 +134,7 @@ status_codes Game::MakeMove(const NardiCoord& start, const NardiCoord& end)
 
 void Game::MockAndUpdate(const NardiCoord& start, const NardiCoord& end)
 {
-    int d = board.GetDistance(start, end);
+    int d = board._realBoard.GetDistance(start, end);
     if(d == dice[0])
         ++times_mockdice_used[0];
     else if(d == dice[1])
@@ -156,7 +156,7 @@ void Game::MockAndUpdate(const NardiCoord& start, const NardiCoord& end)
 
 void Game::UndoMockAndUpdate(const NardiCoord& start, const NardiCoord& end)
 {
-    int d = board.GetDistance(start, end);
+    int d = board._realBoard.GetDistance(start, end);
     if(d == dice[0])
         --times_mockdice_used[0];
     else if(d == dice[1])
@@ -178,10 +178,10 @@ void Game::UndoMockAndUpdate(const NardiCoord& start, const NardiCoord& end)
 void Game::MockAndUpdateByDice(const NardiCoord& start, bool dice_idx)
 {
     ++times_mockdice_used[dice_idx];
-    if(board.CurrPlayerInEndgame() && arbiter.DiceRemovesPiece(start, dice_idx))
+    if(board._realBoard.CurrPlayerInEndgame() && arbiter.DiceRemovesPiece(start, dice_idx))
         board.Mock_Remove(start);
     else
-        board.Mock_Move(start, board.CoordAfterDistance(start, dice[dice_idx]));
+        board.Mock_Move(start, board._realBoard.CoordAfterDistance(start, dice[dice_idx]));
     
     arbiter.OnMockChange();
 }
@@ -207,7 +207,7 @@ status_codes Game::MakeMove(const NardiCoord& start, bool dice_idx)
     if(arbiter.DiceRemovesPiece(start, dice_idx))
         return RemovePiece(start);
     else
-        return MakeMove(start, board.CoordAfterDistance(start, dice[dice_idx]) );
+        return MakeMove(start, board._realBoard.CoordAfterDistance(start, dice[dice_idx]) );
 }
 
 status_codes Game::RemovePiece(const NardiCoord& start)
@@ -223,7 +223,7 @@ status_codes Game::RemovePiece(const NardiCoord& start)
 }
 
 bool Game::GameIsOver() const 
-{   return (board.PiecesLeft().at(0) == 0 || board.PiecesLeft().at(1) == 0);   }
+{   return (board._realBoard.PiecesLeft().at(0) == 0 || board._realBoard.PiecesLeft().at(1) == 0);   }
 
 void Game::SwitchPlayer()
 {   
@@ -250,7 +250,7 @@ std::pair<status_codes, NardiCoord> Game::Arbiter::CanMoveByDice(const NardiCoor
 {
     // std::cout << "called without problems - canmovebydice\n";
 
-    status_codes can_start = _g.board.Mock_ValidStart(start);
+    status_codes can_start = _g.board._mockBoard.ValidStart(start);
     if(can_start != status_codes::SUCCESS)
         return {can_start, {} };
     else
@@ -265,14 +265,14 @@ std::pair<status_codes, NardiCoord> Game::Arbiter::CanFinishByDice(const NardiCo
     for( const auto& coord : _movables.at(dice_idx))
     {
         if(coord == start)
-            return { status_codes::SUCCESS, _g.board.CoordAfterDistance(start, _g.dice[dice_idx]) };
+            return { status_codes::SUCCESS, _g.board._realBoard.CoordAfterDistance(start, _g.dice[dice_idx]) };
     }
 
-    std::cout << "not found in movables, tried " << start.AsStr() << " with dice " << _g.dice[dice_idx] << "\n";
+    // std::cout << "not found in movables, tried " << start.AsStr() << " with dice " << _g.dice[dice_idx] << "\n";
     //std::cout << "dice usable\n";
 
-    NardiCoord final_dest = _g.board.CoordAfterDistance(start, _g.dice[dice_idx]);
-    status_codes result = _g.board.Mock_WellDefinedEnd(start, final_dest);
+    NardiCoord final_dest = _g.board._realBoard.CoordAfterDistance(start, _g.dice[dice_idx]);
+    status_codes result = _g.board._mockBoard.WellDefinedEnd(start, final_dest);
 
     //std::cout << "board legal?\n";
     //// DispErorrCode(result);
@@ -295,12 +295,12 @@ std::pair<status_codes, NardiCoord> Game::Arbiter::CanFinishByDice(const NardiCo
 
 bool Game::Arbiter::DiceRemovesPiece(const NardiCoord& start, bool dice_idx)
 {
-    if(!_g.board.Mock_CurrPlayerInEndgame())
+    if(!_g.board._mockBoard.CurrPlayerInEndgame())
         return false;
     
     int pos_from_end = COL - start.col;
     return (pos_from_end == _g.dice[dice_idx] ||  // dice val exactly
-            (pos_from_end == _g.board.Mock_MaxNumOcc().at(_g.board.PlayerIdx()) && _g.dice[dice_idx] > pos_from_end) );  
+            (pos_from_end == _g.board._mockBoard.MaxNumOcc().at(_g.board.PlayerIdx()) && _g.dice[dice_idx] > pos_from_end) );  
                 // largest available is less than dice
 }
 
@@ -313,7 +313,7 @@ bool Game::Arbiter::CanUseMockDice(bool idx, int n) const
 std::pair<status_codes, std::array<int, 2>> Game::Arbiter::LegalMove(const NardiCoord& start, const NardiCoord& end)    
 // array represents how many times each dice is used, 0 or 1 usually, in case of doubles can be up to 4
 {    
-    int d = _g.board.GetDistance(start, end);
+    int d = _g.board._realBoard.GetDistance(start, end);
 
     if(d == _g.dice[0])
         return {CanFinishByDice(start, 0).first, {1, 0} };
@@ -343,8 +343,8 @@ std::pair<status_codes, NardiCoord> Game::Arbiter::LegalMove_2step(const NardiCo
     if(!CanUseMockDice(0) || !CanUseMockDice(1))
         return {status_codes::DICE_USED_ALREADY, {} };
 
-    NardiCoord end = _g.board.CoordAfterDistance(start, _g.dice[0] + _g.dice[1]);
-    status_codes second_step = _g.board.Mock_WellDefinedEnd(start, end);
+    NardiCoord end = _g.board._realBoard.CoordAfterDistance(start, _g.dice[0] + _g.dice[1]);
+    status_codes second_step = _g.board._mockBoard.WellDefinedEnd(start, end);
 
     if(second_step != status_codes::SUCCESS)
         return {second_step, end };
@@ -354,8 +354,8 @@ std::pair<status_codes, NardiCoord> Game::Arbiter::LegalMove_2step(const NardiCo
         
     bool first_dice = 0;
 
-    NardiCoord mid = _g.board.CoordAfterDistance(start, _g.dice[first_dice]);
-    status_codes status = _g.board.Mock_WellDefinedEnd(start, mid);
+    NardiCoord mid = _g.board._realBoard.CoordAfterDistance(start, _g.dice[first_dice]);
+    status_codes status = _g.board._mockBoard.WellDefinedEnd(start, mid);
 
     if(status != status_codes::SUCCESS)
     {
@@ -363,8 +363,8 @@ std::pair<status_codes, NardiCoord> Game::Arbiter::LegalMove_2step(const NardiCo
             return {status_codes::NO_PATH, end }; 
         
         first_dice = !first_dice;   // try both dice to get to a midpoint, no need if doubles
-        mid = _g.board.CoordAfterDistance(start, _g.dice[first_dice]);
-        status = _g.board.Mock_WellDefinedEnd(start, mid);
+        mid = _g.board._realBoard.CoordAfterDistance(start, _g.dice[first_dice]);
+        status = _g.board._mockBoard.WellDefinedEnd(start, mid);
 
         if(status != status_codes::SUCCESS)
             return {status_codes::NO_PATH, end }; 

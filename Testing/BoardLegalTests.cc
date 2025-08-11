@@ -147,7 +147,7 @@ TEST_F(TestBuilder, HeadReuse_DoublesFourthMove)
 
 // ───────────────────────── 4. Well Def End ──────────────────────────
 
-TEST_F(TestBuilder, Move_OntoEnemyPiece)
+TEST_F(TestBuilder, MoveOntoEnemyPiece)
 {
     auto brd = SafeBoard();
     brd[0][0] = 1;    // white
@@ -158,10 +158,17 @@ TEST_F(TestBuilder, Move_OntoEnemyPiece)
     ASSERT_EQ(ReceiveCommand({Actions::SELECT_SLOT, {0,0}}), status_codes::SUCCESS);
     EXPECT_EQ(ReceiveCommand({Actions::MOVE_BY_DICE, first}),     status_codes::DEST_ENEMY)
         << "landing on enemy pile must be DEST_ENEMY";
+
+    NardiBoard brd2(board_legal);
+
+    EXPECT_EQ(brd2.WellDefinedEnd({0, 0}, {0, 11}), status_codes::DEST_ENEMY);
+    
+    brd2.SwitchPlayer();
+
+    EXPECT_EQ(brd2.WellDefinedEnd({1, 0}, {1, 11}), status_codes::DEST_ENEMY);
 }
 
-
-TEST_F(TestBuilder, MovePastEndOfBoard)
+TEST_F(TestBuilder, OutOfBounds)
 {
     auto brd = SafeBoard();
     brd[1][10] = 1;   // piece near end
@@ -173,33 +180,20 @@ TEST_F(TestBuilder, MovePastEndOfBoard)
     auto rc = ReceiveCommand({Actions::MOVE_BY_DICE, first});
 
     DispErrorCode(rc);
-    EXPECT_NE(rc, status_codes::SUCCESS) << "move that crosses board end should be OUT_OF_BOUNDS or BOARD_END_REACHED";
-}
-
-TEST(WellDefEnd, OutOfBounds)
-{
-    NardiBoard brd(board_legal);
-
-    EXPECT_EQ(brd.WellDefinedEnd({0, 0}, {0, COL}), status_codes::OUT_OF_BOUNDS);   // past end to right
-    EXPECT_EQ(brd.WellDefinedEnd({0, 0}, {1, -1}), status_codes::OUT_OF_BOUNDS);    // past end to left
-
-    EXPECT_EQ(brd.WellDefinedEnd({0, 0}, {1, 3}), status_codes::SUCCESS);           // valid row change
-    EXPECT_EQ(brd.WellDefinedEnd({1, 10}, {0, 0}), status_codes::OUT_OF_BOUNDS);    // bad row change for white
-    brd.SwitchPlayer();                                                             // switch to black
-    EXPECT_EQ(brd.WellDefinedEnd({1, 0}, {0, 3}), status_codes::SUCCESS);           // valid row change
-    EXPECT_EQ(brd.WellDefinedEnd({0, 11}, {1, 0}), status_codes::OUT_OF_BOUNDS);    // bad row change black
-}
-
-TEST(WellDefEnd, DestEnemy)
-{
-    NardiBoard brd(board_legal);
-
-    EXPECT_EQ(brd.WellDefinedEnd({0, 0}, {0, 11}), status_codes::DEST_ENEMY);
+    EXPECT_NE(rc, status_codes::SUCCESS) << "move that crosses board end should be OUT_OF_BOUNDS";
     
-    brd.SwitchPlayer();
+    NardiBoard brd2(board_legal);
 
-    EXPECT_EQ(brd.WellDefinedEnd({1, 0}, {1, 11}), status_codes::DEST_ENEMY);
+    EXPECT_EQ(brd2.WellDefinedEnd({0, 0}, {0, COL}), status_codes::OUT_OF_BOUNDS);   // past end to right
+    EXPECT_EQ(brd2.WellDefinedEnd({0, 0}, {1, -1}), status_codes::OUT_OF_BOUNDS);    // past end to left
+
+    EXPECT_EQ(brd2.WellDefinedEnd({0, 0}, {1, 3}), status_codes::SUCCESS);           // valid row change
+    EXPECT_EQ(brd2.WellDefinedEnd({1, 10}, {0, 0}), status_codes::OUT_OF_BOUNDS);    // bad row change for white
+    brd2.SwitchPlayer();                                                             // switch to black
+    EXPECT_EQ(brd2.WellDefinedEnd({1, 0}, {0, 3}), status_codes::SUCCESS);           // valid row change
+    EXPECT_EQ(brd2.WellDefinedEnd({0, 11}, {1, 0}), status_codes::OUT_OF_BOUNDS);    // bad row change black
 }
+
 
 TEST(WellDefEnd, BackwardsMove)
 {
@@ -287,6 +281,21 @@ TEST(Calculators, CoordAfterDist)
         EXPECT_EQ(brd.CoordAfterDistance(end_w, -d), NardiCoord(1, 11-d) );
 
     EXPECT_EQ(brd.CoordAfterDistance(end_w, -d), NardiCoord(1, -1) );
+}
+
+TEST(Calculators, GetDistance)
+{
+    NardiBoard brd = SafeBoard();
+    EXPECT_EQ( brd.GetDistance({0, 0}, {0, 9}), 9 );        // same row forward
+    EXPECT_EQ( brd.GetDistance({0, 11}, {0, 9}), -2 );      // same row backward
+
+    // white row changing
+    EXPECT_EQ( brd.GetDistance({0, 3}, {1, 3}), 12 );       // row change forward
+    EXPECT_EQ( brd.GetDistance({1, 1}, {0, 7}), -6 );       // row change backward
+    // black row change
+    brd.SwitchPlayer();
+    EXPECT_EQ( brd.GetDistance({0, 0}, {1, 3}), -9 );       // backward
+    EXPECT_EQ( brd.GetDistance({1, 1}, {0, 6}),  17);       // forward
 }
 
 

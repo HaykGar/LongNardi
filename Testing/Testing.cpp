@@ -45,7 +45,8 @@ status_codes TestBuilder::withDice(int d1, int d2)
 
 void TestBuilder::withPlayer(bool p_idx)
 {
-    _game->board.SetPlayer(p_idx);
+    if(_game->board.PlayerIdx() != p_idx)
+        _game->board.SwitchPlayer();
 }
 
 void TestBuilder::withBoard(const std::array<std::array<int, COL>, ROW>& b)
@@ -81,11 +82,12 @@ status_codes TestBuilder::ReceiveCommand(const Command& cmd)
 
 void TestBuilder::PrintBoard() const
 {
+    auto& brd = _game->GetBoardRef();
     for(int r = 0; r < ROW; ++r)
     {
         for (int c = 0; c < COL; ++c)
         {
-            std::cout << _game->board.at(r, c) << "\t";
+            std::cout << brd.at(r, c) << "\t";
         }
         std::cout << "\n\n";
     }

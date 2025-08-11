@@ -43,11 +43,13 @@ class TestBuilder : public testing::Test
 inline 
 const int& TestBuilder::GetBoardAt(const NardiCoord& coord) const
 {
-    return _game->board.at(coord);
+    auto& brd = _game->GetBoardRef();
+    return brd.at(coord);
 }
 
 inline 
 const int& TestBuilder::GetBoardAt(int r, int c) const
 {
-    return _game->board.at(r, c);
+    auto& brd = _game->GetBoardRef();
+    return brd.at(r, c);
 }

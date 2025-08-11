@@ -256,43 +256,22 @@ class Game
                 void UpdateMovables();
         };
 
-        class BoardWithMocker
+        struct BoardWithMocker
         {
             public:
                 BoardWithMocker(Game& g);
 
-                // Getters
-                const NardiBoard& ViewReal() const;
+                // boards 
+                NardiBoard _realBoard;
+                NardiBoard _mockBoard;
 
-                const int& at(const NardiCoord& s) const;
-                const int& at(size_t r, size_t c) const;
-
-                const int& Mock_at(const NardiCoord& s) const;
-                const int& Mock_at(size_t r, size_t c) const;
-
+                // wrap with real Board for convenience
                 bool PlayerIdx() const;
                 int PlayerSign() const;
 
                 bool IsPlayerHead(const NardiCoord& c) const;
 
-                bool HeadUsed() const;
-                bool Mock_HeadUsed() const;
-
-                const std::array<int, 2>& MaxNumOcc() const;
-                const std::array<int, 2>& ReachedEnemyHome() const;
-                const std::array<int, 2>& PiecesLeft() const;
-                const std::array< std::array< std::unordered_set<NardiCoord>, 6 >, 2 >& GoesIdxPlusOne() const; 
-                const std::unordered_set<NardiCoord>& PlayerGoesByDist(size_t dist) const;
-
-                const std::array<int, 2>& Mock_MaxNumOcc() const;
-                const std::array<int, 2>& Mock_ReachedEnemyHome() const;
-                const std::array<int, 2>& Mock_PiecesLeft() const;
-                const std::array< std::array< std::unordered_set<NardiCoord>, 6 >, 2 >& Mock_GoesIdxPlusOne() const;
-                const std::unordered_set<NardiCoord>& Mock_PlayerGoesByDist(size_t dist) const;
-
-                unsigned MovablePieces(const NardiCoord& start) const;
-                unsigned Mock_MovablePieces(const NardiCoord& start) const;
-
+                // check
                 bool MisMatch() const;
 
                 // Updates and Actions
@@ -310,32 +289,8 @@ class Game
 
                 void SwitchPlayer();
 
-                // Legality Checks
-                status_codes ValidStart(const NardiCoord& s) const;
-                status_codes Mock_ValidStart(const NardiCoord& s) const;
-
-                status_codes WellDefinedEnd(const NardiCoord& start, const NardiCoord& end) const;  // check that move end from start is friendly or empty
-                status_codes Mock_WellDefinedEnd(const NardiCoord& start, const NardiCoord& end) const;  // check that move end from start is friendly or empty
-            
-                bool HeadReuseIssue(const NardiCoord& c) const;
-                bool Mock_HeadReuseIssue(const NardiCoord& c) const;
-
-                bool CurrPlayerInEndgame() const;
-                bool Mock_CurrPlayerInEndgame() const;
-
-                // Calculations
-                NardiCoord CoordAfterDistance(const NardiCoord& start, int d, bool player) const;
-                NardiCoord CoordAfterDistance(const NardiCoord& start, int d) const;
-                int GetDistance(const NardiCoord& start, const NardiCoord& end) const;
-
-                friend class TestBuilder;
             private:
-                NardiBoard _realBoard;
-                NardiBoard _mockBoard;
                 Game& _game;
-
-                // testing
-                void SetPlayer(bool player);
         };
 
         BoardWithMocker board;                      // contains real and mock boards
