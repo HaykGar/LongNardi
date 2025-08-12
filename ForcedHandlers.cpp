@@ -28,33 +28,42 @@ status_codes Game::DoublesHandler::Check()
     std::cout << "mock dice used: " << _g.times_mockdice_used.at(0) << " " 
                     << _g.times_mockdice_used.at(1) << "\n";
 
-    if(!Is())
-        return status_codes::MISC_FAILURE;
-
     if( first_move_checker.PreConditions() )  // first move double 4 or 6
         return first_move_checker.MakeForced();
 
     steps_left = 4 - (_g.times_mockdice_used.at(0) + _g.times_mockdice_used.at(1));
+    if(steps_left <= 0)
+        return status_codes::NO_LEGAL_MOVES_LEFT;
 
     std::cout << "steps left: " << steps_left << "\n";
 
-    auto movables = _arb.GetMovables(0);
+    auto movables = _arb.GetMovables(0);    // copy
     std::cout << "num movables: " << movables.size() << "\n";
 
     for(int i = 0; i < movables.size(); ++i)
     {
-        if(steps_left <= 0)         // previous iteration mocked through to the end, this one can mock further
-        {
-            _g.ResetMock();
-            return status_codes::SUCCESS;
-        }
-         
-        // std::cout << "i = " << i << "\n";
-        MockFrom(movables.at(i));   // updates steps_left
-    }
-    // steps left >= 0, need to make all forcing moves
-    _g.RealizeMock();
+        int n_movables = _g.board._mockBoard.MovablePieces(movables.at(i));
 
+        for(int j = 0; j < n_movables; ++j)
+        {
+            if(steps_left <= 0)         // previous iteration mocked through to the end, this one can mock further
+            {
+                _g.ResetMock();
+                return status_codes::SUCCESS;
+            }
+            
+            // std::cout << "i = " << i << "\n";
+            MockFrom(movables.at(i));   // updates steps_left
+        }
+    }
+
+    if(steps_left < 0)
+    {
+        _g.ResetMock();
+        return status_codes::SUCCESS;
+    }
+    
+    _g.RealizeMock();
     return status_codes::NO_LEGAL_MOVES_LEFT;
 }
 
