@@ -41,3 +41,15 @@ TEST_F(TestBuilder, LegalityForcedMovesDoubles)
 
     // fixme needs more situations !! `
 }
+
+TEST_F(TestBuilder, Extra)
+{
+    auto stat = StartOfTurn(white, doubles_stacked, ds[0], ds[1]);
+    DispErrorCode(stat);
+    ASSERT_EQ(stat, status_codes::SUCCESS);
+}
+
+////////// Chat
+
+using enum status_codes;
+

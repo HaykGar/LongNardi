@@ -233,7 +233,7 @@ TEST(Calculators, CoordAfterDist)
     NardiCoord head_w(0, 0);
     NardiCoord head_b(1, 0);
     
-    for(d; d < COL; ++d)
+    for(; d < COL; ++d)
         EXPECT_EQ(brd.CoordAfterDistance(head_w, d), NardiCoord(0, d) );
 
     EXPECT_EQ(brd.CoordAfterDistance(head_w, d),  head_b);
@@ -242,7 +242,6 @@ TEST(Calculators, CoordAfterDist)
         EXPECT_EQ(brd.CoordAfterDistance(head_b, d), NardiCoord(1, d));
 
     EXPECT_EQ(brd.CoordAfterDistance(head_b, d), NardiCoord(1, 12));
-    // check negatives... `
 
     NardiCoord end_w(1, 11);
     NardiCoord end_b(0, 11);
@@ -265,13 +264,11 @@ TEST(Calculators, CoordAfterDist)
 
     EXPECT_EQ(brd.CoordAfterDistance(head_b, d), head_w );
 
-    for(d; d < COL; ++d)
+    for(; d < COL; ++d)
         EXPECT_EQ(brd.CoordAfterDistance(head_w, d), NardiCoord(0, d) );
 
     EXPECT_EQ(brd.CoordAfterDistance(head_w, d), NardiCoord(0, 12));
     
-    // check negatives... `
-
     for(d = 0; d < COL; ++d)
         EXPECT_EQ(brd.CoordAfterDistance(end_b, -d), NardiCoord(0, 11-d) );
 

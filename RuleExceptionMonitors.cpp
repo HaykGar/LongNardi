@@ -76,8 +76,6 @@ bool Game::PreventionMonitor::PreConditions()
 
 bool Game::PreventionMonitor::Illegal(const NardiCoord& start, bool dice_idx)
 {
-    // need to be checking block illegality... case: move prevented because all second sequences create block... `
-
     if(PreConditions() && !MakesSecondStep(start))
     {
         std::unordered_set<NardiCoord> other_dice_options = _g.PlayerGoesByMockDice(!dice_idx);
@@ -85,7 +83,7 @@ bool Game::PreventionMonitor::Illegal(const NardiCoord& start, bool dice_idx)
         std::unordered_set<NardiCoord>::iterator it = other_dice_options.begin();
         while(it != other_dice_options.end())
         {
-            if(_arb.IllegalBlocking(*it, !dice_idx))    // illegalblocking modifies mock board... careful of dangling references
+            if(_arb.IllegalBlocking(*it, !dice_idx))    // illegalblocking modifies mock board... careful of dangling
             {
                 std::unordered_set<NardiCoord>::iterator old = it;
                 ++it;
@@ -99,22 +97,6 @@ bool Game::PreventionMonitor::Illegal(const NardiCoord& start, bool dice_idx)
     }
     
     return false;
-
-    // return
-    // (
-    //     PreConditions() &&
-    //     (
-    //         !MakesSecondStep(start) &&                              // cannot continue with this piece (includes block check)
-    //         ( 
-    //             _g.PlayerGoesByMockDice(!dice_idx).empty() ||      // no pieces move first by other dice
-    //             (
-    //                 _g.PlayerGoesByMockDice(!dice_idx).size() == 1 && 
-    //                 _g.PlayerGoesByMockDice(!dice_idx).contains(start) && 
-    //                 _g.board._mockBoard.MovablePieces(start) == 1
-    //             )   // moving start prevents moving any other piece by other dice
-    //         )   
-    //     )
-    // );
 }
 
 bool Game::PreventionMonitor::TurnCompletable()
@@ -182,13 +164,19 @@ void Game::BadBlockMonitor::Reset()
 
 void Game::BadBlockMonitor::Solidify()
 {
-    std::cout << "solidifying \n\n\n";
+    // std::cout << "solidifying \n\n\n";
 
-    _blockedAll =  BlockingAll();
+    Reset();
+    _blockedAll = BlockingAll();
     _isSolidified = true;
 
-    std::cout << "blocking all? " << std::boolalpha << _blockedAll << "\n";
-    std::cout << "block length? " << _blockLength << "\n";
+    if(_blockedAll)
+        WillBeFixable();    // set block state
+    else
+        _state = block_state::CLEAR;
+
+    // std::cout << "blocking all? " << std::boolalpha << _blockedAll << "\n";
+    // std::cout << "block length? " << _blockLength << "\n";
 }
 
 bool Game::BadBlockMonitor::BlockingAll()
@@ -207,7 +195,16 @@ bool Game::BadBlockMonitor::BlockingAll()
         {
             ++streak;
             if(streak == 6 && (BlockageAround(coord) && !PieceAhead()) )  // CreatesBlockageAt will go over this location and set vars accordingly
-                return true;   
+            {
+                do
+                {
+                    _blockStart = coord;
+                    coord = _g.board._realBoard.CoordAfterDistance(coord, -1, other_player);
+                } while (coord.InBounds() && _g.board._mockBoard.at(coord) * player_sign > 0);     
+
+                return true; 
+            }
+                  
         }
         else
             streak = 0;
@@ -235,18 +232,33 @@ bool Game::BadBlockMonitor::Illegal(const NardiCoord& start, const NardiCoord& e
 
 bool Game::BadBlockMonitor::IllegalEndpoints(const NardiCoord& start, const NardiCoord& end)
 {
-    if(_isSolidified && _blockedAll)
+    if(!_g.SilentMock(start, end))// updates mock dice used
     {
-        return !Unblocks(start, end);
+        std::cout << "unexpected input to block illegale check, no valid silent mock\n";
+        return true;
     }
-    else
-    {
-        _g.board.Mock_Move(start, end);
-        _blockedAll = ( PreConditions() && BlockageAround(end) && !PieceAhead() && !WillBeFixable() );
-        _g.board.Mock_UndoMove(start, end);
 
-        return _blockedAll;
+    bool ret;
+    if(_isSolidified && _blockedAll)
+        ret = !Unblocked() && !WillBeFixable();
+        // ret = !Unblocks(start, end);
+    else
+        ret = ( PreConditions() && BlockageAround(end) && !PieceAhead() && !WillBeFixable() );
+
+    _g.UndoSilentMock(start, end);
+    return ret;
+}
+
+bool Game::BadBlockMonitor::Unblocked()
+{
+    NardiCoord start = _blockStart;
+    for(int i = 0; i < 6 && start.InBounds(); ++i, start = _g.board._mockBoard.CoordAfterDistance(start, 1, !_g.board.PlayerIdx()))
+    {
+        if(_g.board._mockBoard.at(start) * _g.board.PlayerSign() <= 0)  // empty or enemy, should only ever be friendly or empty
+            return true;
     }
+
+    return false;
 }
 
 bool Game::BadBlockMonitor::Unblocks(const NardiCoord& start, const NardiCoord& end)
@@ -256,6 +268,9 @@ bool Game::BadBlockMonitor::Unblocks(const NardiCoord& start, const NardiCoord& 
 
     std::cout << "checking if " << start.AsStr() << " unblocks\n";
     auto dist = _g.board._realBoard.GetDistance(_blockStart, start, !_g.board.PlayerIdx()); 
+
+    // std::cout << "block starts at ";
+    // _blockStart.Print();
 
     std::cout << "dist: " << dist << "\n";
     if(dist >= 0 && dist < 6)   // start is a blocking piece, at most the 6th one
@@ -295,6 +310,8 @@ bool Game::BadBlockMonitor::BlockageAround(const NardiCoord& end)
     // std::cout << "n ahead: " << n_ahead << ", n behind: " << n_behind << "\n";
     
     _blockStart = _g.board._realBoard.CoordAfterDistance(end, -n_behind, other_player);
+    // std::cout << "block starts at ";
+    // _blockStart.Print();
     _blockLength += n_ahead + n_behind;
     
     return (_blockLength >= 6);
@@ -314,22 +331,84 @@ bool Game::BadBlockMonitor::PieceAhead()
     return false;
 }
 
-bool Game::BadBlockMonitor::WillBeFixable()
+bool Game::BadBlockMonitor::WillBeFixable() // reminder the block is already mocked in, also unblocking can never trigger move prevention
 {    
-    // std::cout << "checking if block is fixable\n";
-    if(_blockLength < 6)
-        return true;    // should never be called in this condition
-
-    if( _g.times_mockdice_used[0] + _g.times_mockdice_used[1] >= (_g.doubles_rolled + 1) * 2 )
-    {   // no more dice to use
-        _state = block_state::BAD_BLOCK;
-        return false;
-    }
-    else 
-    {
-        _state = block_state::FIXABLE_BLOCK;
+    if(!StillBlocking())
         return true;
+
+    std::pair<int, int> times_usable = {0, 0};
+    if(_g.doubles_rolled)
+        times_usable.first = 4 - (_g.times_mockdice_used[0] + _g.times_mockdice_used[1]);
+    else
+    {
+        times_usable.first  = (_g.times_mockdice_used[0] == 0) ? 1 : 0;
+        times_usable.second = (_g.times_mockdice_used[1] == 0) ? 1 : 0;
     }
+
+    NardiCoord coord;
+    bool success = false;
+
+
+    auto TryDice = [&](bool d_idx, const NardiCoord& c) -> bool {
+
+        // std::cout << "trying to move from " << c.AsStr() << "by " << _g.dice[d_idx] << " in willbefixable\n";
+
+        NardiCoord dest = _g.board._mockBoard.CoordAfterDistance(c, _g.dice[d_idx], _g.board.PlayerIdx());
+        auto rc = _g.board._mockBoard.WellDefinedEnd(c, dest);
+        // DispErrorCode(rc);
+        if(rc == status_codes::SUCCESS)
+        {
+            _g.SilentMock(c, dest);
+            success =  WillBeFixable();
+            _g.UndoSilentMock(c, dest);
+            if(success)
+                return true;
+        }
+
+        return false;
+    };
+
+    auto PrepReturn = [&](bool fixable) -> bool {
+        _state = fixable ? block_state::FIXABLE_BLOCK : block_state::BAD_BLOCK;
+        return fixable;
+    };
+
+    for( int d = 0; d < 6; ++d )
+    {
+        coord = _g.board._mockBoard.CoordAfterDistance(_blockStart, d, !_g.board.PlayerIdx());
+        if(_g.board._mockBoard.ValidStart(coord) != status_codes::SUCCESS)
+            continue;
+        if(times_usable.first > 0 && TryDice(0, coord))
+            return PrepReturn(true);
+        
+        if(times_usable.second > 0 && TryDice(1, coord))
+            return PrepReturn(true);
+    }
+
+    return PrepReturn(false);
+}
+
+bool Game::BadBlockMonitor::StillBlocking()
+{
+    NardiCoord start = _blockStart;
+    while( start.InBounds() && _g.board.PlayerSign() * _g.board._mockBoard.at(start) <= 0)
+    {
+        // std::cout << "shifting start, blockstart is still: "; _blockStart.Print();
+
+        start = _g.board._mockBoard.CoordAfterDistance(start, 1, !_g.board.PlayerIdx() );
+    }   // sometimes this spot is unblocked by willbefixable recursions, so we find the next blocked one
+    if(start.OutOfBounds())
+        return false;
+
+    NardiCoord coord = _g.board._mockBoard.CoordAfterDistance(start, 1, !_g.board.PlayerIdx() );
+    for(int d = 1; d < 6 && coord.InBounds(); ++d)
+    {
+        if(_g.board.PlayerSign() * _g.board._mockBoard.at(coord) <= 0)
+            return false;
+        coord = _g.board._mockBoard.CoordAfterDistance(coord, 1, !_g.board.PlayerIdx() );
+    }
+
+    return true;
 }
 
 Game::BadBlockMonitor::block_state Game::BadBlockMonitor::State() const

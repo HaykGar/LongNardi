@@ -375,6 +375,11 @@ const std::unordered_set<NardiCoord>& NardiBoard::PlayerGoesByDist(size_t dist) 
     return goes_idx_plusone.at(player_idx).at(dist - 1);   
 }
 
+void NardiBoard::Print() const
+{
+    DisplayBoard(data);
+}
+
 ///////////// Updates and Actions /////////////
 
 

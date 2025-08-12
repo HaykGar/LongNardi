@@ -27,6 +27,8 @@ class TestBuilder : public testing::Test
         const int& GetBoardAt(const NardiCoord& coord) const;
         const int& GetBoardAt(int r, int c) const;
 
+        const std::array<std::array<int, COL>, ROW>& GetBoard() const;
+
         void StatusReport() const;
         
     private:
@@ -52,4 +54,10 @@ const int& TestBuilder::GetBoardAt(int r, int c) const
 {
     auto& brd = _game->GetBoardRef();
     return brd.at(r, c);
+}
+
+inline
+const std::array<std::array<int, COL>, ROW>& TestBuilder::GetBoard() const
+{
+    return _game->board._realBoard.data;
 }

@@ -150,4 +150,42 @@ TEST_F(TestBuilder, BlockadeRowWrap)
     ASSERT_EQ(ReceiveCommand(Command(Actions::SELECT_SLOT, {0,2})), status_codes::SUCCESS);
     ASSERT_EQ(ReceiveCommand(Command(Actions::MOVE_BY_DICE, second)), status_codes::NO_LEGAL_MOVES_LEFT)
         << "Move from (0,2) with second dice should successfully unblock and end turn";
+
+    brd = block_wrap1;
+    brd[0][11] = -1;
+    ++brd[1][0];
+
+    // Test with wrap_dice1 = {1, 6}
+    rc = StartOfTurn(white, brd, wrap_dice1[0], wrap_dice1[1]);
+    ASSERT_EQ(rc, status_codes::SUCCESS);
+
+    // Select (1,8) and move by dice first (1) to get to (1,9), forming a blocked position with piece ahead
+    ASSERT_EQ(ReceiveCommand(Command(Actions::SELECT_SLOT, {1,8})), status_codes::SUCCESS);
+    ASSERT_EQ(ReceiveCommand(Command(Actions::MOVE_BY_DICE, first)), status_codes::SUCCESS);
+
+    ASSERT_EQ(ReceiveCommand(Command(Actions::SELECT_SLOT, {0,0})), status_codes::SUCCESS);
+    ASSERT_EQ(ReceiveCommand(Command(Actions::MOVE_BY_DICE, second)), status_codes::NO_LEGAL_MOVES_LEFT);   // should be no bad blockade now
 }
+
+TEST_F(TestBuilder, UnliftableWithDoubles)
+{
+    auto brd = block_doub1;
+
+    DisplayBoard(brd);
+    
+    auto rc = StartOfTurn(black, brd, 3, 3);
+    DispErrorCode(rc);
+
+    ASSERT_EQ(rc, status_codes::SUCCESS);
+    ASSERT_EQ(brd, GetBoard());
+
+    ASSERT_EQ(ReceiveCommand(Command(Actions::SELECT_SLOT, {1,2})), status_codes::SUCCESS);
+    ASSERT_EQ(ReceiveCommand(Command(Actions::SELECT_SLOT, {1,8})), status_codes::SUCCESS); // move to create block
+
+    StatusReport();
+
+    ASSERT_EQ(ReceiveCommand(Command(Actions::SELECT_SLOT, {1,5})), status_codes::SUCCESS);
+    ASSERT_NE(ReceiveCommand(Command(Actions::MOVE_BY_DICE, first)),status_codes::SUCCESS);
+}
+
+// need valid blocks - mars ` ` `

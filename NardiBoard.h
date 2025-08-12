@@ -33,6 +33,8 @@ public:
 
     void SwitchPlayer();
 
+    void Print() const;
+    
     // Legality Checks
     status_codes ValidStart(const NardiCoord& s) const;
     status_codes WellDefinedEnd(const NardiCoord& start, const NardiCoord& end) const;  // check that move end from start is friendly or empty

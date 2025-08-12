@@ -10,21 +10,15 @@
 #include <memory>
 
 /*
-touch up back block for doubles...
+more than 1 block at a time?????
 
-// need to be checking block illegality... case: move prevented because all second sequences create block... `
+endgame testing: include case of starting endgame mid-turn, and also in forced checking
 
-Logging services... log everything in files `
+Logging services... log everything in files instead of cout
 
 TryFinishMove, legal move checkers, etc, need to be integrated with hanel in endgame...
 
-first move exception is Forced handler... NOT rule exception
-
-Rule precedence: only available move creates block issue not allowed
-
-Pass ownership of goes_idx to board... 
-    needs board to handle the 1st move exception
-    const reference Getters for the sets...
+first move exception as a member function in doubles handler not a separate class
 
 Automate dice rolling from controller ?
 
@@ -149,8 +143,10 @@ class Game
                 bool PieceAhead();
                 bool WillBeFixable();
                 bool BlockingAll();
+                bool StillBlocking();
 
                 bool Unblocks(const NardiCoord& start, const NardiCoord& end);
+                bool Unblocked();
         };
 
         // Forced move handlers
@@ -225,6 +221,8 @@ class Game
                 const std::vector<NardiCoord>& GetMovables(bool idx);
                 std::unordered_set<NardiCoord> GetTwoSteppers(size_t max_qty, const std::array<std::vector<NardiCoord>, 2>& to_search);
                 std::unordered_set<NardiCoord> GetTwoSteppers(size_t max_qty);
+
+                BadBlockMonitor::block_state BlockState() const;
 
                 // Updates and Actions
                 status_codes OnRoll();
@@ -329,8 +327,10 @@ class Game
         status_codes RemovePiece(const NardiCoord& start);
 
         // Mocking
-        void MockAndUpdate(const NardiCoord& start, const NardiCoord& end);
-        void UndoMockAndUpdate(const NardiCoord& start, const NardiCoord& end);
+        bool SilentMock(const NardiCoord& start, const NardiCoord& end);
+        // void MockAndUpdate(const NardiCoord& start, const NardiCoord& end);
+        bool UndoSilentMock(const NardiCoord& start, const NardiCoord& end);
+        // void UndoMockAndUpdate(const NardiCoord& start, const NardiCoord& end);
         void MockAndUpdateByDice(const NardiCoord& start, bool dice_idx);
         void RealizeMock();
         void ResetMock();

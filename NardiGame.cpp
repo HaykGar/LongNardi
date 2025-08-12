@@ -44,6 +44,11 @@ const std::unordered_set<NardiCoord>& Game::PlayerGoesByDice(bool dice_idx) cons
 NardiCoord Game::PlayerHead() const
 {   return {board.PlayerIdx(), 0};   }
 
+Game::BadBlockMonitor::block_state Game::Arbiter::BlockState() const
+{
+    return _blockMonitor.State();
+}
+
 ///////////// Gameplay /////////////
 
 status_codes Game::RollDice() // important to force this only once per turn in controller, no explicit safeguard here
@@ -132,7 +137,7 @@ status_codes Game::MakeMove(const NardiCoord& start, const NardiCoord& end)
     return arbiter.OnMove();
 }
 
-void Game::MockAndUpdate(const NardiCoord& start, const NardiCoord& end)
+bool Game::SilentMock(const NardiCoord& start, const NardiCoord& end)
 {
     int d = board._realBoard.GetDistance(start, end);
     if(d == dice[0])
@@ -147,14 +152,22 @@ void Game::MockAndUpdate(const NardiCoord& start, const NardiCoord& end)
     else if(doubles_rolled && d % dice[0] == 0 && arbiter.CanUseMockDice(0, d / dice[0]) )
         times_mockdice_used[0] += d / dice[0];
     else
-        std::cout << "!!!!\nunexpected input to MockAndUpdate\n";
-    
-    
+    {
+        std::cout << "!!!!\nunexpected input to SilentMock\n";
+        return false;
+    }
+
     board.Mock_Move(start, end);
-    arbiter.OnMockChange();  // not sure if this is needed
+    return true;
 }
 
-void Game::UndoMockAndUpdate(const NardiCoord& start, const NardiCoord& end)
+// void Game::MockAndUpdate(const NardiCoord& start, const NardiCoord& end)
+// {
+//     SilentMock(start, end);
+//     arbiter.OnMockChange();  // not sure if this is needed
+// }
+
+bool Game::UndoSilentMock(const NardiCoord& start, const NardiCoord& end)
 {
     int d = board._realBoard.GetDistance(start, end);
     if(d == dice[0])
@@ -169,11 +182,19 @@ void Game::UndoMockAndUpdate(const NardiCoord& start, const NardiCoord& end)
     else if(doubles_rolled && d % dice[0] == 0 && arbiter.CanUseMockDice(0, d / dice[0]) )
         times_mockdice_used[0] -= d / dice[0];
     else
-        std::cout << "!!!!\nunexpected input to MockAndUpdate\n";
-
+    {
+        std::cout << "!!!!\nunexpected input to UndoSilentMock\n";
+        return false;
+    }
     board.Mock_UndoMove(start, end);
-    arbiter.OnMockChange();
+    return true;
 }
+
+// void Game::UndoMockAndUpdate(const NardiCoord& start, const NardiCoord& end)
+// {
+//     UndoSilentMock(start, end);
+//     arbiter.OnMockChange();
+// }
 
 void Game::MockAndUpdateByDice(const NardiCoord& start, bool dice_idx)
 {
@@ -280,7 +301,7 @@ std::pair<status_codes, NardiCoord> Game::Arbiter::CanFinishByDice(const NardiCo
     {
         if (_blockMonitor.Illegal(start, dice_idx))
         {
-            std::cout << "illegal block\n";
+            // std::cout << "illegal block\n";
             return {status_codes::BAD_BLOCK, {} };
         }
             
@@ -385,40 +406,46 @@ bool Game::Arbiter::IllegalBlocking(const NardiCoord& start, const NardiCoord& e
 
 void Game::Arbiter::UpdateMovables()
 {
+    _g.board._mockBoard.Print();
     _movables = {};
 
     if(CanUseMockDice(0))
     {
         std::vector<NardiCoord> candidates(_g.PlayerGoesByMockDice(0).begin(), _g.PlayerGoesByMockDice(0).end());
-        // std::cout << "updating movables for dice: " << _g.dice[0] << "\n";
+        std::cout << "updating movables for dice: " << _g.dice[0] << "\n";
 
         for(const auto& coord : candidates)
         {
-            // std::cout << "coord considered: " << coord.row << ", " << coord.col << "\n";
+            std::cout << "coord considered: " << coord.row << ", " << coord.col << "\n";
 
             if(CanMoveByDice(coord, 0).first == status_codes::SUCCESS )   // checks prevention as well
             {
                 _movables.at(0).push_back(coord);
-                // std::cout << "works with dice 0\n";
+                std::cout << "works with dice 0\n";
             }
-            // else
-            // {
+            else
+            {
             //     continue;
-            //     // DispErorrCode(CanMoveByDice(coord, 0).first);
-            //     // std::cout << "doesn't work\n";
-            // }
+                DispErrorCode(CanMoveByDice(coord, 0).first);
+                std::cout << "doesn't work\n";
+            }
                 
         }
     }
     if(CanUseMockDice(1))
     {
-        std::vector<NardiCoord> candidates(_g.PlayerGoesByMockDice(1).begin(), _g.PlayerGoesByMockDice(1).end());
-        // std::cout << "updating movables for dice: " << _g.dice[1] << "\n";
-        for( const auto& coord : candidates )
+        if(_g.doubles_rolled)
+            _movables.at(1) = _movables.at(0);
+        else
         {
-            // std::cout << "coord considered: " << coord.row << ", " << coord.col << "\n";
-            if(CanMoveByDice(coord, 1).first == status_codes::SUCCESS )
-                _movables.at(1).push_back(coord);
+            std::vector<NardiCoord> candidates(_g.PlayerGoesByMockDice(1).begin(), _g.PlayerGoesByMockDice(1).end());
+            std::cout << "updating movables for dice: " << _g.dice[1] << "\n";
+            for( const auto& coord : candidates )
+            {
+                std::cout << "coord considered: " << coord.row << ", " << coord.col << "\n";
+                if(CanMoveByDice(coord, 1).first == status_codes::SUCCESS )
+                    _movables.at(1).push_back(coord);
+            }
         }
     }
 }

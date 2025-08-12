@@ -91,6 +91,14 @@ inline constexpr
 boardConfig preventions2 = {{ { 15 - 3,-1, 0, 1, 0, 0,-1, 1,-1, 0, 0, 1}, 
                               {-(15-3), 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0} }};  
 
+
+                              inline constexpr 
+                       //        0  1  2  3  4  5  6  7  8  9 10 11   
+boardConfig preventions3 = {{ { 10, 2, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0}, 
+                              {-15, 1, 0, 0, 0, 0, 0, 0, 2, 2, 2, 2} }};  
+
+inline constexpr dice prev3dice = {6, 5};
+
 inline constexpr 
                          //     0  1  2  3  4. 5. 6. 7. 8. 9. 10 11   
 boardConfig block_check1 = {{ {14, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}, 
@@ -121,5 +129,15 @@ inline constexpr
                          //      0  1  2  3  4. 5. 6. 7. 8. 9. 10 11   
 boardConfig block_wrap2 = {{  { 10, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0}, 
                               {-12, 0, 0, 0, 1,-1,-1,-1, 0, 0, 1, 1} }};
+
+inline constexpr 
+                         //     0  1  2  3  4. 5. 6. 7. 8. 9. 10 11   
+boardConfig block_doub1 = {{  {12, 1, 0, 1, 1, 0, 0, 0, 0, 0, 0, 0}, 
+                              {-1, 0,-2, 0, 0,-2,-2,-2, 0,-2,-2,-2} }};
+
+inline constexpr
+boardConfig doubles_stacked = {{   { 13, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}, 
+                                   {-15, 0, 2, 0, 0, 0, 0, 0, 0, 0, 0, 0} }};
+inline constexpr dice ds = {3, 3};
 
 }
