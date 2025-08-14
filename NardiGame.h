@@ -6,11 +6,16 @@
 #include <array>
 #include <stack>
 #include <unordered_set>
+#include <unordered_map>
 #include <random>
 #include <memory>
 
 /*
+precompute all legal moves `
+
 more than 1 block at a time?????
+
+Endgame legality, can we actually remove the piece without leaving an illegal block?
 
 endgame testing: include case of starting endgame mid-turn, and also in forced checking
 
@@ -51,6 +56,7 @@ class Game
 
         // Getters
         const NardiBoard& GetBoardRef() const;
+        const std::vector< std::vector<StartAndDice> >& ViewAllLegalMoveSeqs() const;
 
         int GetDice(bool idx) const;
         const ReaderWriter* GetConstRW();
@@ -104,9 +110,7 @@ class Game
                 void SetCompletable();
         };
 
-        struct BadBlockMonitor : public RuleExceptionMonitor    // doubles change things somewhat - 
-                                                                // fixable() if we can move multiple pieces !!! fixme `
-                                                                // need to attach this logic to CanFinishByDice, legal2step needs to be careful
+        struct BadBlockMonitor : public RuleExceptionMonitor
         {
             public:
                 BadBlockMonitor(Game& g, Arbiter& a);
@@ -174,7 +178,6 @@ class Game
             private:
                 int steps_left;
                 FirstMoveException first_move_checker;
-
                 void MockFrom(NardiCoord start);
         };
 
@@ -185,7 +188,8 @@ class Game
 
                 virtual bool Is() override;
                 virtual status_codes Check() override;
-            protected:
+            private:
+                bool _activeDiceIdx;
                 virtual status_codes ForceFromDice(bool idx);
         };
 
@@ -196,6 +200,9 @@ class Game
 
                 virtual bool Is() override;
                 virtual status_codes Check() override;
+            private:
+                bool _maxDice;
+
         };
 
         // Arbiter, tying these together
@@ -291,6 +298,21 @@ class Game
                 Game& _game;
         };
 
+        struct LegalTurnSeqs
+        {
+            public:
+                LegalTurnSeqs(Game& g);
+                void ComputeAllLegalMoves();
+                const std::vector< std::vector<StartAndDice> >& ViewMoveSeqs() const;
+            
+            private:
+                Game& _g;
+                std::unordered_map<std::string, std::vector<StartAndDice> > _brdsToSeqs;
+                std::vector< std::vector<StartAndDice> > _vals;
+
+                void dfs(std::vector<StartAndDice>& seq);
+        };
+
         BoardWithMocker board;                      // contains real and mock boards
 
         std::mt19937 rng;                           // Mersenne Twister engine
@@ -302,13 +324,15 @@ class Game
 
         bool doubles_rolled;
         std::array<int, 2> turn_number;
+
         ReaderWriter* rw;
         Arbiter arbiter;
+        LegalTurnSeqs legal_turn;
+
 
         // Getters
         const std::unordered_set<NardiCoord>& PlayerGoesByMockDice(bool dice_idx) const;
         const std::unordered_set<NardiCoord>& PlayerGoesByDice(bool dice_idx) const;
-
 
         NardiCoord PlayerHead() const;
 
@@ -332,6 +356,7 @@ class Game
         bool UndoSilentMock(const NardiCoord& start, const NardiCoord& end);
         // void UndoMockAndUpdate(const NardiCoord& start, const NardiCoord& end);
         void MockAndUpdateByDice(const NardiCoord& start, bool dice_idx);
+        void UndoMockAndUpdateByDice(const NardiCoord& start, bool dice_idx);
         void RealizeMock();
         void ResetMock();
 

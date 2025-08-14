@@ -48,8 +48,3 @@ TEST_F(TestBuilder, Extra)
     DispErrorCode(stat);
     ASSERT_EQ(stat, status_codes::SUCCESS);
 }
-
-////////// Chat
-
-using enum status_codes;
-

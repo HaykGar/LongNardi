@@ -3,9 +3,7 @@
 #include <array>
 #include <iostream>
 
-using boardConfig = std::array< std::array<int, 12>, 2>;
-using dice = std::array<int, 2>;
-
+#include "Auxilaries.h"
 
 namespace TestGlobals
 {
@@ -94,8 +92,8 @@ boardConfig preventions2 = {{ { 15 - 3,-1, 0, 1, 0, 0,-1, 1,-1, 0, 0, 1},
 
                               inline constexpr 
                        //        0  1  2  3  4  5  6  7  8  9 10 11   
-boardConfig preventions3 = {{ { 10, 2, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0}, 
-                              {-15, 1, 0, 0, 0, 0, 0, 0, 2, 2, 2, 2} }};  
+boardConfig preventions3 = {{ {  0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 3}, 
+                              {-12, 1,-1,-1, 0,-1, 2, 0, 2, 2, 2, 2} }};  
 
 inline constexpr dice prev3dice = {6, 5};
 

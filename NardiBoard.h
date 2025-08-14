@@ -13,6 +13,7 @@ public:
     // Getters
     const int& at(const NardiCoord& s) const;
     const int& at(size_t r, size_t c) const;
+    const boardConfig& View() const;
 
     bool PlayerIdx() const;
     int PlayerSign() const;
@@ -58,7 +59,7 @@ public:
 
     friend class TestBuilder;
 private:
-    std::array<std::array<int, COL>, ROW> data;     // worth making private?
+    boardConfig data;
 
     bool player_idx;
     int player_sign;

@@ -8,6 +8,9 @@ constexpr int ROW = 2;
 constexpr int COL = 12;
 constexpr int PIECES_PER_PLAYER = 15;
 
+using boardConfig = std::array< std::array<int, COL>, ROW>;
+using dice = std::array<int, 2>;
+
 // enum classes for scoping and extra safety
 
 enum class status_codes 
@@ -52,6 +55,13 @@ struct NardiCoord
     int col;
 };
 
+struct StartAndDice{ 
+    StartAndDice(NardiCoord f, bool d) : _from(f), _diceIdx(d) {}
+    NardiCoord _from; 
+    bool _diceIdx; 
+};
+
+
 namespace std 
 {
     template<>
@@ -84,3 +94,5 @@ int BoolToSign(bool p_idx);
 void DispErrorCode(status_codes code);
 
 void DisplayBoard(const std::array<std::array<int, COL>, ROW>& b);
+
+std::string Board2Str(const boardConfig& b);

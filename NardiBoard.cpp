@@ -345,6 +345,11 @@ const int& NardiBoard::at(size_t r, size_t c) const
 const int& NardiBoard::at (const NardiCoord& s) const
 {   return at(s.row, s.col);   }
 
+const boardConfig& NardiBoard::View() const
+{
+    return data;
+}
+
 bool NardiBoard::PlayerIdx() const
 {   return player_idx;   }
 

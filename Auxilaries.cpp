@@ -110,3 +110,16 @@ void DisplayBoard(const std::array<std::array<int, COL>, ROW>& brd)
     }
     std::cout<< "\n\n\n\n";
 }
+
+std::string Board2Str(const boardConfig& b)
+{
+    std::string ret;
+    for(int r = 0; r < ROW; ++r)
+    {
+        for(int c = 0; c < COL; ++c)
+        {
+            ret += std::to_string(b.at(r).at(c)) + " ";
+        }
+    }
+    return ret;
+}

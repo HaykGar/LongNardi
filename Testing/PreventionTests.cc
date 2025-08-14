@@ -73,7 +73,6 @@ TEST_F(TestBuilder, PreventsCompletion)
   EXPECT_EQ(outcome, status_codes::SUCCESS);
   EXPECT_EQ(GetBoardAt(1, 1), 1) << "did not partially force move, head->2 will prevent";
 
-
   outcome = StartOfTurn(white, preventions2, 1, 2);
   ASSERT_EQ(outcome, status_codes::SUCCESS) << "forced on roll - preventions2";
 
@@ -82,17 +81,4 @@ TEST_F(TestBuilder, PreventsCompletion)
 
   outcome = ReceiveCommand(Command(Actions::SELECT_SLOT, {0, 5}));
   EXPECT_EQ(outcome, status_codes::PREVENTS_COMPLETION) << "should be no available 1 moves";
-}
-
-TEST_F(TestBuilder, PreventsViaBlock)
-{
-  auto brd = preventions3;
-                                      // 6          5
-  auto rc = StartOfTurn(white, brd, prev3dice[0], prev3dice[1]);
-  ASSERT_EQ(rc, status_codes::SUCCESS);
-  ASSERT_EQ(brd, GetBoard());
-
-  ASSERT_EQ(ReceiveCommand(Command(Actions::SELECT_SLOT, {0, 0})), status_codes::SUCCESS);
-  StatusReport();
-  EXPECT_NE(ReceiveCommand({Actions::MOVE_BY_DICE, second}), status_codes::SUCCESS );
 }

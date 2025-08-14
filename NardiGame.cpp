@@ -9,11 +9,11 @@
 ///////////// Constructor and intialization /////////////
 
 Game::Game(int rseed) : board(*this), rng(rseed), dist(1, 6), dice({0, 0}), times_dice_used({0, 0}),
-                        doubles_rolled(false), turn_number({0, 0}), rw(nullptr), arbiter(*this)
+                        doubles_rolled(false), turn_number({0, 0}), rw(nullptr), arbiter(*this), legal_turn(*this)
 {} 
 
 Game::Game() :  board(*this), rng(std::random_device{}()), dist(1, 6), dice({0, 0}), times_dice_used({0, 0}), 
-                doubles_rolled(false), turn_number({0, 0}), rw(nullptr), arbiter(*this)
+                doubles_rolled(false), turn_number({0, 0}), rw(nullptr), arbiter(*this), legal_turn(*this)
 {}
 
 void Game::AttachReaderWriter(ReaderWriter* r)
@@ -26,6 +26,10 @@ const NardiBoard& Game::GetBoardRef() const
     return board._realBoard;
 }
 
+const std::vector< std::vector<StartAndDice> >& Game::ViewAllLegalMoveSeqs() const
+{
+    return legal_turn.ViewMoveSeqs();
+}
 
 int Game::GetDice(bool idx) const
 {   return dice[idx];   }
@@ -199,10 +203,21 @@ bool Game::UndoSilentMock(const NardiCoord& start, const NardiCoord& end)
 void Game::MockAndUpdateByDice(const NardiCoord& start, bool dice_idx)
 {
     ++times_mockdice_used[dice_idx];
-    if(board._realBoard.CurrPlayerInEndgame() && arbiter.DiceRemovesPiece(start, dice_idx))
+    if(board._mockBoard.CurrPlayerInEndgame() && arbiter.DiceRemovesPiece(start, dice_idx))
         board.Mock_Remove(start);
     else
         board.Mock_Move(start, board._realBoard.CoordAfterDistance(start, dice[dice_idx]));
+    
+    arbiter.OnMockChange();
+}
+
+void Game::UndoMockAndUpdateByDice(const NardiCoord& start, bool dice_idx)
+{
+    --times_mockdice_used[dice_idx];
+    if(board._mockBoard.CurrPlayerInEndgame() && arbiter.DiceRemovesPiece(start, dice_idx)) // will this work ? `
+        board.Mock_UndoRemove(start);
+    else
+        board.Mock_UndoMove(start, board._realBoard.CoordAfterDistance(start, dice[dice_idx]));
     
     arbiter.OnMockChange();
 }
@@ -321,7 +336,7 @@ bool Game::Arbiter::DiceRemovesPiece(const NardiCoord& start, bool dice_idx)
     
     int pos_from_end = COL - start.col;
     return (pos_from_end == _g.dice[dice_idx] ||  // dice val exactly
-            (pos_from_end == _g.board._mockBoard.MaxNumOcc().at(_g.board.PlayerIdx()) && _g.dice[dice_idx] > pos_from_end) );  
+            (pos_from_end >= _g.board._mockBoard.MaxNumOcc().at(_g.board.PlayerIdx()) && _g.dice[dice_idx] > pos_from_end) );  
                 // largest available is less than dice
 }
 
@@ -406,28 +421,28 @@ bool Game::Arbiter::IllegalBlocking(const NardiCoord& start, const NardiCoord& e
 
 void Game::Arbiter::UpdateMovables()
 {
-    _g.board._mockBoard.Print();
+    // _g.board._mockBoard.Print();
     _movables = {};
 
     if(CanUseMockDice(0))
     {
         std::vector<NardiCoord> candidates(_g.PlayerGoesByMockDice(0).begin(), _g.PlayerGoesByMockDice(0).end());
-        std::cout << "updating movables for dice: " << _g.dice[0] << "\n";
+        // std::cout << "updating movables for dice: " << _g.dice[0] << "\n";
 
         for(const auto& coord : candidates)
         {
-            std::cout << "coord considered: " << coord.row << ", " << coord.col << "\n";
+            // std::cout << "coord considered: " << coord.row << ", " << coord.col << "\n";
 
             if(CanMoveByDice(coord, 0).first == status_codes::SUCCESS )   // checks prevention as well
             {
                 _movables.at(0).push_back(coord);
-                std::cout << "works with dice 0\n";
+                // std::cout << "works with dice 0\n";
             }
             else
             {
-            //     continue;
-                DispErrorCode(CanMoveByDice(coord, 0).first);
-                std::cout << "doesn't work\n";
+                continue;
+                // DispErrorCode(CanMoveByDice(coord, 0).first);
+                // std::cout << "doesn't work\n";
             }
                 
         }
@@ -439,7 +454,7 @@ void Game::Arbiter::UpdateMovables()
         else
         {
             std::vector<NardiCoord> candidates(_g.PlayerGoesByMockDice(1).begin(), _g.PlayerGoesByMockDice(1).end());
-            std::cout << "updating movables for dice: " << _g.dice[1] << "\n";
+            // std::cout << "updating movables for dice: " << _g.dice[1] << "\n";
             for( const auto& coord : candidates )
             {
                 std::cout << "coord considered: " << coord.row << ", " << coord.col << "\n";
@@ -551,6 +566,7 @@ void Game::Arbiter::SolidifyBlockMonitor()
 
 status_codes Game::Arbiter::CheckForcedMoves()
 {
+    _g.legal_turn.ComputeAllLegalMoves();
     if(_doubles.Is())
         return _doubles.Check();
     else if(_twoDice.Is())
