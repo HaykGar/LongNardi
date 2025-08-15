@@ -215,10 +215,10 @@ class Game
                 Game& _game;
         };
 
-        struct LegalTurnSeqs
+        struct LegalSeqComputer
         {
             public:
-                LegalTurnSeqs(Game& g);
+                LegalSeqComputer(Game& g);
                 void ComputeAllLegalMoves();
                 const std::vector< std::vector<StartAndDice> >& ViewMoveSeqs() const;
             
@@ -226,6 +226,8 @@ class Game
                 Game& _g;
                 std::unordered_map<std::string, std::vector<StartAndDice> > _brdsToSeqs;
                 std::vector< std::vector<StartAndDice> > _vals;
+
+                std::unordered_set<std::string> _encountered;
 
                 void dfs(std::vector<StartAndDice>& seq);
                 bool ForceFirstMove();
@@ -245,7 +247,7 @@ class Game
 
         ReaderWriter* rw;
         Arbiter arbiter;
-        LegalTurnSeqs legal_turn;
+        LegalSeqComputer legal_turns;
 
         // Getters
         const std::unordered_set<NardiCoord>& PlayerGoesByMockDice(bool dice_idx) const;
@@ -261,6 +263,7 @@ class Game
         // Updates
         void IncrementTurnNumber();
         void ReAnimate();
+        void AnimateDice();
         
         // Moving
         status_codes MakeMove(const NardiCoord& start, const NardiCoord& end);

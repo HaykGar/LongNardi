@@ -9,11 +9,11 @@
 ///////////// Constructor and intialization /////////////
 
 Game::Game(int rseed) : board(*this), rng(rseed), dist(1, 6), dice({0, 0}), times_dice_used({0, 0}),
-                        doubles_rolled(false), turn_number({0, 0}), rw(nullptr), arbiter(*this), legal_turn(*this)
+                        doubles_rolled(false), turn_number({0, 0}), rw(nullptr), arbiter(*this), legal_turns(*this)
 {} 
 
 Game::Game() :  board(*this), rng(std::random_device{}()), dist(1, 6), dice({0, 0}), times_dice_used({0, 0}), 
-                doubles_rolled(false), turn_number({0, 0}), rw(nullptr), arbiter(*this), legal_turn(*this)
+                doubles_rolled(false), turn_number({0, 0}), rw(nullptr), arbiter(*this), legal_turns(*this)
 {}
 
 void Game::AttachReaderWriter(ReaderWriter* r)
@@ -28,7 +28,7 @@ const NardiBoard& Game::GetBoardRef() const
 
 const std::vector< std::vector<StartAndDice> >& Game::ViewAllLegalMoveSeqs() const
 {
-    return legal_turn.ViewMoveSeqs();
+    return legal_turns.ViewMoveSeqs();
 }
 
 int Game::GetDice(bool idx) const
@@ -63,8 +63,9 @@ status_codes Game::RollDice() // important to force this only once per turn in c
  
 void Game::SetDice(int d1, int d2)
 {   
-    dice[0] = d1; 
-    dice[1] = d2;  
+    // dice[0] = d1; ` ` ` ` ` ` `. `
+    // dice[1] = d2;  
+    dice[0] = 4; dice[1] = 4;   // ` ` ` ` ` `` ` ` ` ` 
     times_dice_used[0] = 0;
     times_dice_used[1] = 0;
     doubles_rolled = (dice[0] == dice[1]); 
@@ -78,7 +79,7 @@ void Game::UseDice(bool idx, int n)
 
 status_codes Game::OnRoll()
 {
-    ReAnimate();
+    AnimateDice();
 
     IncrementTurnNumber();  // starts at 0
 
@@ -269,6 +270,12 @@ void Game::ReAnimate()
 {
     if(rw)
         rw->ReAnimate();
+}
+
+void Game::AnimateDice()
+{
+    if(rw)
+        rw->AnimateDice();
 }
 
 
@@ -561,32 +568,32 @@ void Game::Arbiter::OnMockChange()
 
 status_codes Game::Arbiter::CheckForcedMoves()
 {
-    _g.legal_turn.ComputeAllLegalMoves();
+    _g.legal_turns.ComputeAllLegalMoves();
 
-    if(_g.legal_turn.ViewMoveSeqs().empty())
+    if(_g.legal_turns.ViewMoveSeqs().empty())
         return status_codes::NO_LEGAL_MOVES_LEFT;
     else
         return status_codes::SUCCESS;
 }
 
 ////////////////////////////////////
-////////   LegalTurnSeqs   ////////
+////////   LegalSeqComputer   ////////
 //////////////////////////////////
 
-Game::LegalTurnSeqs::LegalTurnSeqs(Game& g) : _g(g) {}
+Game::LegalSeqComputer::LegalSeqComputer(Game& g) : _g(g) {}
 
-const std::vector< std::vector<StartAndDice> >& Game::LegalTurnSeqs::ViewMoveSeqs() const
+const std::vector< std::vector<StartAndDice> >& Game::LegalSeqComputer::ViewMoveSeqs() const
 {
     return _vals;
 }
 
-void Game::LegalTurnSeqs::ComputeAllLegalMoves()
+void Game::LegalSeqComputer::ComputeAllLegalMoves()
 {
     _brdsToSeqs.clear();
+    _encountered.clear();
 
     if(ForceFirstMove())    // make moves to bypass legality checks
         return;
-    
     
     std::vector<StartAndDice> seq; 
     dfs(seq);
@@ -596,7 +603,7 @@ void Game::LegalTurnSeqs::ComputeAllLegalMoves()
         _vals.push_back(v);
 }
 
-void Game::LegalTurnSeqs::dfs(std::vector<StartAndDice>& seq)
+void Game::LegalSeqComputer::dfs(std::vector<StartAndDice>& seq)
 {
     std::array< std::vector<NardiCoord>, 2 > movables = {_g.arbiter.GetMovables(0), _g.arbiter.GetMovables(1) }; 
         // bypass legality check by only giving pre-approved legal moves
@@ -618,14 +625,21 @@ void Game::LegalTurnSeqs::dfs(std::vector<StartAndDice>& seq)
         {
             seq.emplace_back(coord, dieIdx);
             _g.MockAndUpdateByDice(coord, dieIdx);
-            dfs(seq);
+
+            std::string brdStr = Board2Str(_g.board._mockBoard.View());
+            if(! _encountered.contains(brdStr) ) 
+            {
+                dfs(seq);
+                _encountered.insert(brdStr);
+            }
+
             _g.UndoMockAndUpdateByDice(coord, dieIdx);
             seq.pop_back();
         }
     }
 }
 
-bool Game::LegalTurnSeqs::ForceFirstMove()
+bool Game::LegalSeqComputer::ForceFirstMove()
 {
     if (_g.turn_number[_g.board.PlayerIdx()] == 1 && _g.doubles_rolled && (_g.dice[0] == 4 || _g.dice[0] == 6 ) ) // first move exception
     {
@@ -643,3 +657,18 @@ bool Game::LegalTurnSeqs::ForceFirstMove()
 
     return false;
 }
+
+/*
+current board position vs start - move order used to get there may not be unique but the dice used are:
+
+pf:
+
+case no doubles:
+    either 0, 1, or 2 pieces moved, 0 case trivial, if 1 piece then just trace the path to the source (missing a piece now)
+    and see how far we've gone and use distance to figure out dice used, if 2 pieces then clearly we used both dice
+
+case doubles:
+    0 pieces moved trivial. Moving from source A to source B then moving from source B is the same as moving from B then 
+    moving from A to B in terms of dice usages. Therefore, for each moved piece, just backtrack to the nearest source recursively
+    counting dice usages along the way
+*/
