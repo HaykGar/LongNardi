@@ -21,19 +21,16 @@ TEST_F(TestBuilder, Legality_MovePreventsCompletion)
     PrintBoard();
     DispErrorCode(rc);
 
-    ASSERT_EQ(rc, status_codes::SUCCESS);   // not forced to the end, but partially forced
-    ASSERT_EQ(GetBoardAt(0, 9), 1) << "did not force only 6 that doesn't prevent completion";
-    ASSERT_EQ(GetBoardAt(0, 3), 0);
+    ASSERT_EQ(rc, status_codes::SUCCESS);
+    ASSERT_EQ(ReceiveCommand({Actions::SELECT_SLOT, {0,0}}), status_codes::SUCCESS) << "couldn't select head";
+    ASSERT_NE(ReceiveCommand({Actions::MOVE_BY_DICE, second}), status_codes::SUCCESS) << "move 6 from head prevents completion";
 
-
-    ASSERT_EQ(ReceiveCommand({Actions::SELECT_SLOT, {0,0}}), status_codes::SUCCESS);
-    EXPECT_NE(ReceiveCommand({Actions::MOVE_BY_DICE, 1}),    status_codes::SUCCESS)
-        << "dice 6 should not be re-usable ";
+    ASSERT_EQ(ReceiveCommand({Actions::SELECT_SLOT, {0,3}}), status_codes::SUCCESS) << "couldn't select head";
+    ASSERT_EQ(ReceiveCommand({Actions::MOVE_BY_DICE, second}), status_codes::SUCCESS) << "couldn't perform valid move";
 
     ASSERT_EQ(ReceiveCommand({Actions::SELECT_SLOT, {0,0}}), status_codes::SUCCESS);
     rc = ReceiveCommand({Actions::MOVE_BY_DICE, first});
     EXPECT_EQ(rc, status_codes::NO_LEGAL_MOVES_LEFT) << "couldn't move from head";
-    ASSERT_GE(GetBoardAt(0, 5), 1);
 
     brd = ZeroWhite1BlackBoard();
     brd[0][0] = 3;  // 2, 1, NOT both
@@ -68,13 +65,9 @@ TEST_F(TestBuilder, PreventsCompletion)
   outcome = ReceiveCommand(Command(Actions::SELECT_SLOT, {0, 2}));
   EXPECT_EQ(outcome, status_codes::PREVENTS_COMPLETION);
 
-  brd[0][6] = 0;
-  outcome = StartOfTurn(white, brd, 1, 2);
-  EXPECT_EQ(outcome, status_codes::SUCCESS);
-  EXPECT_EQ(GetBoardAt(1, 1), 1) << "did not partially force move, head->2 will prevent";
-
+  DisplayBoard(preventions2);
   outcome = StartOfTurn(white, preventions2, 1, 2);
-  ASSERT_EQ(outcome, status_codes::SUCCESS) << "forced on roll - preventions2";
+  ASSERT_EQ(outcome, status_codes::SUCCESS);
 
   outcome = ReceiveCommand(Command(Actions::SELECT_SLOT, {0, 3}));
   ASSERT_EQ(outcome, status_codes::SUCCESS) << "unable to select start - preventions2";

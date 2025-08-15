@@ -1,89 +1,27 @@
 #include "NardiGame.h"
 
-////////////////////////////////////////////
-////////   RuleExceptionMonitors   ////////
-//////////////////////////////////////////
-
-/*
-
-NO CALLS TO MockAndUpdate else seg fault - the update step depends on the monitors.
-
-*/
-
-///////////// Base Class /////////////
-
-Game::RuleExceptionMonitor::RuleExceptionMonitor(Game& g, Arbiter& a) : _g(g), _arb(a), _preconditions(false) {}
-
-bool Game::RuleExceptionMonitor::IsFlagged() const
-{
-    return _preconditions;
-}
-
-void Game::RuleExceptionMonitor::Reset()
-{
-    _preconditions = false;
-}
-
-///////////// FirstMove /////////////
-
-Game::FirstMoveException::FirstMoveException(Game& g, Arbiter& a) : RuleExceptionMonitor(g, a) {}
-
-bool Game::FirstMoveException::PreConditions()
-{
-    _preconditions = (_g.turn_number[_g.board.PlayerIdx()] == 1 && (_g.dice[0] == 4 || _g.dice[0] == 6 ) );
-    return _preconditions;
-}
-
-bool Game::FirstMoveException::Illegal(const NardiCoord& s, bool dice_idx)
-{
-    return  (  PreConditions() );
-}
-
-status_codes Game::FirstMoveException::MakeForced()
-{
-    int dist = _g.dice[0] * (1 + (_g.dice[0] == 4) );    // 8 if double 4, else 6
-    NardiCoord head(_g.board.PlayerIdx(), 0);
-
-    NardiCoord dest(head.row, dist);
-
-    _g.board.Move(head, dest);
-    _g.board.Move(head, dest);
-
-    Reset();
-
-    return status_codes::NO_LEGAL_MOVES_LEFT;
-}
-
 ///////////// Turn Completion /////////////
 
-Game::PreventionMonitor::PreventionMonitor(Game& g, Arbiter& a) : RuleExceptionMonitor(g, a), turn_last_updated({0, 0})
+Game::PreventionMonitor::PreventionMonitor(Game& g) : _g(g), turn_last_updated({0, 0})
 {}
 
-void Game::PreventionMonitor::Reset()
+bool Game::PreventionMonitor::CheckNeeded()
 {
-    _preconditions = PreConditions();
-}
-
-bool Game::PreventionMonitor::PreConditions()
-{
-    _preconditions = (!_g.doubles_rolled && _arb.CanUseMockDice(0) && _arb.CanUseMockDice(1) && TurnCompletable() );
-                                    // if last_turn_checked == turn number return stashed, else...
-
+    return (!_g.doubles_rolled && _g.arbiter.CanUseMockDice(0) && _g.arbiter.CanUseMockDice(1) && TurnCompletable() );
             // could play both before
             // case: both could play only once from the same coord, one piece - checked in forcing
-    return _preconditions;
 }
 
 bool Game::PreventionMonitor::Illegal(const NardiCoord& start, bool dice_idx)
 {
-    if(PreConditions() && !MakesSecondStep(start))
+    if(CheckNeeded() && !MakesSecondStep(start))
     {
         std::unordered_set<NardiCoord> other_dice_options = _g.PlayerGoesByMockDice(!dice_idx);
 
         std::unordered_set<NardiCoord>::iterator it = other_dice_options.begin();
         while(it != other_dice_options.end())
         {
-            if(_arb.IllegalBlocking(*it, !dice_idx))    // illegalblocking modifies mock board... careful of dangling
+            if(_g.arbiter.IllegalBlocking(*it, !dice_idx))    // illegalblocking modifies mock board... careful of dangling
             {
                 std::unordered_set<NardiCoord>::iterator old = it;
                 ++it;
@@ -109,7 +47,7 @@ void Game::PreventionMonitor::SetCompletable()
 {
     if( turn_last_updated.at(_g.board.PlayerIdx()) != _g.turn_number.at(_g.board.PlayerIdx()) )
     {
-        auto two_steps = _arb.GetTwoSteppers(1);    // blocking checked
+        auto two_steps = _g.arbiter.GetTwoSteppers(1);    // blocking checked
         if(two_steps.size() > 0)
             _completable = true;
 
@@ -119,12 +57,12 @@ void Game::PreventionMonitor::SetCompletable()
 
             for(const auto& coord : _g.PlayerGoesByDice(0))
             {
-                if(_arb.IllegalBlocking(coord, 0))
+                if(_g.arbiter.IllegalBlocking(coord, 0))
                     options.at(0).erase(coord);
             }
             for(const auto& coord : _g.PlayerGoesByDice(1))
             {
-                if(_arb.IllegalBlocking(coord, 1))
+                if(_g.arbiter.IllegalBlocking(coord, 1))
                     options.at(1).erase(coord);
             }
 
@@ -145,17 +83,15 @@ void Game::PreventionMonitor::SetCompletable()
 bool Game::PreventionMonitor::MakesSecondStep(const NardiCoord& start) const
 {
     NardiCoord end = _g.board._realBoard.CoordAfterDistance(start, _g.dice[0] + _g.dice[1]);
-    return (_g.board._mockBoard.WellDefinedEnd(start, end) == status_codes::SUCCESS && !_arb.IllegalBlocking(start, end) );
+    return (_g.board._mockBoard.WellDefinedEnd(start, end) == status_codes::SUCCESS && !_g.arbiter.IllegalBlocking(start, end) );
 }
 
 ///////////// Bad Block /////////////
 
-Game::BadBlockMonitor::BadBlockMonitor(Game& g, Arbiter& a) :   RuleExceptionMonitor(g, a), _isSolidified(false),  
-                                                                _state(block_state::CLEAR) {}
+Game::BadBlockMonitor::BadBlockMonitor(Game& g) : _g(g), _isSolidified(false), _state(block_state::CLEAR) {}
 
 void Game::BadBlockMonitor::Reset()
 {
-    _preconditions = false;
     _blockedAll = false;
     _isSolidified = false;
     _blockLength = 0;
@@ -215,8 +151,7 @@ bool Game::BadBlockMonitor::BlockingAll()
 
 bool Game::BadBlockMonitor::PreConditions()
 {
-    _preconditions = _g.board._mockBoard.ReachedEnemyHome().at(! _g.board.PlayerIdx() ) == 0; // not possible once enemy entered home 
-    return _preconditions;
+    return _g.board._mockBoard.ReachedEnemyHome().at(! _g.board.PlayerIdx() ) == 0; // not possible once enemy entered home 
 }
 
 bool Game::BadBlockMonitor::Illegal(const NardiCoord& start, bool dice_idx)

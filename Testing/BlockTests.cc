@@ -91,9 +91,8 @@ TEST_F(TestBuilder, BlockadeUnblockOnlyBySpecificMove)
     std::cout << "rc was\n";
     DispErrorCode(rc);
 
-    ASSERT_EQ(rc, status_codes::NO_LEGAL_MOVES_LEFT);
-    
-    ASSERT_EQ(GetBoardAt(0,5), -1);
+    ASSERT_EQ(ReceiveCommand(Command(Actions::SELECT_SLOT, {1, 11})), status_codes::SUCCESS);
+    ASSERT_EQ(ReceiveCommand(Command(Actions::MOVE_BY_DICE, second)), status_codes::NO_LEGAL_MOVES_LEFT);
 }
 
 TEST_F(TestBuilder, BlockadeRowWrap)

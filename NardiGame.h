@@ -68,52 +68,28 @@ class Game
         class Arbiter;
         
         // Exception Monitors
-        struct RuleExceptionMonitor 
+
+        class PreventionMonitor
         {
             public:
-                RuleExceptionMonitor(Game& g, Arbiter& a);
-                
-                bool IsFlagged() const;
-                virtual void Reset();
-                virtual bool PreConditions() = 0;  // conditions for this test to be needed - RENAME FIXME ` or simply make IsFlagged, then overload in first move
-                virtual bool Illegal(const NardiCoord& start, bool dice_idx) = 0; // Violation of rules
-            protected:
-                Game& _g;
-                Arbiter& _arb;
-                bool _preconditions; // rename or re-design `
+                PreventionMonitor(Game& g);
 
-        };
-
-        struct FirstMoveException : public RuleExceptionMonitor
-        {
-            public:
-                FirstMoveException(Game& g, Arbiter& a);
-                virtual bool Illegal(const NardiCoord& start, bool dice_idx) override;    // parameters not needed here
-                virtual status_codes MakeForced();
-                virtual bool PreConditions() override;
-        };
-
-        struct PreventionMonitor : public RuleExceptionMonitor
-        {
-            public:
-                PreventionMonitor(Game& g, Arbiter& a);
-
-                virtual void Reset() override;
-                virtual bool Illegal(const NardiCoord& start, bool dice_idx) override;
-                virtual bool PreConditions() override;
+                bool Illegal(const NardiCoord& start, bool dice_idx);
+                bool CheckNeeded();
             private:
+                Game& _g;
                 bool _completable;
                 std::array<int, 2> turn_last_updated;
-                                
+     
                 bool MakesSecondStep(const NardiCoord& start) const;   
                 bool TurnCompletable();
                 void SetCompletable();
         };
 
-        struct BadBlockMonitor : public RuleExceptionMonitor
+        class BadBlockMonitor
         {
             public:
-                BadBlockMonitor(Game& g, Arbiter& a);
+                BadBlockMonitor(Game& g);
                 enum class block_state
                 {
                     CLEAR,
@@ -121,19 +97,19 @@ class Game
                     BAD_BLOCK
                 };
 
-                virtual bool Illegal(const NardiCoord& start, bool dice_idx) override;
+                bool Illegal(const NardiCoord& start, bool dice_idx);
                 
                 bool Illegal(const NardiCoord& start, const NardiCoord& end);
                 
-                virtual bool PreConditions() override;
+                bool PreConditions();
 
-                virtual void Reset() override;
+                void Reset();
                 void Solidify();
 
                 block_state State() const;
 
             private:
-                // _blocked true when Blockage with no pieces ahead, fixable or not
+                Game& _g;                
                 bool _blockedAll;
                 bool _isSolidified;
                 block_state _state;
@@ -151,58 +127,6 @@ class Game
 
                 bool Unblocks(const NardiCoord& start, const NardiCoord& end);
                 bool Unblocked();
-        };
-
-        // Forced move handlers
-        struct ForcedHandler
-        {
-            public:
-                ForcedHandler(Game& g, Arbiter& a);
-
-                virtual bool Is() = 0;
-                virtual status_codes Check() = 0;
-
-            protected:
-                Arbiter& _arb;
-                Game& _g;
-        };
-
-        struct DoublesHandler : public ForcedHandler
-        {
-            public:
-                DoublesHandler(Game& g, Arbiter& a);
-
-                virtual bool Is() override;
-                virtual status_codes Check() override;
-            
-            private:
-                int steps_left;
-                FirstMoveException first_move_checker;
-                void MockFrom(NardiCoord start);
-        };
-
-        struct SingleDiceHandler : public ForcedHandler
-        {
-            public:
-                SingleDiceHandler(Game& g, Arbiter& a);
-
-                virtual bool Is() override;
-                virtual status_codes Check() override;
-            private:
-                bool _activeDiceIdx;
-                virtual status_codes ForceFromDice(bool idx);
-        };
-
-        struct TwoDiceHandler : public ForcedHandler
-        {
-            public:
-                TwoDiceHandler(Game& g, Arbiter& a);
-
-                virtual bool Is() override;
-                virtual status_codes Check() override;
-            private:
-                bool _maxDice;
-
         };
 
         // Arbiter, tying these together
@@ -238,8 +162,6 @@ class Game
 
                 void OnMockChange();
 
-                void SolidifyBlockMonitor();
-
                 // friend class for testing
                 friend class TestBuilder;
 
@@ -247,12 +169,7 @@ class Game
                 Game& _g;
                 std::array< std::vector<NardiCoord>, 2 >  _movables;
 
-                DoublesHandler      _doubles;
-                TwoDiceHandler      _twoDice;
-                SingleDiceHandler   _singleDice;
-
                 PreventionMonitor   _prevMonitor;
-                FirstMoveException  _firstMove;
                 BadBlockMonitor     _blockMonitor;
 
                 // Forced Moves
@@ -311,6 +228,7 @@ class Game
                 std::vector< std::vector<StartAndDice> > _vals;
 
                 void dfs(std::vector<StartAndDice>& seq);
+                bool ForceFirstMove();
         };
 
         BoardWithMocker board;                      // contains real and mock boards
@@ -329,7 +247,6 @@ class Game
         Arbiter arbiter;
         LegalTurnSeqs legal_turn;
 
-
         // Getters
         const std::unordered_set<NardiCoord>& PlayerGoesByMockDice(bool dice_idx) const;
         const std::unordered_set<NardiCoord>& PlayerGoesByDice(bool dice_idx) const;
@@ -343,6 +260,7 @@ class Game
 
         // Updates
         void IncrementTurnNumber();
+        void ReAnimate();
         
         // Moving
         status_codes MakeMove(const NardiCoord& start, const NardiCoord& end);
@@ -359,5 +277,4 @@ class Game
         void UndoMockAndUpdateByDice(const NardiCoord& start, bool dice_idx);
         void RealizeMock();
         void ResetMock();
-
 };

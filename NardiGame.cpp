@@ -78,8 +78,7 @@ void Game::UseDice(bool idx, int n)
 
 status_codes Game::OnRoll()
 {
-    if(rw)
-        rw->AnimateDice();
+    ReAnimate();
 
     IncrementTurnNumber();  // starts at 0
 
@@ -135,8 +134,7 @@ status_codes Game::MakeMove(const NardiCoord& start, const NardiCoord& end)
 {
     board.Move(start, end);
 
-    if(rw)
-        rw->ReAnimate();
+    ReAnimate();
 
     return arbiter.OnMove();
 }
@@ -249,9 +247,7 @@ status_codes Game::MakeMove(const NardiCoord& start, bool dice_idx)
 status_codes Game::RemovePiece(const NardiCoord& start)
 {
     board.Remove(start);
-
-    if(rw)
-        rw->ReAnimate();
+    ReAnimate();
     if(GameIsOver())
         return status_codes::NO_LEGAL_MOVES_LEFT;
 
@@ -269,6 +265,12 @@ void Game::SwitchPlayer()
 void Game::IncrementTurnNumber()
 {   ++turn_number[board.PlayerIdx()];   }
 
+void Game::ReAnimate()
+{
+    if(rw)
+        rw->ReAnimate();
+}
+
 
 ////////////////////////////
 ////////   Arbiter ////////
@@ -276,8 +278,7 @@ void Game::IncrementTurnNumber()
 
 ///////////// Constructor /////////////
 
-Game::Arbiter::Arbiter(Game& gm) :  _g(gm), _doubles(_g, *this), _twoDice(_g, *this), _singleDice(_g, *this),
-                                    _prevMonitor(_g, *this), _firstMove(_g, *this), _blockMonitor(_g, *this)
+Game::Arbiter::Arbiter(Game& g) :  _g(g), _prevMonitor(_g), _blockMonitor(_g)
 {}
 
 ///////////// Legality /////////////
@@ -457,7 +458,7 @@ void Game::Arbiter::UpdateMovables()
             // std::cout << "updating movables for dice: " << _g.dice[1] << "\n";
             for( const auto& coord : candidates )
             {
-                std::cout << "coord considered: " << coord.row << ", " << coord.col << "\n";
+                // std::cout << "coord considered: " << coord.row << ", " << coord.col << "\n";
                 if(CanMoveByDice(coord, 1).first == status_codes::SUCCESS )
                     _movables.at(1).push_back(coord);
             }
@@ -528,7 +529,6 @@ std::unordered_set<NardiCoord> Game::Arbiter::GetTwoSteppers(size_t max_qty)
 status_codes Game::Arbiter::OnRoll()
 {
     _blockMonitor.Reset();
-    _prevMonitor.Reset();
 
     UpdateMovables();
 
@@ -557,22 +557,89 @@ void Game::Arbiter::OnMockChange()
     UpdateMovables();
 }
 
-void Game::Arbiter::SolidifyBlockMonitor()
-{
-    _blockMonitor.Solidify();
-}
-
 ///////////// Forced Moves /////////////
 
 status_codes Game::Arbiter::CheckForcedMoves()
 {
     _g.legal_turn.ComputeAllLegalMoves();
-    if(_doubles.Is())
-        return _doubles.Check();
-    else if(_twoDice.Is())
-        return _twoDice.Check();
-    else if(_singleDice.Is())
-        return _singleDice.Check();
-    else
+
+    if(_g.legal_turn.ViewMoveSeqs().empty())
         return status_codes::NO_LEGAL_MOVES_LEFT;
+    else
+        return status_codes::SUCCESS;
+}
+
+////////////////////////////////////
+////////   LegalTurnSeqs   ////////
+//////////////////////////////////
+
+Game::LegalTurnSeqs::LegalTurnSeqs(Game& g) : _g(g) {}
+
+const std::vector< std::vector<StartAndDice> >& Game::LegalTurnSeqs::ViewMoveSeqs() const
+{
+    return _vals;
+}
+
+void Game::LegalTurnSeqs::ComputeAllLegalMoves()
+{
+    _brdsToSeqs.clear();
+
+    if(ForceFirstMove())    // make moves to bypass legality checks
+        return;
+    
+    
+    std::vector<StartAndDice> seq; 
+    dfs(seq);
+
+    _vals.clear();
+    for(const auto& [_, v] : _brdsToSeqs )
+        _vals.push_back(v);
+}
+
+void Game::LegalTurnSeqs::dfs(std::vector<StartAndDice>& seq)
+{
+    std::array< std::vector<NardiCoord>, 2 > movables = {_g.arbiter.GetMovables(0), _g.arbiter.GetMovables(1) }; 
+        // bypass legality check by only giving pre-approved legal moves
+
+    if(movables.at(0).size() + movables.at(1).size() == 0)  // no moves left
+    {
+        if(!seq.empty())    // only care about non-empty move sequences
+        {
+            std::string key = Board2Str(_g.board._mockBoard.View());
+            if(!_brdsToSeqs.contains(key))
+                _brdsToSeqs.emplace(key, seq);
+        }
+        return;
+    }
+
+    for(int dieIdx = 0; dieIdx < 2; ++ dieIdx)
+    {
+        for(const auto& coord : movables.at(dieIdx) )   
+        {
+            seq.emplace_back(coord, dieIdx);
+            _g.MockAndUpdateByDice(coord, dieIdx);
+            dfs(seq);
+            _g.UndoMockAndUpdateByDice(coord, dieIdx);
+            seq.pop_back();
+        }
+    }
+}
+
+bool Game::LegalTurnSeqs::ForceFirstMove()
+{
+    if (_g.turn_number[_g.board.PlayerIdx()] == 1 && _g.doubles_rolled && (_g.dice[0] == 4 || _g.dice[0] == 6 ) ) // first move exception
+    {
+        int dist = _g.dice[0] * (1 + (_g.dice[0] == 4) );    // 8 if double 4, else 6
+        NardiCoord head(_g.board.PlayerIdx(), 0);
+        NardiCoord dest(head.row, dist);
+
+        _g.board.Move(head, dest);
+        _g.board.Move(head, dest);
+
+        _g.ReAnimate();
+        
+        return true; // no legal moves beyond the ones just forced
+    }
+
+    return false;
 }
