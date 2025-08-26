@@ -64,6 +64,7 @@ private:
     bool player_idx;
     int player_sign;
     bool head_used;
+    std::array<int, 2> pieces_per_player;
     std::array<int, 2> reached_enemy_home;
     std::array<int, 2>  pieces_left;
     std::array<int, 2> max_num_occ; // left uninitialized because we don't use it until the endgame, maybe can set to -1, -1

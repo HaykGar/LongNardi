@@ -53,7 +53,7 @@ void TestBuilder::withBoard(const std::array<std::array<int, COL>, ROW>& b)
 {
     _game->board._realBoard.head_used = false;
     _game->board._realBoard.SetData(b);
-    _game->board.ResetMock();
+    _game->board._mockBoard = _game->board._realBoard;
 }
 
 void TestBuilder::ResetControllerState()

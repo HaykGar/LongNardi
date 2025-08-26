@@ -28,12 +28,6 @@ TEST_F(TestBuilder, Move_TwoStep_FirstOkSecondIllegal)
         << "second step should be DEST_ENEM";
 }
 
-
-
-
-
-
-
 /*──────────────────────────────────────────────────────────────────────────────
   2. Use same die twice → DICE_USED_ALREADY
 ──────────────────────────────────────────────────────────────────────────────*/
@@ -77,4 +71,29 @@ TEST_F(TestBuilder, Legality_AllGood)
     // further move should yield NO_LEGAL_MOVES_LEFT
     EXPECT_NE(ReceiveCommand({Actions::MOVE_BY_DICE, first}),      status_codes::SUCCESS)
         << "after both dice used, turn over";
+}
+
+
+/////// endgame fixme ` ` ` ` ` ` `
+
+TEST_F(TestBuilder, EndgameWeirdness)
+{
+    boardConfig seg = {{ {0, 0,	0, 0, 0,-1, 0,-1, 0, 0, 0, 0},
+    	                 {0, 0,	0, 0, 0, 0,	0, 0, 0, 0,	0, PIECES_PER_PLAYER} }};
+
+    auto rc = StartOfTurn(white, seg, 4, 3);
+    DispErrorCode(rc);
+    EXPECT_EQ(rc, status_codes::SUCCESS);
+
+    std::cout << "on to the second one :) \n\n\n";
+
+    boardConfig at_zsh = {{ {0,	0,	0,	0,	0,	0,	0,	0,	-1,	0,	0,	0},	
+                            {0,	0,	0,	0,	0,	1,	0,	1,	0,	0,	0,	0}}};
+
+    rc = StartOfTurn(white, at_zsh, 6, 1);
+    ASSERT_EQ(rc, status_codes::SUCCESS);
+    ASSERT_EQ(ReceiveCommand({Actions::SELECT_SLOT, {1, 5}}), status_codes::SUCCESS) << "couldn't select start as in mini-game";
+    rc = ReceiveCommand({Actions::MOVE_BY_DICE, second});
+    DispErrorCode(rc);
+    EXPECT_EQ(rc, status_codes::SUCCESS);
 }

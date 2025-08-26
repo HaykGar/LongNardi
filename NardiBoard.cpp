@@ -4,12 +4,17 @@
 
 NardiBoard::NardiBoard() :      data {{ { PIECES_PER_PLAYER, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}, 
                                         {-PIECES_PER_PLAYER, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0} }},
+                                pieces_per_player{ {PIECES_PER_PLAYER, PIECES_PER_PLAYER} },
+                                // data {{ { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}, 
+                                //         {-PIECES_PER_PLAYER, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 2} }},
                                 player_idx(0), player_sign(BoolToSign(player_idx)), head_used(false),
                                 reached_enemy_home{0, 0}, pieces_left{PIECES_PER_PLAYER, PIECES_PER_PLAYER}
 {
     for(int p = 0; p < 2; ++p)
         for(int i = 0; i < 6; ++i)
-            goes_idx_plusone[p][i].emplace(p, 0);   // "head" can move any of the numbers initially
+            goes_idx_plusone[p][i].emplace(p, 0);   // "head" can move any of the numbers initially 
+    // CalcPiecesLeftandReached();
+    // ConstructAvailabilitySets();
 }
 
 NardiBoard::NardiBoard(const std::array<std::array<int, COL>, ROW>& d) : player_idx(0), player_sign(BoolToSign(player_idx)), head_used(false)
@@ -108,12 +113,15 @@ void NardiBoard::UpdateAvailabilityStart(const NardiCoord start)  // not referen
     if(CurrPlayerInEndgame())
     {
         SetMaxOcc();
-        for(int i = max_num_occ.at(player_idx); i <= 6; ++i)
-            goes_idx_plusone[player_idx][i-1].insert({!player_idx, COL - max_num_occ.at(player_idx)}); 
+        if(max_num_occ.at(player_idx) > 0)
+        {
+            for(int i = max_num_occ.at(player_idx); i <= 6; ++i)
+                goes_idx_plusone[player_idx][i-1].insert({!player_idx, COL - max_num_occ.at(player_idx)}); 
 
-        for(int i = 1; i < max_num_occ.at(player_idx); ++i)
-            if(at(!player_idx, COL - i) * player_sign  > 0)
-                goes_idx_plusone[player_idx][i-1].insert({!player_idx, COL - i});
+            for(int i = 1; i < max_num_occ.at(player_idx); ++i)
+                if(at(!player_idx, COL - i) * player_sign  > 0)
+                    goes_idx_plusone[player_idx][i-1].insert({!player_idx, COL - i});
+        }
     }
 }
 
@@ -157,18 +165,6 @@ void NardiBoard::SetMaxOcc()
 
 status_codes NardiBoard::ValidStart(const NardiCoord& start) const
 {
-    //std::cout << "\n\n\n\n";
-    
-    //std::cout << "out of bounds? " << std::boolalpha << start.OutOfBounds() << "\n";
-    // if(!start.OutOfBounds())
-    // {
-    //     //std::cout << "checking start: " << start.row << ", " << start.col << " with val " << at(start) << "\n";
-    //     //std::cout << "empty or enemy? " << std::boolalpha << (player_sign * at(start) <= 0) << "\n";
-    //     //std::cout << "HeadReuse?" << std::boolalpha << HeadReuseIssue(start) << "\n";
-    // }
-
-    //std::cout << "\n\n\n\n";
-
     if(start.OutOfBounds())
         return status_codes::OUT_OF_BOUNDS;
     else if ( player_sign * at(start) <= 0)
@@ -259,7 +255,16 @@ unsigned NardiBoard::MovablePieces(const NardiCoord& start) const
 
 bool NardiBoard::operator== (const NardiBoard& other) const
 {
-    return (this->data == other.data && this->player_idx == other.player_idx && this->head_used == other.head_used);
+
+    if (!(this->data == other.data && this->player_idx == other.player_idx && this->head_used == other.head_used))
+        return false;
+
+    for(int plyr = 0; plyr < 2; ++ plyr)
+        for(int i = 0; i < 6; ++i)
+            if(this->goes_idx_plusone[plyr][i] != other.goes_idx_plusone[plyr][i])
+                return false;
+    
+    return true;
 }
 
 // testing
@@ -268,6 +273,7 @@ void NardiBoard::SetData(const std::array<std::array<int, COL>, ROW>& b)
 {
     data = b;
     CalcPiecesLeftandReached();
+    pieces_per_player = pieces_left;
     ConstructAvailabilitySets();
 }
 
@@ -291,11 +297,17 @@ void NardiBoard::CalcPiecesLeftandReached()
         if(at(starts[0]) < 0)   // black piece at end of white's row - home
             reached_enemy_home[1] += abs(at(starts[0]));
         if(at(starts[1]) > 0)   // white piece at end of black's row - home
-            reached_enemy_home[0] += abs(at(starts[0]));
+            reached_enemy_home[0] += abs(at(starts[1]));
 
         pieces_left[at(starts[0]) < 0] += abs(at(starts[0]));   // no-op if 0
         pieces_left[at(starts[1]) < 0] += abs(at(starts[1]));
     }
+
+    std::cout << "pieces left white: " << pieces_left[0] << "\n";
+    std::cout << "pieces left black: " << pieces_left[1] << "\n";
+
+    std::cout << "pieces reached white: " << reached_enemy_home[0] << "\n";
+    std::cout << "pieces reached black: " << reached_enemy_home[1] << "\n";
 }
 
 void NardiBoard::ConstructAvailabilitySets()
@@ -305,33 +317,47 @@ void NardiBoard::ConstructAvailabilitySets()
         goes_idx_plusone[0][i].clear();
         goes_idx_plusone[1][i].clear();
     }
-
-    NardiCoord start(0, 0);
-    while (!start.OutOfBounds())
+    for(int plyr = 0; plyr < 2; ++plyr)
     {
-        if(at(start) != 0)
+        NardiCoord start(player_idx, 0);
+        while (!start.OutOfBounds())
         {
-            bool player_idx = at(start) < 0;
-            for(int d = 1; d <= 6; ++d)
+            if(ValidStart(start) == status_codes::SUCCESS)
             {
-                NardiCoord dest = CoordAfterDistance(start, d, player_idx);
-                if(WellDefinedEnd(start, dest) == status_codes::SUCCESS)    // relies on p_idx
-                    goes_idx_plusone[player_idx][d-1].insert(start);
+                for(int d = 1; d <= 6; ++d)
+                {
+                    NardiCoord dest = CoordAfterDistance(start, d, player_idx);
+                    if(WellDefinedEnd(start, dest) == status_codes::SUCCESS)
+                        goes_idx_plusone[player_idx][d-1].insert(start);
+                }
+            }
+            start = CoordAfterDistance(start, 1, player_idx);
+        }
+
+        if(CurrPlayerInEndgame())
+        {
+            std::cout << "endgame case detected for player " << player_idx << "\n";
+
+            SetMaxOcc();
+            if(max_num_occ.at(player_idx) > 0)
+            {
+                for(int i = max_num_occ.at(player_idx); i <= 6; ++i)
+                    goes_idx_plusone[player_idx][i-1].insert({!player_idx, COL - max_num_occ.at(player_idx)}); 
+
+                for(int i = 1; i < max_num_occ.at(player_idx); ++i)
+                    if(at(!player_idx, COL - i) * player_sign  > 0)
+                        goes_idx_plusone[player_idx][i-1].insert({!player_idx, COL - i});
             }
         }
-        start = CoordAfterDistance(start, 1, 0);
-    }
 
-    if(CurrPlayerInEndgame())
-    {
-        SetMaxOcc();
-        for(int i = max_num_occ.at(player_idx); i <= 6; ++i)
-            goes_idx_plusone[player_idx][i-1].insert({
-                    !player_idx, COL - max_num_occ.at(player_idx)}); 
-
-        for(int i = 1; i < max_num_occ.at(player_idx); ++i)
-            if(at(!player_idx, COL - i) * player_sign  > 0)
-                goes_idx_plusone[player_idx][i-1].insert({!player_idx, COL - i});
+        std::cout << "result for player " << player_idx << "\n";
+        for(int i = 0; i < 6; ++i)
+        {
+            std::cout << "dist: " << i+1 << "\n";
+            for (const auto& coord : goes_idx_plusone[player_idx][i])
+                coord.Print();
+        }
+        SwitchPlayer();
     }
 }
 
@@ -412,4 +438,4 @@ bool NardiBoard::HeadReuseIssue(const NardiCoord& coord) const
 {   return (IsPlayerHead(coord) && head_used);   }
 
 bool NardiBoard::CurrPlayerInEndgame() const
-{   return reached_enemy_home[player_idx] >= PIECES_PER_PLAYER;   }
+{   return reached_enemy_home[player_idx] >= pieces_per_player[player_idx];   }

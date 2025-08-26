@@ -23,9 +23,15 @@ TEST_F(TestBuilder, Legality_MovePreventsCompletion)
 
     ASSERT_EQ(rc, status_codes::SUCCESS);
     ASSERT_EQ(ReceiveCommand({Actions::SELECT_SLOT, {0,0}}), status_codes::SUCCESS) << "couldn't select head";
-    ASSERT_NE(ReceiveCommand({Actions::MOVE_BY_DICE, second}), status_codes::SUCCESS) << "move 6 from head prevents completion";
 
-    ASSERT_EQ(ReceiveCommand({Actions::SELECT_SLOT, {0,3}}), status_codes::SUCCESS) << "couldn't select head";
+    rc = ReceiveCommand({Actions::MOVE_BY_DICE, second});
+    DispErrorCode(rc);
+    ASSERT_NE(rc, status_codes::SUCCESS) << "move 6 from head prevents completion";
+    ASSERT_EQ(GetBoardAt(0, 6), 0);
+
+    StatusReport();
+
+    ASSERT_EQ(ReceiveCommand({Actions::SELECT_SLOT, {0,3}}), status_codes::SUCCESS) << "couldn't select 0, 3";
     ASSERT_EQ(ReceiveCommand({Actions::MOVE_BY_DICE, second}), status_codes::SUCCESS) << "couldn't perform valid move";
 
     ASSERT_EQ(ReceiveCommand({Actions::SELECT_SLOT, {0,0}}), status_codes::SUCCESS);

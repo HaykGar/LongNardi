@@ -11,8 +11,6 @@
 #include <memory>
 
 /*
-precompute all legal moves `
-
 more than 1 block at a time?????
 
 Endgame legality, can we actually remove the piece without leaving an illegal block?
@@ -22,8 +20,6 @@ endgame testing: include case of starting endgame mid-turn, and also in forced c
 Logging services... log everything in files instead of cout
 
 TryFinishMove, legal move checkers, etc, need to be integrated with hanel in endgame...
-
-first move exception as a member function in doubles handler not a separate class
 
 Automate dice rolling from controller ?
 
@@ -98,7 +94,6 @@ class Game
                 };
 
                 bool Illegal(const NardiCoord& start, bool dice_idx);
-                
                 bool Illegal(const NardiCoord& start, const NardiCoord& end);
                 
                 bool PreConditions();
@@ -117,7 +112,7 @@ class Game
                 unsigned _blockLength;
                 NardiCoord _blockStart;
 
-                bool IllegalEndpoints(const NardiCoord& start, const NardiCoord& end);
+                bool CheckMockedState();
 
                 bool BlockageAround(const NardiCoord& end);
                 bool PieceAhead();
@@ -141,7 +136,7 @@ class Game
                 std::pair<status_codes, std::array<int, 2>> LegalMove(const NardiCoord& start, const NardiCoord& end);
                 std::pair<status_codes, NardiCoord> LegalMove_2step(const NardiCoord& start);
 
-                bool DiceRemovesPiece(const NardiCoord& start, bool d_idx);
+                bool DiceRemovesFrom(const NardiCoord& start, bool d_idx);
 
                 bool CanUseMockDice(bool idx, int n_times = 1) const;
 
@@ -273,8 +268,12 @@ class Game
 
         // Mocking
         bool SilentMock(const NardiCoord& start, const NardiCoord& end);
+        bool SilentMock(const NardiCoord& start, bool dice_idx);
+    
         // void MockAndUpdate(const NardiCoord& start, const NardiCoord& end);
         bool UndoSilentMock(const NardiCoord& start, const NardiCoord& end);
+        bool UndoSilentMock(const NardiCoord& start, bool dice_idx);
+
         // void UndoMockAndUpdate(const NardiCoord& start, const NardiCoord& end);
         void MockAndUpdateByDice(const NardiCoord& start, bool dice_idx);
         void UndoMockAndUpdateByDice(const NardiCoord& start, bool dice_idx);

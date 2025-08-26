@@ -63,9 +63,8 @@ status_codes Game::RollDice() // important to force this only once per turn in c
  
 void Game::SetDice(int d1, int d2)
 {   
-    // dice[0] = d1; ` ` ` ` ` ` `. `
-    // dice[1] = d2;  
-    dice[0] = 4; dice[1] = 4;   // ` ` ` ` ` `` ` ` ` ` 
+    dice[0] = d1; 
+    dice[1] = d2;  
     times_dice_used[0] = 0;
     times_dice_used[1] = 0;
     doubles_rolled = (dice[0] == dice[1]); 
@@ -84,7 +83,7 @@ status_codes Game::OnRoll()
     IncrementTurnNumber();  // starts at 0
 
     board.ResetMock();
-    
+ 
     return arbiter.OnRoll();
 }
 
@@ -142,6 +141,11 @@ status_codes Game::MakeMove(const NardiCoord& start, const NardiCoord& end)
 
 bool Game::SilentMock(const NardiCoord& start, const NardiCoord& end)
 {
+    if(end.OutOfBounds() || start.OutOfBounds())
+    {
+        std::cout << "attempted to mock out of bounds, if attempting removal use the coord, dice overload \n";
+        return false;
+    }
     int d = board._realBoard.GetDistance(start, end);
     if(d == dice[0])
         ++times_mockdice_used[0];
@@ -164,14 +168,14 @@ bool Game::SilentMock(const NardiCoord& start, const NardiCoord& end)
     return true;
 }
 
-// void Game::MockAndUpdate(const NardiCoord& start, const NardiCoord& end)
-// {
-//     SilentMock(start, end);
-//     arbiter.OnMockChange();  // not sure if this is needed
-// }
 
 bool Game::UndoSilentMock(const NardiCoord& start, const NardiCoord& end)
 {
+    if(end.OutOfBounds() || start.OutOfBounds())
+    {
+        std::cout << "attempted to mock out of bounds, if attempting removal use the coord, dice overload \n";
+        return false;
+    }
     int d = board._realBoard.GetDistance(start, end);
     if(d == dice[0])
         --times_mockdice_used[0];
@@ -193,38 +197,50 @@ bool Game::UndoSilentMock(const NardiCoord& start, const NardiCoord& end)
     return true;
 }
 
-// void Game::UndoMockAndUpdate(const NardiCoord& start, const NardiCoord& end)
-// {
-//     UndoSilentMock(start, end);
-//     arbiter.OnMockChange();
-// }
+bool Game::SilentMock(const NardiCoord& start, bool dice_idx)
+{
+    NardiCoord dest = board._realBoard.CoordAfterDistance(start, dice[dice_idx]);
+
+    if(board._mockBoard.CurrPlayerInEndgame() && arbiter.DiceRemovesFrom(start, dice_idx))
+        board.Mock_Remove(start);
+    else if(board._mockBoard.WellDefinedEnd(start, dest) == status_codes::SUCCESS)
+        board.Mock_Move(start, dest);
+    else
+        return false;
+
+    ++times_mockdice_used[dice_idx];
+    return true;
+}
+
+bool Game::UndoSilentMock(const NardiCoord& start, bool dice_idx)
+{
+    NardiCoord dest = board._realBoard.CoordAfterDistance(start, dice[dice_idx]);
+
+    if(board._mockBoard.CurrPlayerInEndgame() && arbiter.DiceRemovesFrom(start, dice_idx)) // will this work ? `
+        board.Mock_UndoRemove(start);
+    else if(board._mockBoard.WellDefinedEnd(start, dest) == status_codes::SUCCESS)
+        board.Mock_UndoMove(start, board._realBoard.CoordAfterDistance(start, dice[dice_idx]));
+    else
+        return false;
+
+    --times_mockdice_used[dice_idx];
+    return true;
+}
 
 void Game::MockAndUpdateByDice(const NardiCoord& start, bool dice_idx)
 {
-    ++times_mockdice_used[dice_idx];
-    if(board._mockBoard.CurrPlayerInEndgame() && arbiter.DiceRemovesPiece(start, dice_idx))
-        board.Mock_Remove(start);
-    else
-        board.Mock_Move(start, board._realBoard.CoordAfterDistance(start, dice[dice_idx]));
-    
+    SilentMock(start, dice_idx);
     arbiter.OnMockChange();
 }
 
 void Game::UndoMockAndUpdateByDice(const NardiCoord& start, bool dice_idx)
 {
-    --times_mockdice_used[dice_idx];
-    if(board._mockBoard.CurrPlayerInEndgame() && arbiter.DiceRemovesPiece(start, dice_idx)) // will this work ? `
-        board.Mock_UndoRemove(start);
-    else
-        board.Mock_UndoMove(start, board._realBoard.CoordAfterDistance(start, dice[dice_idx]));
-    
+    UndoSilentMock(start, dice_idx);
     arbiter.OnMockChange();
 }
 
 void Game::ResetMock()
 {
-    // std::cout << "game - reset mock\n";
-    // std::cout << "current dice are " << dice[0] << " " << dice[1] <<"\n";
     board.ResetMock();
     arbiter.OnMockChange();
 }
@@ -239,7 +255,7 @@ status_codes Game::MakeMove(const NardiCoord& start, bool dice_idx)
 {
     std::cout << "moving from " << start.AsStr() << " by " << dice[dice_idx] << "\n";
     UseDice(dice_idx);
-    if(arbiter.DiceRemovesPiece(start, dice_idx))
+    if(arbiter.DiceRemovesFrom(start, dice_idx))
         return RemovePiece(start);
     else
         return MakeMove(start, board._realBoard.CoordAfterDistance(start, dice[dice_idx]) );
@@ -292,8 +308,6 @@ Game::Arbiter::Arbiter(Game& g) :  _g(g), _prevMonitor(_g), _blockMonitor(_g)
 
 std::pair<status_codes, NardiCoord> Game::Arbiter::CanMoveByDice(const NardiCoord& start, bool dice_idx)
 {
-    // std::cout << "called without problems - canmovebydice\n";
-
     status_codes can_start = _g.board._mockBoard.ValidStart(start);
     if(can_start != status_codes::SUCCESS)
         return {can_start, {} };
@@ -306,15 +320,8 @@ std::pair<status_codes, NardiCoord> Game::Arbiter::CanFinishByDice(const NardiCo
     if(!CanUseMockDice(dice_idx))
         return {status_codes::DICE_USED_ALREADY, {} };
 
-    for( const auto& coord : _movables.at(dice_idx))
-    {
-        if(coord == start)
-            return { status_codes::SUCCESS, _g.board._realBoard.CoordAfterDistance(start, _g.dice[dice_idx]) };
-    }
-
-    // std::cout << "not found in movables, tried " << start.AsStr() << " with dice " << _g.dice[dice_idx] << "\n";
-    //std::cout << "dice usable\n";
-
+    // look-up in precomputed legal moves for efficiency - later `
+    
     NardiCoord final_dest = _g.board._realBoard.CoordAfterDistance(start, _g.dice[dice_idx]);
     status_codes result = _g.board._mockBoard.WellDefinedEnd(start, final_dest);
 
@@ -331,13 +338,13 @@ std::pair<status_codes, NardiCoord> Game::Arbiter::CanFinishByDice(const NardiCo
         else if(_prevMonitor.Illegal(start, dice_idx))
             return {status_codes::PREVENTS_COMPLETION, {} }; 
     }
-    else if( DiceRemovesPiece(start, dice_idx) )
+    else if( DiceRemovesFrom(start, dice_idx) )
         return {status_codes::SUCCESS, {}};
     
     return {result, final_dest};
 }
 
-bool Game::Arbiter::DiceRemovesPiece(const NardiCoord& start, bool dice_idx)
+bool Game::Arbiter::DiceRemovesFrom(const NardiCoord& start, bool dice_idx)
 {
     if(!_g.board._mockBoard.CurrPlayerInEndgame())
         return false;
@@ -436,6 +443,7 @@ void Game::Arbiter::UpdateMovables()
     {
         std::vector<NardiCoord> candidates(_g.PlayerGoesByMockDice(0).begin(), _g.PlayerGoesByMockDice(0).end());
         // std::cout << "updating movables for dice: " << _g.dice[0] << "\n";
+
 
         for(const auto& coord : candidates)
         {
@@ -607,7 +615,7 @@ void Game::LegalSeqComputer::dfs(std::vector<StartAndDice>& seq)
 {
     std::array< std::vector<NardiCoord>, 2 > movables = {_g.arbiter.GetMovables(0), _g.arbiter.GetMovables(1) }; 
         // bypass legality check by only giving pre-approved legal moves
-
+        
     if(movables.at(0).size() + movables.at(1).size() == 0)  // no moves left
     {
         if(!seq.empty())    // only care about non-empty move sequences
@@ -644,6 +652,7 @@ bool Game::LegalSeqComputer::ForceFirstMove()
     if (_g.turn_number[_g.board.PlayerIdx()] == 1 && _g.doubles_rolled && (_g.dice[0] == 4 || _g.dice[0] == 6 ) ) // first move exception
     {
         int dist = _g.dice[0] * (1 + (_g.dice[0] == 4) );    // 8 if double 4, else 6
+
         NardiCoord head(_g.board.PlayerIdx(), 0);
         NardiCoord dest(head.row, dist);
 
@@ -657,18 +666,3 @@ bool Game::LegalSeqComputer::ForceFirstMove()
 
     return false;
 }
-
-/*
-current board position vs start - move order used to get there may not be unique but the dice used are:
-
-pf:
-
-case no doubles:
-    either 0, 1, or 2 pieces moved, 0 case trivial, if 1 piece then just trace the path to the source (missing a piece now)
-    and see how far we've gone and use distance to figure out dice used, if 2 pieces then clearly we used both dice
-
-case doubles:
-    0 pieces moved trivial. Moving from source A to source B then moving from source B is the same as moving from B then 
-    moving from A to B in terms of dice usages. Therefore, for each moved piece, just backtrack to the nearest source recursively
-    counting dice usages along the way
-*/
