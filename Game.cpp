@@ -1,6 +1,7 @@
-#include "NardiGame.h"
+#include "Game.h"
 #include "ReaderWriter.h"
 
+using namespace Nardi;
 
 ///////////////////////////
 ////////   Game   ////////
@@ -21,7 +22,7 @@ void Game::AttachReaderWriter(ReaderWriter* r)
 
 ///////////// Getters /////////////
 
-const NardiBoard& Game::GetBoardRef() const
+const Board& Game::GetBoardRef() const
 {
     return board._realBoard;
 }
@@ -37,15 +38,15 @@ int Game::GetDice(bool idx) const
 const ReaderWriter* Game::GetConstRW() 
 {   return rw;   }
 
-const std::unordered_set<NardiCoord>& Game::PlayerGoesByMockDice(bool dice_idx) const
+const std::unordered_set<Coord>& Game::PlayerGoesByMockDice(bool dice_idx) const
 {   return board._mockBoard.PlayerGoesByDist(dice[dice_idx]);   }
 
-const std::unordered_set<NardiCoord>& Game::PlayerGoesByDice(bool dice_idx) const
+const std::unordered_set<Coord>& Game::PlayerGoesByDice(bool dice_idx) const
 {   
     return board._realBoard.PlayerGoesByDist(dice[dice_idx]);   
 }
 
-NardiCoord Game::PlayerHead() const
+Coord Game::PlayerHead() const
 {   return {board.PlayerIdx(), 0};   }
 
 Game::BadBlockMonitor::block_state Game::Arbiter::BlockState() const
@@ -87,7 +88,7 @@ status_codes Game::OnRoll()
     return arbiter.OnRoll();
 }
 
-status_codes Game::TryStart(const NardiCoord& start)
+status_codes Game::TryStart(const Coord& start)
 {
     board.ResetMock();
     //std::cout << "called TryStart\n";
@@ -98,7 +99,7 @@ status_codes Game::TryStart(const NardiCoord& start)
     return s;
 }
 
-status_codes Game::TryFinishMove(const NardiCoord& start, const NardiCoord& end) // assumes start already checked
+status_codes Game::TryFinishMove(const Coord& start, const Coord& end) // assumes start already checked
 {
     std::cout << "trying to complete move from " << start.AsStr() << " to " << end.AsStr() << "\n";
     board.ResetMock();
@@ -113,7 +114,7 @@ status_codes Game::TryFinishMove(const NardiCoord& start, const NardiCoord& end)
     }
 }
 
-status_codes Game::TryMoveByDice(const NardiCoord& start, bool dice_idx)
+status_codes Game::TryMoveByDice(const Coord& start, bool dice_idx)
 {
     std::cout << "trying to move by dice " << dice[dice_idx] << " from " << start.AsStr() << "\n";
     board.ResetMock(); // could be redundant, but safe
@@ -130,7 +131,7 @@ status_codes Game::TryMoveByDice(const NardiCoord& start, bool dice_idx)
         return MakeMove(start, dice_idx);
 }
 
-status_codes Game::MakeMove(const NardiCoord& start, const NardiCoord& end)
+status_codes Game::MakeMove(const Coord& start, const Coord& end)
 {
     board.Move(start, end);
 
@@ -139,7 +140,7 @@ status_codes Game::MakeMove(const NardiCoord& start, const NardiCoord& end)
     return arbiter.OnMove();
 }
 
-bool Game::SilentMock(const NardiCoord& start, const NardiCoord& end)
+bool Game::SilentMock(const Coord& start, const Coord& end)
 {
     if(end.OutOfBounds() || start.OutOfBounds())
     {
@@ -169,7 +170,7 @@ bool Game::SilentMock(const NardiCoord& start, const NardiCoord& end)
 }
 
 
-bool Game::UndoSilentMock(const NardiCoord& start, const NardiCoord& end)
+bool Game::UndoSilentMock(const Coord& start, const Coord& end)
 {
     if(end.OutOfBounds() || start.OutOfBounds())
     {
@@ -197,9 +198,9 @@ bool Game::UndoSilentMock(const NardiCoord& start, const NardiCoord& end)
     return true;
 }
 
-bool Game::SilentMock(const NardiCoord& start, bool dice_idx)
+bool Game::SilentMock(const Coord& start, bool dice_idx)
 {
-    NardiCoord dest = board._realBoard.CoordAfterDistance(start, dice[dice_idx]);
+    Coord dest = board._realBoard.CoordAfterDistance(start, dice[dice_idx]);
 
     if(board._mockBoard.CurrPlayerInEndgame() && arbiter.DiceRemovesFrom(start, dice_idx))
         board.Mock_Remove(start);
@@ -212,9 +213,9 @@ bool Game::SilentMock(const NardiCoord& start, bool dice_idx)
     return true;
 }
 
-bool Game::UndoSilentMock(const NardiCoord& start, bool dice_idx)
+bool Game::UndoSilentMock(const Coord& start, bool dice_idx)
 {
-    NardiCoord dest = board._realBoard.CoordAfterDistance(start, dice[dice_idx]);
+    Coord dest = board._realBoard.CoordAfterDistance(start, dice[dice_idx]);
 
     if(board._mockBoard.CurrPlayerInEndgame() && arbiter.DiceRemovesFrom(start, dice_idx)) // will this work ? `
         board.Mock_UndoRemove(start);
@@ -227,13 +228,13 @@ bool Game::UndoSilentMock(const NardiCoord& start, bool dice_idx)
     return true;
 }
 
-void Game::MockAndUpdateByDice(const NardiCoord& start, bool dice_idx)
+void Game::MockAndUpdateByDice(const Coord& start, bool dice_idx)
 {
     SilentMock(start, dice_idx);
     arbiter.OnMockChange();
 }
 
-void Game::UndoMockAndUpdateByDice(const NardiCoord& start, bool dice_idx)
+void Game::UndoMockAndUpdateByDice(const Coord& start, bool dice_idx)
 {
     UndoSilentMock(start, dice_idx);
     arbiter.OnMockChange();
@@ -251,7 +252,7 @@ void Game::RealizeMock()
     arbiter.OnMockChange();
 }
 
-status_codes Game::MakeMove(const NardiCoord& start, bool dice_idx)
+status_codes Game::MakeMove(const Coord& start, bool dice_idx)
 {
     std::cout << "moving from " << start.AsStr() << " by " << dice[dice_idx] << "\n";
     UseDice(dice_idx);
@@ -261,7 +262,7 @@ status_codes Game::MakeMove(const NardiCoord& start, bool dice_idx)
         return MakeMove(start, board._realBoard.CoordAfterDistance(start, dice[dice_idx]) );
 }
 
-status_codes Game::RemovePiece(const NardiCoord& start)
+status_codes Game::RemovePiece(const Coord& start)
 {
     board.Remove(start);
     ReAnimate();
@@ -306,7 +307,7 @@ Game::Arbiter::Arbiter(Game& g) :  _g(g), _prevMonitor(_g), _blockMonitor(_g)
 
 ///////////// Legality /////////////
 
-std::pair<status_codes, NardiCoord> Game::Arbiter::CanMoveByDice(const NardiCoord& start, bool dice_idx)
+std::pair<status_codes, Coord> Game::Arbiter::CanMoveByDice(const Coord& start, bool dice_idx)
 {
     status_codes can_start = _g.board._mockBoard.ValidStart(start);
     if(can_start != status_codes::SUCCESS)
@@ -315,14 +316,14 @@ std::pair<status_codes, NardiCoord> Game::Arbiter::CanMoveByDice(const NardiCoor
         return CanFinishByDice(start, dice_idx);
 }
 
-std::pair<status_codes, NardiCoord> Game::Arbiter::CanFinishByDice(const NardiCoord& start, bool dice_idx)
+std::pair<status_codes, Coord> Game::Arbiter::CanFinishByDice(const Coord& start, bool dice_idx)
 {
     if(!CanUseMockDice(dice_idx))
         return {status_codes::DICE_USED_ALREADY, {} };
 
     // look-up in precomputed legal moves for efficiency - later `
     
-    NardiCoord final_dest = _g.board._realBoard.CoordAfterDistance(start, _g.dice[dice_idx]);
+    Coord final_dest = _g.board._realBoard.CoordAfterDistance(start, _g.dice[dice_idx]);
     status_codes result = _g.board._mockBoard.WellDefinedEnd(start, final_dest);
 
     //std::cout << "board legal?\n";
@@ -344,12 +345,12 @@ std::pair<status_codes, NardiCoord> Game::Arbiter::CanFinishByDice(const NardiCo
     return {result, final_dest};
 }
 
-bool Game::Arbiter::DiceRemovesFrom(const NardiCoord& start, bool dice_idx)
+bool Game::Arbiter::DiceRemovesFrom(const Coord& start, bool dice_idx)
 {
     if(!_g.board._mockBoard.CurrPlayerInEndgame())
         return false;
     
-    int pos_from_end = COL - start.col;
+    int pos_from_end = COLS - start.col;
     return (pos_from_end == _g.dice[dice_idx] ||  // dice val exactly
             (pos_from_end >= _g.board._mockBoard.MaxNumOcc().at(_g.board.PlayerIdx()) && _g.dice[dice_idx] > pos_from_end) );  
                 // largest available is less than dice
@@ -361,7 +362,7 @@ bool Game::Arbiter::CanUseMockDice(bool idx, int n) const
     return ( new_val <= 1 + _g.doubles_rolled*(3 - _g.times_mockdice_used[!idx]));
 }
 
-std::pair<status_codes, std::array<int, 2>> Game::Arbiter::LegalMove(const NardiCoord& start, const NardiCoord& end)    
+std::pair<status_codes, std::array<int, 2>> Game::Arbiter::LegalMove(const Coord& start, const Coord& end)    
 // array represents how many times each dice is used, 0 or 1 usually, in case of doubles can be up to 4
 {    
     int d = _g.board._realBoard.GetDistance(start, end);
@@ -389,12 +390,12 @@ std::pair<status_codes, std::array<int, 2>> Game::Arbiter::LegalMove(const Nardi
     return {status_codes::NO_PATH, {}};
 }
 
-std::pair<status_codes, NardiCoord> Game::Arbiter::LegalMove_2step(const NardiCoord& start)  
+std::pair<status_codes, Coord> Game::Arbiter::LegalMove_2step(const Coord& start)  
 {
     if(!CanUseMockDice(0) || !CanUseMockDice(1))
         return {status_codes::DICE_USED_ALREADY, {} };
 
-    NardiCoord end = _g.board._realBoard.CoordAfterDistance(start, _g.dice[0] + _g.dice[1]);
+    Coord end = _g.board._realBoard.CoordAfterDistance(start, _g.dice[0] + _g.dice[1]);
     status_codes second_step = _g.board._mockBoard.WellDefinedEnd(start, end);
 
     if(second_step != status_codes::SUCCESS)
@@ -405,7 +406,7 @@ std::pair<status_codes, NardiCoord> Game::Arbiter::LegalMove_2step(const NardiCo
         
     bool first_dice = 0;
 
-    NardiCoord mid = _g.board._realBoard.CoordAfterDistance(start, _g.dice[first_dice]);
+    Coord mid = _g.board._realBoard.CoordAfterDistance(start, _g.dice[first_dice]);
     status_codes status = _g.board._mockBoard.WellDefinedEnd(start, mid);
 
     if(status != status_codes::SUCCESS)
@@ -424,12 +425,12 @@ std::pair<status_codes, NardiCoord> Game::Arbiter::LegalMove_2step(const NardiCo
     return { status, end };
 }
 
-bool Game::Arbiter::IllegalBlocking(const NardiCoord& start, bool idx)
+bool Game::Arbiter::IllegalBlocking(const Coord& start, bool idx)
 {
     return _blockMonitor.Illegal(start, idx);
 }
 
-bool Game::Arbiter::IllegalBlocking(const NardiCoord& start, const NardiCoord& end)
+bool Game::Arbiter::IllegalBlocking(const Coord& start, const Coord& end)
 {
     return _blockMonitor.Illegal(start, end);
 }
@@ -441,7 +442,7 @@ void Game::Arbiter::UpdateMovables()
 
     if(CanUseMockDice(0))
     {
-        std::vector<NardiCoord> candidates(_g.PlayerGoesByMockDice(0).begin(), _g.PlayerGoesByMockDice(0).end());
+        std::vector<Coord> candidates(_g.PlayerGoesByMockDice(0).begin(), _g.PlayerGoesByMockDice(0).end());
         // std::cout << "updating movables for dice: " << _g.dice[0] << "\n";
 
 
@@ -469,7 +470,7 @@ void Game::Arbiter::UpdateMovables()
             _movables.at(1) = _movables.at(0);
         else
         {
-            std::vector<NardiCoord> candidates(_g.PlayerGoesByMockDice(1).begin(), _g.PlayerGoesByMockDice(1).end());
+            std::vector<Coord> candidates(_g.PlayerGoesByMockDice(1).begin(), _g.PlayerGoesByMockDice(1).end());
             // std::cout << "updating movables for dice: " << _g.dice[1] << "\n";
             for( const auto& coord : candidates )
             {
@@ -481,14 +482,14 @@ void Game::Arbiter::UpdateMovables()
     }
 }
 
-const std::vector<NardiCoord>& Game::Arbiter::GetMovables(bool idx)
+const std::vector<Coord>& Game::Arbiter::GetMovables(bool idx)
 {
     return _movables.at(idx);
 }
 
-std::unordered_set<NardiCoord> Game::Arbiter::GetTwoSteppers(size_t max_qty, const std::array<std::vector<NardiCoord>, 2>& to_search)
+std::unordered_set<Coord> Game::Arbiter::GetTwoSteppers(size_t max_qty, const std::array<std::vector<Coord>, 2>& to_search)
 {
-    std::unordered_set<NardiCoord> two_steppers;
+    std::unordered_set<Coord> two_steppers;
 
     // std::cout << "in 2steppers, searching among: \n";
     for (const auto& c : to_search.at(0))
@@ -531,11 +532,11 @@ std::unordered_set<NardiCoord> Game::Arbiter::GetTwoSteppers(size_t max_qty, con
     return two_steppers;
 }
 
-std::unordered_set<NardiCoord> Game::Arbiter::GetTwoSteppers(size_t max_qty)
+std::unordered_set<Coord> Game::Arbiter::GetTwoSteppers(size_t max_qty)
 {
-    std::array<std::vector<NardiCoord>, 2> to_search = { 
-                    std::vector<NardiCoord>(_g.PlayerGoesByMockDice(0).begin(), _g.PlayerGoesByMockDice(0).end()),
-                    std::vector<NardiCoord>(_g.PlayerGoesByMockDice(1).begin(), _g.PlayerGoesByMockDice(1).end())  };
+    std::array<std::vector<Coord>, 2> to_search = { 
+                    std::vector<Coord>(_g.PlayerGoesByMockDice(0).begin(), _g.PlayerGoesByMockDice(0).end()),
+                    std::vector<Coord>(_g.PlayerGoesByMockDice(1).begin(), _g.PlayerGoesByMockDice(1).end())  };
     return GetTwoSteppers(max_qty, to_search);
 }
 
@@ -613,9 +614,9 @@ void Game::LegalSeqComputer::ComputeAllLegalMoves()
 
 void Game::LegalSeqComputer::dfs(std::vector<StartAndDice>& seq)
 {
-    std::array< std::vector<NardiCoord>, 2 > movables = {_g.arbiter.GetMovables(0), _g.arbiter.GetMovables(1) }; 
+    std::array< std::vector<Coord>, 2 > movables = {_g.arbiter.GetMovables(0), _g.arbiter.GetMovables(1) }; 
         // bypass legality check by only giving pre-approved legal moves
-        
+
     if(movables.at(0).size() + movables.at(1).size() == 0)  // no moves left
     {
         if(!seq.empty())    // only care about non-empty move sequences
@@ -653,8 +654,8 @@ bool Game::LegalSeqComputer::ForceFirstMove()
     {
         int dist = _g.dice[0] * (1 + (_g.dice[0] == 4) );    // 8 if double 4, else 6
 
-        NardiCoord head(_g.board.PlayerIdx(), 0);
-        NardiCoord dest(head.row, dist);
+        Coord head(_g.board.PlayerIdx(), 0);
+        Coord dest(head.row, dist);
 
         _g.board.Move(head, dest);
         _g.board.Move(head, dest);

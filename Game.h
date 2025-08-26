@@ -1,7 +1,7 @@
 #pragma once
 
 #include "Auxilaries.h"
-#include "NardiBoard.h"
+#include "Board.h"
 
 #include <array>
 #include <stack>
@@ -29,6 +29,9 @@ undo move feature
 
 */
 
+namespace Nardi
+{
+
 class ReaderWriter;
 
 class Game
@@ -41,9 +44,9 @@ class Game
 
         // Gameplay
         status_codes RollDice();
-        status_codes TryStart(const NardiCoord& s);
-        status_codes TryFinishMove(const NardiCoord& start, const NardiCoord& end);     // No Removals
-        status_codes TryMoveByDice(const NardiCoord& start, bool dice);                 // Removals and regular moves
+        status_codes TryStart(const Coord& s);
+        status_codes TryFinishMove(const Coord& start, const Coord& end);     // No Removals
+        status_codes TryMoveByDice(const Coord& start, bool dice);                 // Removals and regular moves
         
         void SwitchPlayer();
 
@@ -51,7 +54,7 @@ class Game
         bool GameIsOver() const;
 
         // Getters
-        const NardiBoard& GetBoardRef() const;
+        const Board& GetBoardRef() const;
         const std::vector< std::vector<StartAndDice> >& ViewAllLegalMoveSeqs() const;
 
         int GetDice(bool idx) const;
@@ -70,14 +73,14 @@ class Game
             public:
                 PreventionMonitor(Game& g);
 
-                bool Illegal(const NardiCoord& start, bool dice_idx);
+                bool Illegal(const Coord& start, bool dice_idx);
                 bool CheckNeeded();
             private:
                 Game& _g;
                 bool _completable;
                 std::array<int, 2> turn_last_updated;
      
-                bool MakesSecondStep(const NardiCoord& start) const;   
+                bool MakesSecondStep(const Coord& start) const;   
                 bool TurnCompletable();
                 void SetCompletable();
         };
@@ -93,8 +96,8 @@ class Game
                     BAD_BLOCK
                 };
 
-                bool Illegal(const NardiCoord& start, bool dice_idx);
-                bool Illegal(const NardiCoord& start, const NardiCoord& end);
+                bool Illegal(const Coord& start, bool dice_idx);
+                bool Illegal(const Coord& start, const Coord& end);
                 
                 bool PreConditions();
 
@@ -110,17 +113,17 @@ class Game
                 block_state _state;
 
                 unsigned _blockLength;
-                NardiCoord _blockStart;
+                Coord _blockStart;
 
                 bool CheckMockedState();
 
-                bool BlockageAround(const NardiCoord& end);
+                bool BlockageAround(const Coord& end);
                 bool PieceAhead();
                 bool WillBeFixable();
                 bool BlockingAll();
                 bool StillBlocking();
 
-                bool Unblocks(const NardiCoord& start, const NardiCoord& end);
+                bool Unblocks(const Coord& start, const Coord& end);
                 bool Unblocked();
         };
 
@@ -131,22 +134,22 @@ class Game
                 Arbiter(Game& gm);
 
                 // Legality Checks and helpers
-                std::pair<status_codes, NardiCoord> CanMoveByDice(const NardiCoord& start, bool dice_idx);
-                std::pair<status_codes, NardiCoord> CanFinishByDice   (const NardiCoord& start, bool dice_idx);
-                std::pair<status_codes, std::array<int, 2>> LegalMove(const NardiCoord& start, const NardiCoord& end);
-                std::pair<status_codes, NardiCoord> LegalMove_2step(const NardiCoord& start);
+                std::pair<status_codes, Coord> CanMoveByDice(const Coord& start, bool dice_idx);
+                std::pair<status_codes, Coord> CanFinishByDice   (const Coord& start, bool dice_idx);
+                std::pair<status_codes, std::array<int, 2>> LegalMove(const Coord& start, const Coord& end);
+                std::pair<status_codes, Coord> LegalMove_2step(const Coord& start);
 
-                bool DiceRemovesFrom(const NardiCoord& start, bool d_idx);
+                bool DiceRemovesFrom(const Coord& start, bool d_idx);
 
                 bool CanUseMockDice(bool idx, int n_times = 1) const;
 
-                bool IllegalBlocking(const NardiCoord& start, bool d_idx);
-                bool IllegalBlocking(const NardiCoord& start, const NardiCoord& end);
+                bool IllegalBlocking(const Coord& start, bool d_idx);
+                bool IllegalBlocking(const Coord& start, const Coord& end);
                 
                 // Getters
-                const std::vector<NardiCoord>& GetMovables(bool idx);
-                std::unordered_set<NardiCoord> GetTwoSteppers(size_t max_qty, const std::array<std::vector<NardiCoord>, 2>& to_search);
-                std::unordered_set<NardiCoord> GetTwoSteppers(size_t max_qty);
+                const std::vector<Coord>& GetMovables(bool idx);
+                std::unordered_set<Coord> GetTwoSteppers(size_t max_qty, const std::array<std::vector<Coord>, 2>& to_search);
+                std::unordered_set<Coord> GetTwoSteppers(size_t max_qty);
 
                 BadBlockMonitor::block_state BlockState() const;
 
@@ -162,7 +165,7 @@ class Game
 
             private:
                 Game& _g;
-                std::array< std::vector<NardiCoord>, 2 >  _movables;
+                std::array< std::vector<Coord>, 2 >  _movables;
 
                 PreventionMonitor   _prevMonitor;
                 BadBlockMonitor     _blockMonitor;
@@ -179,14 +182,14 @@ class Game
                 BoardWithMocker(Game& g);
 
                 // boards 
-                NardiBoard _realBoard;
-                NardiBoard _mockBoard;
+                Board _realBoard;
+                Board _mockBoard;
 
                 // wrap with real Board for convenience
                 bool PlayerIdx() const;
                 int PlayerSign() const;
 
-                bool IsPlayerHead(const NardiCoord& c) const;
+                bool IsPlayerHead(const Coord& c) const;
 
                 // check
                 bool MisMatch() const;
@@ -195,14 +198,14 @@ class Game
                 void ResetMock();
                 void RealizeMock();
             
-                void Move(const NardiCoord& start, const NardiCoord& end);
-                void Remove(const NardiCoord& to_remove);
+                void Move(const Coord& start, const Coord& end);
+                void Remove(const Coord& to_remove);
 
-                void Mock_Move(const NardiCoord& start, const NardiCoord& end);
-                void Mock_UndoMove(const NardiCoord& start, const NardiCoord& end);
+                void Mock_Move(const Coord& start, const Coord& end);
+                void Mock_UndoMove(const Coord& start, const Coord& end);
 
-                void Mock_Remove(const NardiCoord& to_remove);
-                void Mock_UndoRemove(const NardiCoord& to_remove);
+                void Mock_Remove(const Coord& to_remove);
+                void Mock_UndoRemove(const Coord& to_remove);
 
                 void SwitchPlayer();
 
@@ -245,10 +248,10 @@ class Game
         LegalSeqComputer legal_turns;
 
         // Getters
-        const std::unordered_set<NardiCoord>& PlayerGoesByMockDice(bool dice_idx) const;
-        const std::unordered_set<NardiCoord>& PlayerGoesByDice(bool dice_idx) const;
+        const std::unordered_set<Coord>& PlayerGoesByMockDice(bool dice_idx) const;
+        const std::unordered_set<Coord>& PlayerGoesByDice(bool dice_idx) const;
 
-        NardiCoord PlayerHead() const;
+        Coord PlayerHead() const;
 
         // Dice Actions
         status_codes OnRoll();
@@ -261,22 +264,25 @@ class Game
         void AnimateDice();
         
         // Moving
-        status_codes MakeMove(const NardiCoord& start, const NardiCoord& end);
-        status_codes MakeMove(const NardiCoord& start, bool dice_idx);
+        status_codes MakeMove(const Coord& start, const Coord& end);
+        status_codes MakeMove(const Coord& start, bool dice_idx);
 
-        status_codes RemovePiece(const NardiCoord& start);
+        status_codes RemovePiece(const Coord& start);
 
         // Mocking
-        bool SilentMock(const NardiCoord& start, const NardiCoord& end);
-        bool SilentMock(const NardiCoord& start, bool dice_idx);
+        bool SilentMock(const Coord& start, const Coord& end);
+        bool SilentMock(const Coord& start, bool dice_idx);
     
-        // void MockAndUpdate(const NardiCoord& start, const NardiCoord& end);
-        bool UndoSilentMock(const NardiCoord& start, const NardiCoord& end);
-        bool UndoSilentMock(const NardiCoord& start, bool dice_idx);
+        // void MockAndUpdate(const Coord& start, const Coord& end);
+        bool UndoSilentMock(const Coord& start, const Coord& end);
+        bool UndoSilentMock(const Coord& start, bool dice_idx);
 
-        // void UndoMockAndUpdate(const NardiCoord& start, const NardiCoord& end);
-        void MockAndUpdateByDice(const NardiCoord& start, bool dice_idx);
-        void UndoMockAndUpdateByDice(const NardiCoord& start, bool dice_idx);
+        // void UndoMockAndUpdate(const Coord& start, const Coord& end);
+        void MockAndUpdateByDice(const Coord& start, bool dice_idx);
+        void UndoMockAndUpdateByDice(const Coord& start, bool dice_idx);
         void RealizeMock();
         void ResetMock();
 };
+
+
+}   // namespace Nardi

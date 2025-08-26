@@ -1,5 +1,7 @@
 #include "Controller.h"
 
+using namespace Nardi;
+
 Controller::Controller(Game& game) : g(game), start(), start_selected(false), dice_rolled(false), quit_requested(false)  {}
 
 Controller::~Controller()
@@ -53,8 +55,8 @@ status_codes Controller::ReceiveCommand(const Command& cmd)
         else if(start_selected)
         {
             //std::cout << "\n\nstart_selected\n\n";
-            if(std::holds_alternative<NardiCoord>(cmd.payload))
-                outcome = g.TryFinishMove(start, std::get<NardiCoord>(cmd.payload) ); // this makes the move if possible, triggering redraws
+            if(std::holds_alternative<Coord>(cmd.payload))
+                outcome = g.TryFinishMove(start, std::get<Coord>(cmd.payload) ); // this makes the move if possible, triggering redraws
             else if (std::holds_alternative<bool>(cmd.payload)){
                 //std::cout << "\n\nattempting movebydice\n\n";
                 outcome = g.TryMoveByDice(start, std::get<bool>(cmd.payload));
@@ -70,13 +72,13 @@ status_codes Controller::ReceiveCommand(const Command& cmd)
         else
         {
             //std::cout << "trying start select\n";
-            if(!std::holds_alternative<NardiCoord>(cmd.payload))
+            if(!std::holds_alternative<Coord>(cmd.payload))
                 break;  // attempted to move by dice without selecting start, or monostate payload
             
-            outcome = g.TryStart(std::get<NardiCoord>(cmd.payload));
+            outcome = g.TryStart(std::get<Coord>(cmd.payload));
             if (outcome == status_codes::SUCCESS)
             {
-                start = std::get<NardiCoord>(cmd.payload);
+                start = std::get<Coord>(cmd.payload);
                 start_selected = true;
             }
         }

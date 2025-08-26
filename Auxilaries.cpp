@@ -1,37 +1,40 @@
 #include "Auxilaries.h"
 
+namespace Nardi
+{
+
 // View treats board as it sees it, but board reverses row 1. Command makes sure this is consistent upon delivery to controller
 
 ///////////// Coord /////////////
 
-bool NardiCoord::operator==(const NardiCoord& rhs) const
+bool Coord::operator==(const Coord& rhs) const
 {   return (this->row == rhs.row && this->col == rhs.col);   }
  
-bool NardiCoord::OutOfBounds() const
-{   return (row < 0 || row >= ROW || col < 0 || col >= COL);    }
+bool Coord::OutOfBounds() const
+{   return (row < 0 || row >= ROWS || col < 0 || col >= COLS);    }
 
-bool NardiCoord::InBounds() const
+bool Coord::InBounds() const
 {   return !OutOfBounds();   }
 
-void NardiCoord::Print() const
+void Coord::Print() const
 {
     std::cout << "(" << row << ", " << col << ")\n";
 }
 
-std::string NardiCoord::AsStr() const
+std::string Coord::AsStr() const
 {   return "(" + std::to_string(row) + ", " + std::to_string(col) + ")";   }
 
 
 ///////////// Command /////////////
 
-Command::Command(Actions a, NardiCoord coord) : action(a)
+Command::Command(Actions a, Coord coord) : action(a)
 {
-    payload.emplace<NardiCoord>( coord );
+    payload.emplace<Coord>( coord );
 }
 
 Command::Command(Actions a, int r, int c) : action(a)
 {
-    payload.emplace<NardiCoord>(r, c);
+    payload.emplace<Coord>(r, c);
 }
 
 Command::Command(Actions a, bool dice_idx) : action(a), payload(dice_idx) {}
@@ -40,10 +43,10 @@ Command::Command(Actions a, bool dice_idx) : action(a), payload(dice_idx) {}
 ///////////// Misc Utilities /////////////
 
 
-void VisualToGameCoord(NardiCoord& coord)
+void VisualToGameCoord(Coord& coord)
 {
     if (coord.row == 0)
-        coord.col = COL - coord.col - 1;
+        coord.col = COLS - coord.col - 1;
 }
 
 int BoolToSign(bool p_idx)
@@ -98,11 +101,11 @@ void DispErrorCode(status_codes c)
     std::cout << "\n\n";
 }
 
-void DisplayBoard(const std::array<std::array<int, COL>, ROW>& brd)
+void DisplayBoard(const std::array<std::array<int, COLS>, ROWS>& brd)
 {
-    for(int i = 0; i < ROW; ++i)
+    for(int i = 0; i < ROWS; ++i)
     {
-        for (int j = 0; j < COL; ++j)
+        for (int j = 0; j < COLS; ++j)
         {
             std::cout << brd[i][j] << "\t";
         }
@@ -114,12 +117,14 @@ void DisplayBoard(const std::array<std::array<int, COL>, ROW>& brd)
 std::string Board2Str(const boardConfig& b)
 {
     std::string ret;
-    for(int r = 0; r < ROW; ++r)
+    for(int r = 0; r < ROWS; ++r)
     {
-        for(int c = 0; c < COL; ++c)
+        for(int c = 0; c < COLS; ++c)
         {
             ret += std::to_string(b.at(r).at(c)) + " ";
         }
     }
     return ret;
 }
+
+}   // namespace Nardi

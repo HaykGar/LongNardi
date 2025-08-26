@@ -1,6 +1,6 @@
 #pragma once
 
-#include "NardiGame.h"
+#include "Game.h"
 #include "Controller.h"
 #include "ReaderWriter.h"
 
@@ -12,6 +12,9 @@
 Manages the full Model-View-Controller flow and set-up between game, controller, and ReaderWriter
 
 */
+
+namespace Nardi
+{
 
 using ReaderWriterFactory = std::function<std::unique_ptr<ReaderWriter>(Game&, Controller&) >;
 
@@ -46,3 +49,5 @@ bool NardiMVC::GameIsOver() const
 {
     return model.GameIsOver();
 }
+
+}   // namespace Nardi

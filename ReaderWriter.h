@@ -1,7 +1,10 @@
 #pragma once
 
-#include "NardiGame.h"
+#include "Game.h"
 #include "Controller.h"
+
+namespace Nardi
+{
 
 class ReaderWriter
 {
@@ -25,5 +28,4 @@ class ReaderWriter
         virtual Command Input_to_Command() const = 0;
 };
 
-
-
+}   // namespace Nardi

@@ -1,5 +1,7 @@
 #include "Testing.h"
 
+using namespace Nardi;
+
 //////////////////////////////
 /////    TestBuilder    /////
 ////////////////////////////
@@ -13,14 +15,14 @@ TestBuilder::TestBuilder()
     _game->turn_number = {2, 2}; // avoiding first turn case unless explicitly requested
 }
 
-void TestBuilder::StartPreRoll(bool p_idx, const std::array<std::array<int, COL>, ROW>& b)
+void TestBuilder::StartPreRoll(bool p_idx, const std::array<std::array<int, COLS>, ROWS>& b)
 {
     withPlayer(p_idx);
     withBoard(b);
     ResetControllerState();
 }
 
-status_codes TestBuilder::StartOfTurn(bool p_idx, const std::array<std::array<int, COL>, ROW>& b, int d1, int d2)
+status_codes TestBuilder::StartOfTurn(bool p_idx, const std::array<std::array<int, COLS>, ROWS>& b, int d1, int d2)
 {
     StartPreRoll(p_idx, b);
     return withDice(d1, d2);
@@ -49,7 +51,7 @@ void TestBuilder::withPlayer(bool p_idx)
         _game->board.SwitchPlayer();
 }
 
-void TestBuilder::withBoard(const std::array<std::array<int, COL>, ROW>& b)
+void TestBuilder::withBoard(const std::array<std::array<int, COLS>, ROWS>& b)
 {
     _game->board._realBoard.head_used = false;
     _game->board._realBoard.SetData(b);
@@ -83,9 +85,9 @@ status_codes TestBuilder::ReceiveCommand(const Command& cmd)
 void TestBuilder::PrintBoard() const
 {
     auto& brd = _game->GetBoardRef();
-    for(int r = 0; r < ROW; ++r)
+    for(int r = 0; r < ROWS; ++r)
     {
-        for (int c = 0; c < COL; ++c)
+        for (int c = 0; c < COLS; ++c)
         {
             std::cout << brd.at(r, c) << "\t";
         }

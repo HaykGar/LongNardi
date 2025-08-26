@@ -4,11 +4,14 @@
 #include <variant>
 #include <string>
 
-constexpr int ROW = 2;
-constexpr int COL = 12;
+namespace Nardi
+{
+
+constexpr int ROWS = 2;
+constexpr int COLS = 12;
 constexpr int PIECES_PER_PLAYER = 15;
 
-using boardConfig = std::array< std::array<int, COL>, ROW>;
+using boardConfig = std::array< std::array<int, COLS>, ROWS>;
 using dice = std::array<int, 2>;
 
 // enum classes for scoping and extra safety
@@ -39,12 +42,12 @@ enum class Actions
     NO_OP
 };   // later: add resign offer, mars offer
 
-struct NardiCoord
+struct Coord
 {
-    NardiCoord(int r, int c) : row(r), col(c) {}
-    NardiCoord() : row(-1), col(-1) {} // initialize out of bounds to force explicit assignment before use
+    Coord(int r, int c) : row(r), col(c) {}
+    Coord() : row(-1), col(-1) {} // initialize out of bounds to force explicit assignment before use
 
-    bool operator==(const NardiCoord& rhs) const;
+    bool operator==(const Coord& rhs) const;
     bool OutOfBounds() const;
     bool InBounds() const;
 
@@ -56,43 +59,49 @@ struct NardiCoord
 };
 
 struct StartAndDice{ 
-    StartAndDice(NardiCoord f, bool d) : _from(f), _diceIdx(d) {}
-    NardiCoord _from; 
+    StartAndDice(Coord f, bool d) : _from(f), _diceIdx(d) {}
+    Coord _from; 
     bool _diceIdx; 
 };
 
+}   // namespace Nardi
 
 namespace std 
 {
     template<>
-    struct hash<NardiCoord>
+    struct hash<Nardi::Coord>
     {
-        constexpr std::size_t operator()(const NardiCoord& c) const noexcept
+        constexpr std::size_t operator()(const Nardi::Coord& c) const noexcept
         {
             if(c.row < 0 || c.col < 0){
-                std::cerr << "Bad NardiCoord hashed\n";
-                return ROW*COL + 1;  // one after any valid coord
+                std::cerr << "Bad Coord hashed\n";
+                return Nardi::ROWS*Nardi::COLS + 1;  // one after any valid coord
             }
-            return COL * c.row + c.col;
+            return Nardi::COLS * c.row + c.col;
         }
     };
 } // namespace std
 
+namespace Nardi
+{
+
 struct Command // considering making this std::variant or something... 
 {
     Command(Actions a) : action(a) {}
-    Command(Actions a, NardiCoord coord);
+    Command(Actions a, Coord coord);
     Command(Actions a, int r, int c);
     Command(Actions a, bool dice_idx);
 
     Actions action;
-    std::variant<std::monostate, NardiCoord, bool> payload;
+    std::variant<std::monostate, Coord, bool> payload;
 };
 
-void VisualToGameCoord(NardiCoord& coord); // not needed currently, but for graphics later
+void VisualToGameCoord(Coord& coord); // not needed currently, but for graphics later
 int BoolToSign(bool p_idx);
 void DispErrorCode(status_codes code);
 
-void DisplayBoard(const std::array<std::array<int, COL>, ROW>& b);
+void DisplayBoard(const std::array<std::array<int, COLS>, ROWS>& b);
 
 std::string Board2Str(const boardConfig& b);
+
+}   // namespace Nardi

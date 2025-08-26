@@ -11,6 +11,8 @@
 
 #include <memory>   // for std::unique_ptr factory
 
+using namespace Nardi;
+
 class TerminalRW : public ReaderWriter
 {
     public:

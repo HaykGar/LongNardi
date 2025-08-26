@@ -1,6 +1,9 @@
 #pragma once
 
-#include "NardiGame.h"
+#include "Game.h"
+
+namespace Nardi
+{
 
 // Can add a print status function that switches on status and prints appropriate function, could be good for debugging 
         // not necessary
@@ -16,7 +19,7 @@ class Controller
         friend class TestBuilder;
     private:
         Game& g;
-        NardiCoord start;
+        Coord start;
         bool start_selected;
         bool dice_rolled;
         bool quit_requested;
@@ -30,3 +33,5 @@ bool Controller::QuitRequested() const
 {
     return quit_requested;
 }
+
+}   // namespace Nardi

@@ -1,7 +1,8 @@
 #include "NardiMVC.h"
 #include "TerminalRW.h"
-
 #include <iostream>
+
+using namespace Nardi;
 
 int main()
 {
@@ -12,10 +13,14 @@ int main()
 
     while(!manager.QuitRequested() && !manager.GameIsOver())
     {
-        std::cout << "Enter r to roll dice, u to undo, or q to quit. Otherwise, enter coordinates separated by white space\n";
+        manager.Animate();
+        std::cout << "Awaiting command\n";
         manager.AwaitUserCommand();
-        std::cout << "Command received, awaiting further commands\n";    // can be more specific later
+        std::cout << "Command received\n\n\n";    // can be more specific later
     }
+
+    if(manager.GameIsOver())
+        std::cout << "Game Over\n";
 
     return 0;
 }

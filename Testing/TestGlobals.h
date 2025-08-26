@@ -5,6 +5,8 @@
 
 #include "Auxilaries.h"
 
+using namespace Nardi;
+
 namespace TestGlobals
 {
 

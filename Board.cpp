@@ -1,8 +1,10 @@
-#include "NardiBoard.h"
+#include "Board.h"
+
+using namespace Nardi;
 
 ///////////// Constructor /////////////
 
-NardiBoard::NardiBoard() :      data {{ { PIECES_PER_PLAYER, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}, 
+Board::Board() :      data {{ { PIECES_PER_PLAYER, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}, 
                                         {-PIECES_PER_PLAYER, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0} }},
                                 pieces_per_player{ {PIECES_PER_PLAYER, PIECES_PER_PLAYER} },
                                 // data {{ { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}, 
@@ -17,21 +19,21 @@ NardiBoard::NardiBoard() :      data {{ { PIECES_PER_PLAYER, 0, 0, 0, 0, 0, 0, 0
     // ConstructAvailabilitySets();
 }
 
-NardiBoard::NardiBoard(const std::array<std::array<int, COL>, ROW>& d) : player_idx(0), player_sign(BoolToSign(player_idx)), head_used(false)
+Board::Board(const std::array<std::array<int, COLS>, ROWS>& d) : player_idx(0), player_sign(BoolToSign(player_idx)), head_used(false)
 {
     SetData(d);
 }
 
 ///////////// Updates and Actions /////////////
 
-void NardiBoard::Move(const NardiCoord& start, const NardiCoord& end)
+void Board::Move(const Coord& start, const Coord& end)
 {
     data.at(start.row).at(start.col)  -= player_sign;
     data.at(end.row).at(end.col)      += player_sign;
     OnMove(start, end);
 }
 
-void NardiBoard::OnMove(const NardiCoord& start, const NardiCoord& end)
+void Board::OnMove(const Coord& start, const Coord& end)
 {
     if(end.row != player_idx && end.col >= 6 && (start.col < 6 || start.row != end.row) )  // moved to home from outside
         ++reached_enemy_home[player_idx];
@@ -41,14 +43,14 @@ void NardiBoard::OnMove(const NardiCoord& start, const NardiCoord& end)
     UpdateAvailabilitySets(start, end);
 }
 
-void NardiBoard::UndoMove(const NardiCoord& start, const NardiCoord& end)
+void Board::UndoMove(const Coord& start, const Coord& end)
 {
     data.at(start.row).at(start.col)  += player_sign;
     data.at(end.row).at(end.col)      -= player_sign;
     OnUndoMove(start, end);
 }
 
-void NardiBoard::OnUndoMove(const NardiCoord& start, const NardiCoord& end)
+void Board::OnUndoMove(const Coord& start, const Coord& end)
 {
     if(end.row != player_idx && end.col >= 6 && (start.col < 6 || start.row != end.row) )  // moved to home from outside
         --reached_enemy_home[player_idx];
@@ -59,37 +61,37 @@ void NardiBoard::OnUndoMove(const NardiCoord& start, const NardiCoord& end)
     UpdateAvailabilitySets(end, start);
 }
 
-void NardiBoard::Remove(const NardiCoord& to_remove)
+void Board::Remove(const Coord& to_remove)
 {
     data.at(to_remove.row).at(to_remove.col) -= player_sign;
     --pieces_left.at(player_idx);
     OnRemove(to_remove);
 }
 
-void NardiBoard::UndoRemove(const NardiCoord& to_remove)
+void Board::UndoRemove(const Coord& to_remove)
 {
     data.at(to_remove.row).at(to_remove.col) += player_sign;
     ++pieces_left.at(player_idx);
     OnUndoRemove(to_remove);
 }
 
-void NardiBoard::OnUndoRemove(const NardiCoord& to_remove)
+void Board::OnUndoRemove(const Coord& to_remove)
 {
     UpdateAvailabilityDest(to_remove);
 }
 
-void NardiBoard::OnRemove(const NardiCoord& to_remove)
+void Board::OnRemove(const Coord& to_remove)
 {
     UpdateAvailabilityStart(to_remove);
 }
 
-void NardiBoard::UpdateAvailabilitySets(const NardiCoord& start, const NardiCoord& dest)
+void Board::UpdateAvailabilitySets(const Coord& start, const Coord& dest)
 {   // only to be called within MakeMove()
     UpdateAvailabilityStart(start);
     UpdateAvailabilityDest(dest);
 }
 
-void NardiBoard::UpdateAvailabilityStart(const NardiCoord start)  // not reference since we destroy stuff
+void Board::UpdateAvailabilityStart(const Coord start)  // not reference since we destroy stuff
 {
     if (at(start) == 0) // start square vacated
     {
@@ -98,7 +100,7 @@ void NardiBoard::UpdateAvailabilityStart(const NardiCoord start)  // not referen
         
         // update other player's options - can now move to this square
         int d = 1;
-        NardiCoord coord = CoordAfterDistance(start, -d, !player_idx);
+        Coord coord = CoordAfterDistance(start, -d, !player_idx);
 
         while( !coord.OutOfBounds()  && d <= 6 )
         {
@@ -116,22 +118,22 @@ void NardiBoard::UpdateAvailabilityStart(const NardiCoord start)  // not referen
         if(max_num_occ.at(player_idx) > 0)
         {
             for(int i = max_num_occ.at(player_idx); i <= 6; ++i)
-                goes_idx_plusone[player_idx][i-1].insert({!player_idx, COL - max_num_occ.at(player_idx)}); 
+                goes_idx_plusone[player_idx][i-1].insert({!player_idx, COLS - max_num_occ.at(player_idx)}); 
 
             for(int i = 1; i < max_num_occ.at(player_idx); ++i)
-                if(at(!player_idx, COL - i) * player_sign  > 0)
-                    goes_idx_plusone[player_idx][i-1].insert({!player_idx, COL - i});
+                if(at(!player_idx, COLS - i) * player_sign  > 0)
+                    goes_idx_plusone[player_idx][i-1].insert({!player_idx, COLS - i});
         }
     }
 }
 
-void NardiBoard::UpdateAvailabilityDest(const NardiCoord& dest)
+void Board::UpdateAvailabilityDest(const Coord& dest)
 {
     if ( at(dest) * player_sign == 1 )  // dest newly filled, note both ifs can be true
     {
         // update player's options - can now possibly move from dest square
         int d = 1;
-        NardiCoord coord = CoordAfterDistance(dest, d);
+        Coord coord = CoordAfterDistance(dest, d);
         while( !coord.OutOfBounds() && d <= 6 )
         {
             if(at(coord) * player_sign >= 0) // square empty or occupied by player already
@@ -154,16 +156,16 @@ void NardiBoard::UpdateAvailabilityDest(const NardiCoord& dest)
     }
 }
 
-void NardiBoard::SetMaxOcc()
+void Board::SetMaxOcc()
 {
     max_num_occ[player_idx] = 6;
-    while(max_num_occ[player_idx] > 0 && player_sign * at(!player_idx, COL - max_num_occ[player_idx]) <= 0 )   // slot empty or enemy
+    while(max_num_occ[player_idx] > 0 && player_sign * at(!player_idx, COLS - max_num_occ[player_idx]) <= 0 )   // slot empty or enemy
         --max_num_occ[player_idx];   
 }
 
 ///////////// Legality /////////////
 
-status_codes NardiBoard::ValidStart(const NardiCoord& start) const
+status_codes Board::ValidStart(const Coord& start) const
 {
     if(start.OutOfBounds())
         return status_codes::OUT_OF_BOUNDS;
@@ -175,7 +177,7 @@ status_codes NardiBoard::ValidStart(const NardiCoord& start) const
         return status_codes::SUCCESS;
 }
 
-status_codes NardiBoard::WellDefinedEnd(const NardiCoord& start, const NardiCoord& end) const
+status_codes Board::WellDefinedEnd(const Coord& start, const Coord& end) const
 {
     if( end.OutOfBounds() )
         return status_codes::OUT_OF_BOUNDS;
@@ -194,7 +196,7 @@ status_codes NardiBoard::WellDefinedEnd(const NardiCoord& start, const NardiCoor
         return status_codes::SUCCESS;
 }
 
-bool NardiBoard::Bad_RowChangeTo(bool er, bool player) const
+bool Board::Bad_RowChangeTo(bool er, bool player) const
 {
     int sign = player ? -1 : 1;
     int r = sign + er; // white to row 1 (r==2) or black to row 0 (r==-1) only acceptable choices, else r==1 or 0
@@ -203,10 +205,10 @@ bool NardiBoard::Bad_RowChangeTo(bool er, bool player) const
 
 ///////////// Calculations /////////////
 
-NardiCoord NardiBoard::CoordAfterDistance(const NardiCoord& start, int d, bool player) const
+Coord Board::CoordAfterDistance(const Coord& start, int d, bool player) const
 {
     int ec = start.col + d;
-    if(ec >= 0 && ec < COL) // no row changing
+    if(ec >= 0 && ec < COLS) // no row changing
         return {start.row, ec};
     else
     {
@@ -215,35 +217,35 @@ NardiCoord NardiBoard::CoordAfterDistance(const NardiCoord& start, int d, bool p
             return {start.row, ec};    // moved forward past end or backwards before beginning of board, return original out of bounds value
         
         else if(ec < 0)
-            ec = COL + ec;
-        else // ec > COL
-            ec -= COL;
+            ec = COLS + ec;
+        else // ec > COLS
+            ec -= COLS;
 
         return {!start.row, ec};
     }
 }
 
-NardiCoord NardiBoard::CoordAfterDistance(const NardiCoord& start, int d) const
+Coord Board::CoordAfterDistance(const Coord& start, int d) const
 {
     return CoordAfterDistance(start, d, player_idx);
 }
 
-int NardiBoard::GetDistance(const NardiCoord& start, const NardiCoord& end) const
+int Board::GetDistance(const Coord& start, const Coord& end) const
 {
     return GetDistance(start, end, player_idx);
 }
 
-int NardiBoard::GetDistance(const NardiCoord& start, const NardiCoord& end, bool player) const
+int Board::GetDistance(const Coord& start, const Coord& end, bool player) const
 {
     if(start.row == end.row)
         return end.col - start.col;
     else if(end.row != player)  // row change forward
-        return COL - start.col + end.col;   
+        return COLS - start.col + end.col;   
     else                            // row change backward
-        return -(COL - end.col + start.col);
+        return -(COLS - end.col + start.col);
 }
 
-unsigned NardiBoard::MovablePieces(const NardiCoord& start) const
+unsigned Board::MovablePieces(const Coord& start) const
 {
     if(at(start) == 0)
         return 0;
@@ -253,7 +255,7 @@ unsigned NardiBoard::MovablePieces(const NardiCoord& start) const
 
 // operators
 
-bool NardiBoard::operator== (const NardiBoard& other) const
+bool Board::operator== (const Board& other) const
 {
 
     if (!(this->data == other.data && this->player_idx == other.player_idx && this->head_used == other.head_used))
@@ -269,7 +271,7 @@ bool NardiBoard::operator== (const NardiBoard& other) const
 
 // testing
 
-void NardiBoard::SetData(const std::array<std::array<int, COL>, ROW>& b)
+void Board::SetData(const std::array<std::array<int, COLS>, ROWS>& b)
 {
     data = b;
     CalcPiecesLeftandReached();
@@ -277,9 +279,9 @@ void NardiBoard::SetData(const std::array<std::array<int, COL>, ROW>& b)
     ConstructAvailabilitySets();
 }
 
-void NardiBoard::CalcPiecesLeftandReached()
+void Board::CalcPiecesLeftandReached()
 {
-    NardiCoord starts [2] = { {0, 0}, {1, 0} };
+    Coord starts [2] = { {0, 0}, {1, 0} };
     pieces_left = {0, 0};
     reached_enemy_home = {0, 0};
     
@@ -290,7 +292,7 @@ void NardiBoard::CalcPiecesLeftandReached()
         pieces_left[at(starts[0]) < 0] += abs(at(starts[0]));   // no-op if 0
         pieces_left[at(starts[1]) < 0] += abs(at(starts[1]));
     }
-    for (;  starts[0].row == 0 && starts[0].col < COL;
+    for (;  starts[0].row == 0 && starts[0].col < COLS;
                     starts[0] = CoordAfterDistance(starts[0], 1),
                     starts[1] = CoordAfterDistance(starts[1], 1)    )    
     {
@@ -310,7 +312,7 @@ void NardiBoard::CalcPiecesLeftandReached()
     std::cout << "pieces reached black: " << reached_enemy_home[1] << "\n";
 }
 
-void NardiBoard::ConstructAvailabilitySets()
+void Board::ConstructAvailabilitySets()
 {
     for(int i = 0; i < 6; ++i)
     {
@@ -319,14 +321,14 @@ void NardiBoard::ConstructAvailabilitySets()
     }
     for(int plyr = 0; plyr < 2; ++plyr)
     {
-        NardiCoord start(player_idx, 0);
+        Coord start(player_idx, 0);
         while (!start.OutOfBounds())
         {
             if(ValidStart(start) == status_codes::SUCCESS)
             {
                 for(int d = 1; d <= 6; ++d)
                 {
-                    NardiCoord dest = CoordAfterDistance(start, d, player_idx);
+                    Coord dest = CoordAfterDistance(start, d, player_idx);
                     if(WellDefinedEnd(start, dest) == status_codes::SUCCESS)
                         goes_idx_plusone[player_idx][d-1].insert(start);
                 }
@@ -342,11 +344,11 @@ void NardiBoard::ConstructAvailabilitySets()
             if(max_num_occ.at(player_idx) > 0)
             {
                 for(int i = max_num_occ.at(player_idx); i <= 6; ++i)
-                    goes_idx_plusone[player_idx][i-1].insert({!player_idx, COL - max_num_occ.at(player_idx)}); 
+                    goes_idx_plusone[player_idx][i-1].insert({!player_idx, COLS - max_num_occ.at(player_idx)}); 
 
                 for(int i = 1; i < max_num_occ.at(player_idx); ++i)
-                    if(at(!player_idx, COL - i) * player_sign  > 0)
-                        goes_idx_plusone[player_idx][i-1].insert({!player_idx, COL - i});
+                    if(at(!player_idx, COLS - i) * player_sign  > 0)
+                        goes_idx_plusone[player_idx][i-1].insert({!player_idx, COLS - i});
             }
         }
 
@@ -365,48 +367,48 @@ void NardiBoard::ConstructAvailabilitySets()
 ///////////// Getters /////////////
 
 
-const int& NardiBoard::at(size_t r, size_t c) const
+const int& Board::at(size_t r, size_t c) const
 {   return data.at(r).at(c);   }
 
-const int& NardiBoard::at (const NardiCoord& s) const
+const int& Board::at (const Coord& s) const
 {   return at(s.row, s.col);   }
 
-const boardConfig& NardiBoard::View() const
+const boardConfig& Board::View() const
 {
     return data;
 }
 
-bool NardiBoard::PlayerIdx() const
+bool Board::PlayerIdx() const
 {   return player_idx;   }
 
-int NardiBoard::PlayerSign() const
+int Board::PlayerSign() const
 {   return player_sign;   }
 
-bool NardiBoard::HeadUsed() const
+bool Board::HeadUsed() const
 {   return head_used;   }
 
-const std::array<int, 2>& NardiBoard::MaxNumOcc() const
+const std::array<int, 2>& Board::MaxNumOcc() const
 {   return max_num_occ;   }
  
-const std::array<int, 2>& NardiBoard::ReachedEnemyHome() const
+const std::array<int, 2>& Board::ReachedEnemyHome() const
 {   return reached_enemy_home;   }
 
  
-const std::array<int, 2>& NardiBoard::PiecesLeft() const
+const std::array<int, 2>& Board::PiecesLeft() const
 {   return pieces_left;   }
 
 
-const std::array< std::array< std::unordered_set<NardiCoord>, 6 >, 2 >& NardiBoard::GoesIdxPlusOne() const
+const std::array< std::array< std::unordered_set<Coord>, 6 >, 2 >& Board::GoesIdxPlusOne() const
 {   
     return goes_idx_plusone;   
 }
 
-const std::unordered_set<NardiCoord>& NardiBoard::PlayerGoesByDist(size_t dist) const
+const std::unordered_set<Coord>& Board::PlayerGoesByDist(size_t dist) const
 {   
     return goes_idx_plusone.at(player_idx).at(dist - 1);   
 }
 
-void NardiBoard::Print() const
+void Board::Print() const
 {
     DisplayBoard(data);
 }
@@ -414,7 +416,7 @@ void NardiBoard::Print() const
 ///////////// Updates and Actions /////////////
 
 
-void NardiBoard::SwitchPlayer()
+void Board::SwitchPlayer()
 {
     player_idx = !player_idx;
     player_sign = BoolToSign(player_idx);
@@ -422,7 +424,7 @@ void NardiBoard::SwitchPlayer()
 }
 
  
-void NardiBoard::FlagHeadIfNeeded(const NardiCoord& start)
+void Board::FlagHeadIfNeeded(const Coord& start)
 { 
     if(!head_used && IsPlayerHead(start))
         head_used = true; 
@@ -430,12 +432,12 @@ void NardiBoard::FlagHeadIfNeeded(const NardiCoord& start)
 
 ///////////// Legality Helpers /////////////
 
-bool NardiBoard::IsPlayerHead(const NardiCoord& coord) const
+bool Board::IsPlayerHead(const Coord& coord) const
 {   return (coord.row == player_idx && coord.col == 0);   }
 
 
-bool NardiBoard::HeadReuseIssue(const NardiCoord& coord) const
+bool Board::HeadReuseIssue(const Coord& coord) const
 {   return (IsPlayerHead(coord) && head_used);   }
 
-bool NardiBoard::CurrPlayerInEndgame() const
+bool Board::CurrPlayerInEndgame() const
 {   return reached_enemy_home[player_idx] >= pieces_per_player[player_idx];   }

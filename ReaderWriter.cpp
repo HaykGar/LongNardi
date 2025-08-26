@@ -1,6 +1,8 @@
 #include "ReaderWriter.h"
 #include <string>
 
+using namespace Nardi;
+
 void ReaderWriter::DispErrorCode(status_codes c) const
 {
     switch (c)

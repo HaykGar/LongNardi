@@ -1,5 +1,7 @@
 #include "NardiMVC.h"
 
+using namespace Nardi;
+
 NardiMVC::NardiMVC(ReaderWriterFactory factory, int seed) : model(seed), controller(model), view(factory(model, controller))
 {
     model.AttachReaderWriter(view.get());

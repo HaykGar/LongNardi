@@ -27,9 +27,9 @@ TEST_F(TestBuilder, StartSelect_InvalidStarts)
         << "Enemy pile (black head) should be rejected";
 
     // 1-C  column out of range
-    rc = ReceiveCommand(Command(Actions::SELECT_SLOT, {0, COL}));
+    rc = ReceiveCommand(Command(Actions::SELECT_SLOT, {0, COLS}));
     EXPECT_EQ(rc, status_codes::OUT_OF_BOUNDS)
-        << "Column == COL should yield OUT_OF_BOUNDS";
+        << "Column == COLS should yield OUT_OF_BOUNDS";
 
     // 1-D  row out of range
     rc = ReceiveCommand(Command(Actions::SELECT_SLOT, {2, 0}));
@@ -159,7 +159,7 @@ TEST_F(TestBuilder, MoveOntoEnemyPiece)
     EXPECT_EQ(ReceiveCommand({Actions::MOVE_BY_DICE, first}),     status_codes::DEST_ENEMY)
         << "landing on enemy pile must be DEST_ENEMY";
 
-    NardiBoard brd2(board_legal);
+    Board brd2(board_legal);
 
     EXPECT_EQ(brd2.WellDefinedEnd({0, 0}, {0, 11}), status_codes::DEST_ENEMY);
     
@@ -182,9 +182,9 @@ TEST_F(TestBuilder, OutOfBounds)
     DispErrorCode(rc);
     EXPECT_NE(rc, status_codes::SUCCESS) << "move that crosses board end should be OUT_OF_BOUNDS";
     
-    NardiBoard brd2(board_legal);
+    Board brd2(board_legal);
 
-    EXPECT_EQ(brd2.WellDefinedEnd({0, 0}, {0, COL}), status_codes::OUT_OF_BOUNDS);   // past end to right
+    EXPECT_EQ(brd2.WellDefinedEnd({0, 0}, {0, COLS}), status_codes::OUT_OF_BOUNDS);   // past end to right
     EXPECT_EQ(brd2.WellDefinedEnd({0, 0}, {1, -1}), status_codes::OUT_OF_BOUNDS);    // past end to left
 
     EXPECT_EQ(brd2.WellDefinedEnd({0, 0}, {1, 3}), status_codes::SUCCESS);           // valid row change
@@ -197,7 +197,7 @@ TEST_F(TestBuilder, OutOfBounds)
 
 TEST(WellDefEnd, BackwardsMove)
 {
-    NardiBoard brd(board_legal);
+    Board brd(board_legal);
     EXPECT_EQ(brd.WellDefinedEnd({0, 2}, {0, 1}), status_codes::BACKWARDS_MOVE);
 
     brd.SwitchPlayer();
@@ -207,7 +207,7 @@ TEST(WellDefEnd, BackwardsMove)
 
 TEST(WellDefEnd, Success)
 {
-    NardiBoard brd(board_legal);
+    Board brd(board_legal);
 
     // dest empty
     EXPECT_EQ(brd.WellDefinedEnd({0, 0}, {1, 3}), status_codes::SUCCESS);
@@ -227,62 +227,62 @@ TEST(WellDefEnd, Success)
 
 TEST(Calculators, CoordAfterDist)
 {
-    NardiBoard brd(start_brd);
+    Board brd(start_brd);
     int d = 0;
 
-    NardiCoord head_w(0, 0);
-    NardiCoord head_b(1, 0);
+    Coord head_w(0, 0);
+    Coord head_b(1, 0);
     
-    for(; d < COL; ++d)
-        EXPECT_EQ(brd.CoordAfterDistance(head_w, d), NardiCoord(0, d) );
+    for(; d < COLS; ++d)
+        EXPECT_EQ(brd.CoordAfterDistance(head_w, d), Coord(0, d) );
 
     EXPECT_EQ(brd.CoordAfterDistance(head_w, d),  head_b);
 
-    for(d = 0; d < COL; ++d)
-        EXPECT_EQ(brd.CoordAfterDistance(head_b, d), NardiCoord(1, d));
+    for(d = 0; d < COLS; ++d)
+        EXPECT_EQ(brd.CoordAfterDistance(head_b, d), Coord(1, d));
 
-    EXPECT_EQ(brd.CoordAfterDistance(head_b, d), NardiCoord(1, 12));
+    EXPECT_EQ(brd.CoordAfterDistance(head_b, d), Coord(1, 12));
 
-    NardiCoord end_w(1, 11);
-    NardiCoord end_b(0, 11);
+    Coord end_w(1, 11);
+    Coord end_b(0, 11);
 
-    for(d = 0; d < COL; ++d)
-        EXPECT_EQ(brd.CoordAfterDistance(end_w, -d), NardiCoord(1, 11-d) );
+    for(d = 0; d < COLS; ++d)
+        EXPECT_EQ(brd.CoordAfterDistance(end_w, -d), Coord(1, 11-d) );
 
-    EXPECT_EQ(brd.CoordAfterDistance(end_w, -d), NardiCoord(0, 11));
+    EXPECT_EQ(brd.CoordAfterDistance(end_w, -d), Coord(0, 11));
 
 
-    for(d = 0; d < COL; ++d)
-        EXPECT_EQ(brd.CoordAfterDistance(end_b, -d), NardiCoord(0, 11-d) );
+    for(d = 0; d < COLS; ++d)
+        EXPECT_EQ(brd.CoordAfterDistance(end_b, -d), Coord(0, 11-d) );
 
-    EXPECT_EQ(brd.CoordAfterDistance(end_b, -d), NardiCoord(0, -1) );
+    EXPECT_EQ(brd.CoordAfterDistance(end_b, -d), Coord(0, -1) );
 
     brd.SwitchPlayer(); // same with black now
 
-    for(d = 0; d < COL; ++d)
-        EXPECT_EQ(brd.CoordAfterDistance(head_b, d), NardiCoord(1, d));
+    for(d = 0; d < COLS; ++d)
+        EXPECT_EQ(brd.CoordAfterDistance(head_b, d), Coord(1, d));
 
     EXPECT_EQ(brd.CoordAfterDistance(head_b, d), head_w );
 
-    for(; d < COL; ++d)
-        EXPECT_EQ(brd.CoordAfterDistance(head_w, d), NardiCoord(0, d) );
+    for(; d < COLS; ++d)
+        EXPECT_EQ(brd.CoordAfterDistance(head_w, d), Coord(0, d) );
 
-    EXPECT_EQ(brd.CoordAfterDistance(head_w, d), NardiCoord(0, 12));
+    EXPECT_EQ(brd.CoordAfterDistance(head_w, d), Coord(0, 12));
     
-    for(d = 0; d < COL; ++d)
-        EXPECT_EQ(brd.CoordAfterDistance(end_b, -d), NardiCoord(0, 11-d) );
+    for(d = 0; d < COLS; ++d)
+        EXPECT_EQ(brd.CoordAfterDistance(end_b, -d), Coord(0, 11-d) );
 
-    EXPECT_EQ(brd.CoordAfterDistance(end_b, -d), NardiCoord(1, 11));
+    EXPECT_EQ(brd.CoordAfterDistance(end_b, -d), Coord(1, 11));
 
-    for(d = 0; d < COL; ++d)
-        EXPECT_EQ(brd.CoordAfterDistance(end_w, -d), NardiCoord(1, 11-d) );
+    for(d = 0; d < COLS; ++d)
+        EXPECT_EQ(brd.CoordAfterDistance(end_w, -d), Coord(1, 11-d) );
 
-    EXPECT_EQ(brd.CoordAfterDistance(end_w, -d), NardiCoord(1, -1) );
+    EXPECT_EQ(brd.CoordAfterDistance(end_w, -d), Coord(1, -1) );
 }
 
 TEST(Calculators, GetDistance)
 {
-    NardiBoard brd = SafeBoard();
+    Board brd = SafeBoard();
     EXPECT_EQ( brd.GetDistance({0, 0}, {0, 9}), 9 );        // same row forward
     EXPECT_EQ( brd.GetDistance({0, 11}, {0, 9}), -2 );      // same row backward
 

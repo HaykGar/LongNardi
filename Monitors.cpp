@@ -1,4 +1,6 @@
-#include "NardiGame.h"
+#include "Game.h"
+
+using namespace Nardi;
 
 ///////////// Turn Completion /////////////
 
@@ -10,7 +12,7 @@ bool Game::PreventionMonitor::CheckNeeded()
     return (!_g.doubles_rolled && _g.arbiter.CanUseMockDice(0) && _g.arbiter.CanUseMockDice(1) && TurnCompletable() );
 }
 
-bool Game::PreventionMonitor::Illegal(const NardiCoord& start, bool dice_idx)
+bool Game::PreventionMonitor::Illegal(const Coord& start, bool dice_idx)
 {
     if(CheckNeeded() && !MakesSecondStep(start))
     {
@@ -21,13 +23,13 @@ bool Game::PreventionMonitor::Illegal(const NardiCoord& start, bool dice_idx)
         // std::cout << "board in prev check\n";
         // DisplayBoard(_g.board._mockBoard.View());
 
-        std::unordered_set<NardiCoord> other_dice_options = _g.PlayerGoesByMockDice(!dice_idx);
+        std::unordered_set<Coord> other_dice_options = _g.PlayerGoesByMockDice(!dice_idx);
 
         // std::cout<< "options:\n";
         // for(const auto& coord : other_dice_options)
         //     coord.Print();
 
-        std::unordered_set<NardiCoord>::iterator it = other_dice_options.begin();
+        std::unordered_set<Coord>::iterator it = other_dice_options.begin();
         while(it != other_dice_options.end())
         {
             if( _g.board._mockBoard.ValidStart(*it) != status_codes::SUCCESS || _g.arbiter.IllegalBlocking(*it, !dice_idx))
@@ -55,7 +57,7 @@ void Game::PreventionMonitor::SetCompletable()
     {
         _g.board._mockBoard = _g.board._realBoard;  // mismatch why??? `
 
-        std::array<std::unordered_set<NardiCoord>, 2> options = { _g.PlayerGoesByMockDice(0), _g.PlayerGoesByMockDice(1) };
+        std::array<std::unordered_set<Coord>, 2> options = { _g.PlayerGoesByMockDice(0), _g.PlayerGoesByMockDice(1) };
 
         auto CompleteFromDice = [&] (bool dice_idx) -> bool
         {  
@@ -64,7 +66,7 @@ void Game::PreventionMonitor::SetCompletable()
                 if(_g.board._mockBoard.ValidStart(coord) == status_codes::SUCCESS && !_g.arbiter.IllegalBlocking(coord, dice_idx))
                 {   // brd and block legal
                     _g.SilentMock(coord, dice_idx);
-                    std::unordered_set<NardiCoord> second_coords = _g.PlayerGoesByMockDice(1);
+                    std::unordered_set<Coord> second_coords = _g.PlayerGoesByMockDice(1);
                     for(const auto& coord2 : second_coords)
                     {
                         if(!_g.arbiter.IllegalBlocking(coord2, !dice_idx))  // board and block legal continuation
@@ -84,9 +86,9 @@ void Game::PreventionMonitor::SetCompletable()
     }
 }
 
-bool Game::PreventionMonitor::MakesSecondStep(const NardiCoord& start) const
+bool Game::PreventionMonitor::MakesSecondStep(const Coord& start) const
 {
-    NardiCoord end = _g.board._realBoard.CoordAfterDistance(start, _g.dice[0] + _g.dice[1]);
+    Coord end = _g.board._realBoard.CoordAfterDistance(start, _g.dice[0] + _g.dice[1]);
     return (_g.board._mockBoard.WellDefinedEnd(start, end) == status_codes::SUCCESS && !_g.arbiter.IllegalBlocking(start, end) );
 }
 
@@ -126,7 +128,7 @@ bool Game::BadBlockMonitor::BlockingAll()
     
     bool other_player = !_g.board.PlayerIdx();
     int player_sign = _g.board.PlayerSign();
-    NardiCoord coord(_g.board.PlayerIdx(), COL - 1);
+    Coord coord(_g.board.PlayerIdx(), COLS - 1);
     unsigned streak = 0;
     
     for(; coord.InBounds(); coord = _g.board._realBoard.CoordAfterDistance(coord, -1, other_player))
@@ -157,7 +159,7 @@ bool Game::BadBlockMonitor::PreConditions()
     return _g.board._mockBoard.ReachedEnemyHome().at(! _g.board.PlayerIdx() ) == 0; // not possible once enemy entered home 
 }
 
-bool Game::BadBlockMonitor::Illegal(const NardiCoord& start, bool dice_idx)
+bool Game::BadBlockMonitor::Illegal(const Coord& start, bool dice_idx)
 {
     if( !_g.SilentMock(start, dice_idx) ) // updates mock dice used
     {
@@ -169,7 +171,7 @@ bool Game::BadBlockMonitor::Illegal(const NardiCoord& start, bool dice_idx)
     return ret;
 }
 
-bool Game::BadBlockMonitor::Illegal(const NardiCoord& start, const NardiCoord& end)
+bool Game::BadBlockMonitor::Illegal(const Coord& start, const Coord& end)
 {    
     if(!_g.SilentMock(start, end))// updates mock dice used
     {
@@ -191,7 +193,7 @@ bool Game::BadBlockMonitor::CheckMockedState()
 
 bool Game::BadBlockMonitor::Unblocked()
 {
-    NardiCoord start = _blockStart;
+    Coord start = _blockStart;
     for(int i = 0; i < 6 && start.InBounds(); ++i, start = _g.board._mockBoard.CoordAfterDistance(start, 1, !_g.board.PlayerIdx()))
     {
         if(_g.board._mockBoard.at(start) * _g.board.PlayerSign() <= 0)  // empty or enemy, should only ever be friendly or empty
@@ -201,7 +203,7 @@ bool Game::BadBlockMonitor::Unblocked()
     return false;
 }
 
-bool Game::BadBlockMonitor::Unblocks(const NardiCoord& start, const NardiCoord& end)
+bool Game::BadBlockMonitor::Unblocks(const Coord& start, const Coord& end)
 {
     if( _g.board.PlayerSign() * _g.board._realBoard.at(start) != 1 )
         return false;   // not even vacating square
@@ -227,7 +229,7 @@ bool Game::BadBlockMonitor::Unblocks(const NardiCoord& start, const NardiCoord& 
         return false;   // start is not one of the blockers, or it's after the 6th so we still have blockage
 }
 
-bool Game::BadBlockMonitor::BlockageAround(const NardiCoord& end)
+bool Game::BadBlockMonitor::BlockageAround(const Coord& end)
 {
     if(_g.board._mockBoard.at(end) * _g.board.PlayerSign() <= 0)
         return false;   //not occupying end
@@ -239,7 +241,7 @@ bool Game::BadBlockMonitor::BlockageAround(const NardiCoord& end)
     int player_sign = _g.board.PlayerSign();
     bool other_player = !_g.board.PlayerIdx();
 
-    NardiCoord coord = _g.board._realBoard.CoordAfterDistance(end, 1, other_player);
+    Coord coord = _g.board._realBoard.CoordAfterDistance(end, 1, other_player);
 
     // check ahead of end
     for(; !coord.OutOfBounds() && _g.board._mockBoard.at(coord) * player_sign > 0; coord = _g.board._realBoard.CoordAfterDistance(coord, 1, other_player))
@@ -262,7 +264,7 @@ bool Game::BadBlockMonitor::BlockageAround(const NardiCoord& end)
 
 bool Game::BadBlockMonitor::PieceAhead() 
 {
-    NardiCoord after_block = _g.board._realBoard.CoordAfterDistance(_blockStart, _blockLength, !_g.board.PlayerIdx());
+    Coord after_block = _g.board._realBoard.CoordAfterDistance(_blockStart, _blockLength, !_g.board.PlayerIdx());
 
     for(; !after_block.OutOfBounds(); after_block = _g.board._realBoard.CoordAfterDistance(after_block, 1, !_g.board.PlayerIdx()))
     {
@@ -288,15 +290,15 @@ bool Game::BadBlockMonitor::WillBeFixable() // reminder the block is already moc
         times_usable.second = (_g.times_mockdice_used[1] == 0) ? 1 : 0;
     }
 
-    NardiCoord coord;
+    Coord coord;
     bool success = false;
 
 
-    auto TryDice = [&](bool d_idx, const NardiCoord& c) -> bool {
+    auto TryDice = [&](bool d_idx, const Coord& c) -> bool {
 
         // std::cout << "trying to move from " << c.AsStr() << "by " << _g.dice[d_idx] << " in willbefixable\n";
 
-        NardiCoord dest = _g.board._mockBoard.CoordAfterDistance(c, _g.dice[d_idx], _g.board.PlayerIdx());
+        Coord dest = _g.board._mockBoard.CoordAfterDistance(c, _g.dice[d_idx], _g.board.PlayerIdx());
         auto rc = _g.board._mockBoard.WellDefinedEnd(c, dest);
         // DispErrorCode(rc);
         if(rc == status_codes::SUCCESS)
@@ -333,7 +335,7 @@ bool Game::BadBlockMonitor::WillBeFixable() // reminder the block is already moc
 
 bool Game::BadBlockMonitor::StillBlocking()
 {
-    NardiCoord start = _blockStart;
+    Coord start = _blockStart;
     while( start.InBounds() && _g.board.PlayerSign() * _g.board._mockBoard.at(start) <= 0)
     {
         // std::cout << "shifting start, blockstart is still: "; _blockStart.Print();
@@ -343,7 +345,7 @@ bool Game::BadBlockMonitor::StillBlocking()
     if(start.OutOfBounds())
         return false;
 
-    NardiCoord coord = _g.board._mockBoard.CoordAfterDistance(start, 1, !_g.board.PlayerIdx() );
+    Coord coord = _g.board._mockBoard.CoordAfterDistance(start, 1, !_g.board.PlayerIdx() );
     for(int d = 1; d < 6 && coord.InBounds(); ++d)
     {
         if(_g.board.PlayerSign() * _g.board._mockBoard.at(coord) <= 0)

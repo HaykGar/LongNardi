@@ -7,12 +7,12 @@ void TerminalRW::ReAnimate() const
     const auto& board = g.GetBoardRef();
     bool player_row = board.PlayerIdx();
     
-    for(int c = COL - 1; c >= 0; --c)
+    for(int c = COLS - 1; c >= 0; --c)
         std::cout << board.at(player_row, c) << "\t";
 
     std::cout << "\n\n";
 
-    for(int c = 0; c < COL; ++c)
+    for(int c = 0; c < COLS; ++c)
         std::cout << board.at(!player_row, c) << "\t";
 
     std::cout << "\n\n\n\n\n";
@@ -65,7 +65,7 @@ Command TerminalRW::Input_to_Command() const
             return Actions::NO_OP;
     }
     else if(input_pieces.size() == 2 && isNumeric(input_pieces[0]) && isNumeric(input_pieces[1]) )
-        return Command( Actions::SELECT_SLOT, NardiCoord( stoi(input_pieces[0]), stoi(input_pieces[1]) ) );
+        return Command( Actions::SELECT_SLOT, Coord( stoi(input_pieces[0]), stoi(input_pieces[1]) ) );
     
     else
         return Command(Actions::NO_OP);
