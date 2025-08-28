@@ -4,6 +4,8 @@
 #include "Board.h"
 
 #include <array>
+#include <algorithm>
+#include <ranges>
 #include <stack>
 #include <unordered_set>
 #include <unordered_map>
@@ -11,22 +13,21 @@
 #include <memory>
 
 /*
-more than 1 block at a time?????
+FIXME max dice not enforced right now ! ! ! ` ` ` ` ` `
 
-Endgame legality, can we actually remove the piece without leaving an illegal block?
+During endgame, if it's a valid start just check if there's a forced move from here, will streamline play
+
+more than 1 block at a time?????
 
 endgame testing: include case of starting endgame mid-turn, and also in forced checking
 
 Logging services... log everything in files instead of cout
-
-TryFinishMove, legal move checkers, etc, need to be integrated with hanel in endgame...
 
 Automate dice rolling from controller ?
 
 On select start, check forced moves from there, return this if valid start?
 
 undo move feature
-
 */
 
 namespace Nardi
@@ -44,9 +45,10 @@ class Game
 
         // Gameplay
         status_codes RollDice();
+        status_codes OnRoll();
         status_codes TryStart(const Coord& s);
         status_codes TryFinishMove(const Coord& start, const Coord& end);     // No Removals
-        status_codes TryMoveByDice(const Coord& start, bool dice);                 // Removals and regular moves
+        status_codes TryFinishMove(const Coord& start, bool dice);                 // Removals and regular moves
         
         void SwitchPlayer();
 
@@ -55,7 +57,8 @@ class Game
 
         // Getters
         const Board& GetBoardRef() const;
-        const std::vector< std::vector<StartAndDice> >& ViewAllLegalMoveSeqs() const;
+        const auto ViewAllLegalMoveSeqs() const;
+        const std::unordered_map<std::string, MoveSequence>& GetBoards2Seqs() const;
 
         int GetDice(bool idx) const;
         const ReaderWriter* GetConstRW();
@@ -64,6 +67,7 @@ class Game
         friend class TestBuilder;
 
     private:
+
         class Arbiter;
         
         // Exception Monitors
@@ -127,13 +131,44 @@ class Game
                 bool Unblocked();
         };
 
+        // Pre-computing legal moves
+
+        struct LegalSeqComputer
+        {
+            public:
+                LegalSeqComputer(Game& g, Arbiter& a);
+                void ComputeAllLegalMoves();
+
+                int MaxLen() const;
+                const std::unordered_map<std::string, MoveSequence>& BrdsToSeqs() const;
+            
+            private:
+                Game& _g;
+                Arbiter& _arb;
+                bool _maxDice;
+                std::array<bool, 2> _dieIdxs;
+                std::unordered_set<std::string> _encountered;
+
+                int _maxLen;
+                std::unordered_map<std::string, MoveSequence> _brdsToSeqs; // possible board configs map to move sequence that form them
+
+                void dfs(std::vector<StartAndDice>& seq);
+                bool FirstMoveException();
+        };
+
         // Arbiter, tying these together
         class Arbiter
         {
             public:
                 Arbiter(Game& gm);
 
+                
+                status_codes CheckForcedMoves();
+
+
                 // Legality Checks and helpers
+                status_codes BoardAndBlockLegal(const Coord& start, bool dice_idx);
+
                 std::pair<status_codes, Coord> CanMoveByDice(const Coord& start, bool dice_idx);
                 std::pair<status_codes, Coord> CanFinishByDice   (const Coord& start, bool dice_idx);
                 std::pair<status_codes, std::array<int, 2>> LegalMove(const Coord& start, const Coord& end);
@@ -145,35 +180,19 @@ class Game
 
                 bool IllegalBlocking(const Coord& start, bool d_idx);
                 bool IllegalBlocking(const Coord& start, const Coord& end);
-                
-                // Getters
-                const std::vector<Coord>& GetMovables(bool idx);
-                std::unordered_set<Coord> GetTwoSteppers(size_t max_qty, const std::array<std::vector<Coord>, 2>& to_search);
-                std::unordered_set<Coord> GetTwoSteppers(size_t max_qty);
-
-                BadBlockMonitor::block_state BlockState() const;
 
                 // Updates and Actions
                 status_codes OnRoll();
-                status_codes OnMove();
-                status_codes OnRemoval();
-
-                void OnMockChange();
+                void SolidifyBlock();
 
                 // friend class for testing
                 friend class TestBuilder;
 
             private:
                 Game& _g;
-                std::array< std::vector<Coord>, 2 >  _movables;
 
                 PreventionMonitor   _prevMonitor;
                 BadBlockMonitor     _blockMonitor;
-
-                // Forced Moves
-                status_codes CheckForcedMoves();
-
-                void UpdateMovables();
         };
 
         struct BoardWithMocker
@@ -213,24 +232,6 @@ class Game
                 Game& _game;
         };
 
-        struct LegalSeqComputer
-        {
-            public:
-                LegalSeqComputer(Game& g);
-                void ComputeAllLegalMoves();
-                const std::vector< std::vector<StartAndDice> >& ViewMoveSeqs() const;
-            
-            private:
-                Game& _g;
-                std::unordered_map<std::string, std::vector<StartAndDice> > _brdsToSeqs;
-                std::vector< std::vector<StartAndDice> > _vals;
-
-                std::unordered_set<std::string> _encountered;
-
-                void dfs(std::vector<StartAndDice>& seq);
-                bool ForceFirstMove();
-        };
-
         BoardWithMocker board;                      // contains real and mock boards
 
         std::mt19937 rng;                           // Mersenne Twister engine
@@ -239,13 +240,16 @@ class Game
         std::array<int, 2> dice; 
         std::array<int, 2> times_dice_used;
         std::array<int, 2> times_mockdice_used;
+        std::array<int, 2> turn_number;
 
         bool doubles_rolled;
-        std::array<int, 2> turn_number;
+        bool first_move_exception;
+        bool maxdice_exception;   // can only play one or the other not both
 
         ReaderWriter* rw;
         Arbiter arbiter;
         LegalSeqComputer legal_turns;
+
 
         // Getters
         const std::unordered_set<Coord>& PlayerGoesByMockDice(bool dice_idx) const;
@@ -254,7 +258,6 @@ class Game
         Coord PlayerHead() const;
 
         // Dice Actions
-        status_codes OnRoll();
         void SetDice(int d1, int d2);
         void UseDice(bool idx, int n = 1);
 
@@ -278,8 +281,8 @@ class Game
         bool UndoSilentMock(const Coord& start, bool dice_idx);
 
         // void UndoMockAndUpdate(const Coord& start, const Coord& end);
-        void MockAndUpdateByDice(const Coord& start, bool dice_idx);
-        void UndoMockAndUpdateByDice(const Coord& start, bool dice_idx);
+        void MockAndUpdateBlock(const Coord& start, bool dice_idx);
+        void UndoMockAndUpdateBlock(const Coord& start, bool dice_idx);
         void RealizeMock();
         void ResetMock();
 };

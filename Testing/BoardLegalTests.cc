@@ -73,8 +73,6 @@ TEST_F(TestBuilder, StartSelect_MultipleLegalStarts)
 
 // ───────────────────────── 3. Head Reuse ──────────────────────────
 
-
-
 /* Head reused on ordinary roll (two dice) */
 TEST_F(TestBuilder, HeadReuse_NormalRoll)
 {

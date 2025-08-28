@@ -16,9 +16,7 @@ bool Game::PreventionMonitor::Illegal(const Coord& start, bool dice_idx)
 {
     if(CheckNeeded() && !MakesSecondStep(start))
     {
-        // std::cout << "checking " << start.AsStr() << " by dice " << _g.dice[dice_idx] << " for prevention\n";
-
-        _g.SilentMock(start, dice_idx); // moves or removes as needed
+        _g.MockAndUpdateBlock(start, dice_idx); // moves or removes as needed
 
         // std::cout << "board in prev check\n";
         // DisplayBoard(_g.board._mockBoard.View());
@@ -32,14 +30,17 @@ bool Game::PreventionMonitor::Illegal(const Coord& start, bool dice_idx)
         std::unordered_set<Coord>::iterator it = other_dice_options.begin();
         while(it != other_dice_options.end())
         {
-            if( _g.board._mockBoard.ValidStart(*it) != status_codes::SUCCESS || _g.arbiter.IllegalBlocking(*it, !dice_idx))
+            if( _g.arbiter.BoardAndBlockLegal(*it, !dice_idx) != status_codes::SUCCESS)
                 it = other_dice_options.erase(it);
             else
-                ++it;
+            {
+                _g.UndoMockAndUpdateBlock(start, dice_idx);
+                return false;
+            }
         }
 
-        _g.UndoSilentMock(start, dice_idx);
-        return other_dice_options.empty();
+        _g.UndoMockAndUpdateBlock(start, dice_idx);
+        return other_dice_options.empty();  // always true here
     }
     
     return false;
@@ -55,33 +56,35 @@ void Game::PreventionMonitor::SetCompletable()
 {
     if( turn_last_updated.at(_g.board.PlayerIdx()) != _g.turn_number.at(_g.board.PlayerIdx()) )
     {
-        _g.board._mockBoard = _g.board._realBoard;  // mismatch why??? `
+        // std::array<std::unordered_set<Coord>, 2> options = { _g.PlayerGoesByMockDice(0), _g.PlayerGoesByMockDice(1) };
 
-        std::array<std::unordered_set<Coord>, 2> options = { _g.PlayerGoesByMockDice(0), _g.PlayerGoesByMockDice(1) };
+        // auto CompleteFromDice = [&] (bool dice_idx) -> bool
+        // {  
+        //     for(const auto& coord : options.at(dice_idx))
+        //     {
+        //         if(_g.board._mockBoard.ValidStart(coord) == status_codes::SUCCESS && !_g.arbiter.IllegalBlocking(coord, dice_idx))
+        //         {   // brd and block legal
+        //             _g.SilentMock(coord, dice_idx);
+        //             std::unordered_set<Coord> second_coords = _g.PlayerGoesByMockDice(1);
+        //             for(const auto& coord2 : second_coords)
+        //             {
+        //                 if( _g.board._mockBoard.ValidStart(coord2) == status_codes::SUCCESS && 
+        //                     !_g.arbiter.IllegalBlocking(coord2, !dice_idx))  // board and block legal continuation
+        //                 {
+        //                     _g.UndoSilentMock(coord, dice_idx);
+        //                     return true;
+        //                 }
+        //             }
+        //             _g.UndoSilentMock(coord, dice_idx);
+        //         }
+        //     }
+        //     return false;
+        // };
+        // _completable = ( CompleteFromDice(0) || CompleteFromDice(1) );
 
-        auto CompleteFromDice = [&] (bool dice_idx) -> bool
-        {  
-            for(const auto& coord : options.at(dice_idx))
-            {
-                if(_g.board._mockBoard.ValidStart(coord) == status_codes::SUCCESS && !_g.arbiter.IllegalBlocking(coord, dice_idx))
-                {   // brd and block legal
-                    _g.SilentMock(coord, dice_idx);
-                    std::unordered_set<Coord> second_coords = _g.PlayerGoesByMockDice(1);
-                    for(const auto& coord2 : second_coords)
-                    {
-                        if(!_g.arbiter.IllegalBlocking(coord2, !dice_idx))  // board and block legal continuation
-                        {
-                            _g.UndoSilentMock(coord, dice_idx);
-                            return true;
-                        }
-                    }
-                    _g.UndoSilentMock(coord, dice_idx);
-                }
-            }
-            return false;
-        };
+        int steps_left = (_g.arbiter.CanUseMockDice(0) + _g.arbiter.CanUseMockDice(1)) * (1 + _g.doubles_rolled);
+        _completable = (steps_left <= _g.legal_turns.MaxLen());
 
-        _completable = ( CompleteFromDice(0) || CompleteFromDice(1) );
         turn_last_updated.at(_g.board.PlayerIdx()) = _g.turn_number.at(_g.board.PlayerIdx());
     }
 }

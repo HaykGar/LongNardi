@@ -59,7 +59,7 @@ status_codes Controller::ReceiveCommand(const Command& cmd)
                 outcome = g.TryFinishMove(start, std::get<Coord>(cmd.payload) ); // this makes the move if possible, triggering redraws
             else if (std::holds_alternative<bool>(cmd.payload)){
                 //std::cout << "\n\nattempting movebydice\n\n";
-                outcome = g.TryMoveByDice(start, std::get<bool>(cmd.payload));
+                outcome = g.TryFinishMove(start, std::get<bool>(cmd.payload));
             }
 
             if(outcome == status_codes::SUCCESS)  // turn not over

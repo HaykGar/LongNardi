@@ -58,11 +58,14 @@ struct Coord
     int col;
 };
 
-struct StartAndDice{ 
-    StartAndDice(Coord f, bool d) : _from(f), _diceIdx(d) {}
+struct StartAndDice
+{ 
+    StartAndDice(const Coord& f, bool d) : _from(f), _diceIdx(d) {}
     Coord _from; 
     bool _diceIdx; 
 };
+
+using MoveSequence = std::vector<StartAndDice>;
 
 }   // namespace Nardi
 

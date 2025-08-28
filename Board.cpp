@@ -102,10 +102,10 @@ void Board::UpdateAvailabilityStart(const Coord start)  // not reference since w
         int d = 1;
         Coord coord = CoordAfterDistance(start, -d, !player_idx);
 
-        while( !coord.OutOfBounds()  && d <= 6 )
+        while( !coord.OutOfBounds() && d <= 6 )
         {
-            if(at(coord) * player_sign < 0) // other player occupies coord
-                goes_idx_plusone[!player_idx][d-1].insert(coord);   // coord reaches a new empty spot at start with distance d
+            if(at(coord) * player_sign < 0 && WellDefinedEnd(coord, start, !player_idx) == status_codes::SUCCESS)
+                goes_idx_plusone[!player_idx][d-1].insert(coord);   // enemy piece at coord brd legal to move to start
 
             ++d;
             coord = CoordAfterDistance(start, -d, !player_idx);
@@ -121,7 +121,7 @@ void Board::UpdateAvailabilityStart(const Coord start)  // not reference since w
                 goes_idx_plusone[player_idx][i-1].insert({!player_idx, COLS - max_num_occ.at(player_idx)}); 
 
             for(int i = 1; i < max_num_occ.at(player_idx); ++i)
-                if(at(!player_idx, COLS - i) * player_sign  > 0)
+                if(at(!player_idx, COLS - i) * player_sign  > 0)    // player occupies square
                     goes_idx_plusone[player_idx][i-1].insert({!player_idx, COLS - i});
         }
     }
@@ -136,7 +136,7 @@ void Board::UpdateAvailabilityDest(const Coord& dest)
         Coord coord = CoordAfterDistance(dest, d);
         while( !coord.OutOfBounds() && d <= 6 )
         {
-            if(at(coord) * player_sign >= 0) // square empty or occupied by player already
+            if(WellDefinedEnd(dest, coord) == status_codes::SUCCESS)    // brd legal to move from newly filled slot to coord
                 goes_idx_plusone[player_idx][d-1].insert(dest);
             
             ++d;
@@ -147,9 +147,8 @@ void Board::UpdateAvailabilityDest(const Coord& dest)
         coord = CoordAfterDistance(dest, -d, !player_idx);
         while( !coord.OutOfBounds() && d <= 6 )
         {
-            if(at(coord) * player_sign < 0) // other player occupies coord
-                goes_idx_plusone[!player_idx][d-1].erase(coord);   // pieces at coord can no longer travel here
-
+            goes_idx_plusone[!player_idx][d-1].erase(coord);   // pieces at coord can no longer travel here
+                // no-op if coord wasn't already contained in it
             ++d;
             coord = CoordAfterDistance(dest, -d, !player_idx);
         }
@@ -179,9 +178,14 @@ status_codes Board::ValidStart(const Coord& start) const
 
 status_codes Board::WellDefinedEnd(const Coord& start, const Coord& end) const
 {
+    return WellDefinedEnd(start, end, player_idx);
+}
+
+status_codes Board::WellDefinedEnd(const Coord& start, const Coord& end, bool player) const
+{
     if( end.OutOfBounds() )
         return status_codes::OUT_OF_BOUNDS;
-    else if ( player_sign * at(end) < 0)   // destination occupied by opponent
+    else if ( BoolToSign(player) * at(end) < 0)   // destination occupied by player's opponent
         return status_codes::DEST_ENEMY;
     else if(start.row == end.row )
     {
@@ -190,7 +194,7 @@ status_codes Board::WellDefinedEnd(const Coord& start, const Coord& end) const
 
         return status_codes::SUCCESS; // prevent unnecessary RowChangeCheck
     }
-    else if (Bad_RowChangeTo(end.row, player_idx)) // sr != er
+    else if (Bad_RowChangeTo(end.row, player)) // sr != er
         return status_codes::OUT_OF_BOUNDS;
     else
         return status_codes::SUCCESS;

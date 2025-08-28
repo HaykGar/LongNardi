@@ -33,6 +33,8 @@ class TestBuilder : public testing::Test
         const std::array<std::array<int, COLS>, ROWS>& GetBoard() const;
 
         void StatusReport() const;
+
+        const Game& GetGame() const;
         
     private:
         std::unique_ptr<Game> _game;
@@ -64,5 +66,9 @@ const std::array<std::array<int, COLS>, ROWS>& TestBuilder::GetBoard() const
 {
     return _game->board._realBoard.data;
 }
+
+inline 
+const Game& TestBuilder::GetGame() const
+{ return *_game; }
 
 }   // namespace Nardi

@@ -42,6 +42,7 @@ public:
     // Legality Checks
     status_codes ValidStart(const Coord& s) const;
     status_codes WellDefinedEnd(const Coord& start, const Coord& end) const;  // check that move end from start is friendly or empty
+    status_codes WellDefinedEnd(const Coord& start, const Coord& end, bool player) const;
     
     bool IsPlayerHead(const Coord& c) const;
     bool HeadReuseIssue(const Coord& c) const;
