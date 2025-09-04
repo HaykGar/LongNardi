@@ -22,7 +22,7 @@ status_codes Controller::ReceiveCommand(const Command& cmd)
     //std::cout << "dice rolled? " << std::boolalpha << dice_rolled << "\n";
     //std::cout << "Game Over? "   << std::boolalpha << g.GameIsOver() << "\n";
 
-    if(g.GameIsOver())  // redundant, cheap protection so no changes made after end.
+    if(g.GameIsOver())
         return status_codes::NO_LEGAL_MOVES_LEFT; 
 
     status_codes outcome = status_codes::MISC_FAILURE;
@@ -32,15 +32,13 @@ status_codes Controller::ReceiveCommand(const Command& cmd)
         break;
     case Actions::QUIT:
         quit_requested = true;
-        outcome = status_codes::SUCCESS;  // user requested quit is not a problem
+        outcome = status_codes::NO_LEGAL_MOVES_LEFT;
         break;
     case Actions::ROLL_DICE:
         if(!dice_rolled)    // treat converse as misc failure
         {
             outcome = g.RollDice();
-            if(outcome == status_codes::NO_LEGAL_MOVES_LEFT)
-                SwitchTurns();
-            else
+            if(outcome != status_codes::NO_LEGAL_MOVES_LEFT)
                 dice_rolled = true;
         }
         break;
@@ -48,9 +46,7 @@ status_codes Controller::ReceiveCommand(const Command& cmd)
     case Actions::MOVE_BY_DICE:
         //std::cout << "trying to select or move\n";
         if (!dice_rolled)   // no attempts to move before rolling
-        {
             break;
-        }
         
         else if(start_selected)
         {
@@ -64,17 +60,12 @@ status_codes Controller::ReceiveCommand(const Command& cmd)
 
             if(outcome == status_codes::SUCCESS)  // turn not over
                 start_selected = false;
-            else if(outcome == status_codes::NO_LEGAL_MOVES_LEFT)
-                SwitchTurns();
             else
-                start_selected = false; // unselect start if illegal move attempted or start re-selected
+                start_selected = false; // unselect start if illegal move attempted or no legal moves left
         }
-        else
+        else if(std::holds_alternative<Coord>(cmd.payload))
         {
             //std::cout << "trying start select\n";
-            if(!std::holds_alternative<Coord>(cmd.payload))
-                break;  // attempted to move by dice without selecting start, or monostate payload
-            
             outcome = g.TryStart(std::get<Coord>(cmd.payload));
             if (outcome == status_codes::SUCCESS)
             {
@@ -83,10 +74,20 @@ status_codes Controller::ReceiveCommand(const Command& cmd)
             }
         }
         break;
+    case Actions::AUTOPLAY:
+        if(std::holds_alternative<std::string>(cmd.payload))
+        {
+            bool auto_played = g.AutoPlayTurn(std::get<std::string>(cmd.payload));
+            outcome = auto_played ? status_codes::NO_LEGAL_MOVES_LEFT : status_codes::MISC_FAILURE;
+        }
+        break;
     default:
         std::cerr << "Unexpected command received\n";
         break;
     }
+
+    if(outcome == status_codes::NO_LEGAL_MOVES_LEFT)
+        SwitchTurns();
 
     return outcome;
 }

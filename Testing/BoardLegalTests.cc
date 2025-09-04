@@ -17,22 +17,22 @@ TEST_F(TestBuilder, StartSelect_InvalidStarts)
                 << "StartOfTurn should succeed, no forced moves";
 
     // 1-A  empty slot
-    rc = ReceiveCommand(Command(Actions::SELECT_SLOT, {0,2} ));
+    rc = ReceiveCommand(Command(0,2));
     EXPECT_EQ(rc, status_codes::START_EMPTY_OR_ENEMY)
         << "Selecting empty slot (0,2) did not return START_EMPTY_OR_ENEMY";
 
     // 1-B  enemy pile
-    rc = ReceiveCommand(Command(Actions::SELECT_SLOT, {1,0}));
+    rc = ReceiveCommand(Command(1,0));
     EXPECT_EQ(rc, status_codes::START_EMPTY_OR_ENEMY)
         << "Enemy pile (black head) should be rejected";
 
     // 1-C  column out of range
-    rc = ReceiveCommand(Command(Actions::SELECT_SLOT, {0, COLS}));
+    rc = ReceiveCommand(Command(0, COLS));
     EXPECT_EQ(rc, status_codes::OUT_OF_BOUNDS)
         << "Column == COLS should yield OUT_OF_BOUNDS";
 
     // 1-D  row out of range
-    rc = ReceiveCommand(Command(Actions::SELECT_SLOT, {2, 0}));
+    rc = ReceiveCommand(Command(2, 0));
     EXPECT_EQ(rc, status_codes::OUT_OF_BOUNDS)
         << "Row 2 should yield OUT_OF_BOUNDS (only 0 & 1 valid)";
 }
@@ -53,20 +53,20 @@ TEST_F(TestBuilder, StartSelect_MultipleLegalStarts)
               << "No forced moves expected on (2,4) roll";
 
     // 2-A  legal start at column 3
-    auto rc = ReceiveCommand(Command(Actions::SELECT_SLOT, {0,3}));
+    auto rc = ReceiveCommand(Command(0,3));
     ASSERT_EQ(rc, status_codes::SUCCESS)
         << "Valid pile (0,3) should be selectable";
-    rc = ReceiveCommand(Command(Actions::SELECT_SLOT, {0,3}));
+    rc = ReceiveCommand(Command(0,3));
 
     ASSERT_NE(rc, status_codes::SUCCESS) << "should not be able to re-select";  // no path anyway as no dice combo = 0
 
     // 2-B  legal re-select head (allowed after previous cleared)
-    rc = ReceiveCommand(Command(Actions::SELECT_SLOT, {0,0}));
+    rc = ReceiveCommand(Command(0,0));
     ASSERT_EQ(rc, status_codes::SUCCESS)
         << "Head (0,0) should be selectable after clearing previous start";
 
     // 2-C  selecting head again without moving
-    rc = ReceiveCommand(Command(Actions::SELECT_SLOT, {0,0}));
+    rc = ReceiveCommand(Command(0,0));
     EXPECT_NE(rc, status_codes::SUCCESS)
         << "Re-selecting same start without move should return NO_PATH";
 }
@@ -83,14 +83,14 @@ TEST_F(TestBuilder, HeadReuse_NormalRoll)
         << "StartOfTurn should succeed (no forced moves)";
 
     // --- Move #1: from head using die index 0 (value 1) ---------------------
-    auto rc = ReceiveCommand(Command(Actions::SELECT_SLOT, {0,0}));
+    auto rc = ReceiveCommand(Command(0,0));
     ASSERT_EQ(rc, status_codes::SUCCESS) << "Unable to select head for first move";
 
-    rc = ReceiveCommand(Command(Actions::MOVE_BY_DICE, first));   // use die 0 (=1)
+    rc = ReceiveCommand(Command(first));   // use die 0 (=1)
     ASSERT_EQ(rc, status_codes::SUCCESS) << "Head move failed with die 1";
 
     // --- Attempt to select head again (should be blocked) -------------------
-    rc = ReceiveCommand(Command(Actions::SELECT_SLOT, {0,0}));
+    rc = ReceiveCommand(Command(0,0));
     EXPECT_EQ(rc, status_codes::HEAD_PLAYED_ALREADY)
         << "Head reused in same turn but did NOT return HEAD_PLAYED_ALREADY";
 }
@@ -111,38 +111,37 @@ TEST_F(TestBuilder, HeadReuse_DoublesFourthMove)
         << "StartOfTurn (4,4) should succeed";
 
     /* -- Move #1 : head piece from 0 to 4 (die idx 0) ---------------------- */
-    rc = ReceiveCommand(Command(Actions::SELECT_SLOT, {0,0}));
+    rc = ReceiveCommand(Command(0,0));
     ASSERT_EQ(rc, status_codes::SUCCESS) << "Cannot select head for move #1";
 
-    rc = ReceiveCommand(Command(Actions::MOVE_BY_DICE, first));   // use first 4
+    rc = ReceiveCommand(Command(first));   // use first 4
     ASSERT_EQ(rc, status_codes::SUCCESS) << "Move #1 from head failed";
 
     PrintBoard();
 
     /* -- Move #2 : other pile (0,3 → 0,7) (die idx 1) ---------------------- */
-    rc = ReceiveCommand(Command(Actions::SELECT_SLOT, {0,3}));
+    rc = ReceiveCommand(Command(0,3));
     ASSERT_EQ(rc, status_codes::SUCCESS) << "Cannot select pile (0,3)";
 
-    rc = ReceiveCommand(Command(Actions::MOVE_BY_DICE, 1));   // use second 4
+    rc = ReceiveCommand(Command(second));   // use second 4
     ASSERT_EQ(rc, status_codes::SUCCESS) << "Move #2 failed";
 
     PrintBoard();
 
     /* -- Move #3 : pile (0,5 → 0,9)  (die idx 0 again) --------------------- */
-    rc = ReceiveCommand(Command(Actions::SELECT_SLOT, {0,5}));
+    rc = ReceiveCommand(Command(0,5));
     ASSERT_EQ(rc, status_codes::SUCCESS) << "Cannot select pile (0,5)";
 
-    rc = ReceiveCommand(Command(Actions::MOVE_BY_DICE, first));   // third 4
+    rc = ReceiveCommand(Command(first));   // third 4
     ASSERT_EQ(rc, status_codes::SUCCESS) << "Move #3 failed";
 
     PrintBoard();
 
     /* -- Move #4 : try head again → should be blocked ---------------------- */
-    rc = ReceiveCommand(Command(Actions::SELECT_SLOT, {0,0}));
+    rc = ReceiveCommand(Command(0,0));
     EXPECT_EQ(rc, status_codes::HEAD_PLAYED_ALREADY)
         << "Head reused on 4-th move (doubles) but not flagged";
 }
-
 // ───────────────────────── 4. Well Def End ──────────────────────────
 
 TEST_F(TestBuilder, MoveOntoEnemyPiece)
@@ -153,8 +152,8 @@ TEST_F(TestBuilder, MoveOntoEnemyPiece)
 
     ASSERT_EQ(StartOfTurn(white, brd, 4, 5), status_codes::SUCCESS);
 
-    ASSERT_EQ(ReceiveCommand({Actions::SELECT_SLOT, {0,0}}), status_codes::SUCCESS);
-    EXPECT_EQ(ReceiveCommand({Actions::MOVE_BY_DICE, first}),     status_codes::DEST_ENEMY)
+    ASSERT_EQ(ReceiveCommand(Command(0,0)), status_codes::SUCCESS);
+    EXPECT_EQ(ReceiveCommand(Command(first)),     status_codes::DEST_ENEMY)
         << "landing on enemy pile must be DEST_ENEMY";
 
     Board brd2(board_legal);
@@ -174,8 +173,8 @@ TEST_F(TestBuilder, OutOfBounds)
 
     ASSERT_EQ(StartOfTurn(white, brd, 3, 5), status_codes::SUCCESS);
 
-    ASSERT_EQ(ReceiveCommand({Actions::SELECT_SLOT, {1,10}}), status_codes::SUCCESS);
-    auto rc = ReceiveCommand({Actions::MOVE_BY_DICE, first});
+    ASSERT_EQ(ReceiveCommand(Command(1,10)), status_codes::SUCCESS);
+    auto rc = ReceiveCommand(Command(first));
 
     DispErrorCode(rc);
     EXPECT_NE(rc, status_codes::SUCCESS) << "move that crosses board end should be OUT_OF_BOUNDS";

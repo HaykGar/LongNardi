@@ -18,7 +18,7 @@ class TerminalRW : public ReaderWriter
     public:
         TerminalRW(const Game& g, Controller& c);
         
-        virtual void AwaitUserCommand() override;
+        virtual status_codes AwaitUserCommand() override;
         
         virtual void ReAnimate() const override;         // show the current state of the game
         virtual void AnimateDice() const override;

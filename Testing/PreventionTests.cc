@@ -22,20 +22,20 @@ TEST_F(TestBuilder, Legality_MovePreventsCompletion)
     DispErrorCode(rc);
 
     ASSERT_EQ(rc, status_codes::SUCCESS);
-    ASSERT_EQ(ReceiveCommand({Actions::SELECT_SLOT, {0,0}}), status_codes::SUCCESS) << "couldn't select head";
+    ASSERT_EQ(ReceiveCommand(Command(0,0)), status_codes::SUCCESS) << "couldn't select head";
 
-    rc = ReceiveCommand({Actions::MOVE_BY_DICE, second});
+    rc = ReceiveCommand(Command(second));
     DispErrorCode(rc);
     ASSERT_NE(rc, status_codes::SUCCESS) << "move 6 from head prevents completion";
     ASSERT_EQ(GetBoardAt(0, 6), 0);
 
     StatusReport();
 
-    ASSERT_EQ(ReceiveCommand({Actions::SELECT_SLOT, {0,3}}), status_codes::SUCCESS) << "couldn't select 0, 3";
-    ASSERT_EQ(ReceiveCommand({Actions::MOVE_BY_DICE, second}), status_codes::SUCCESS) << "couldn't perform valid move";
+    ASSERT_EQ(ReceiveCommand(Command(0,3)), status_codes::SUCCESS) << "couldn't select 0, 3";
+    ASSERT_EQ(ReceiveCommand(Command(second)), status_codes::SUCCESS) << "couldn't perform valid move";
 
-    ASSERT_EQ(ReceiveCommand({Actions::SELECT_SLOT, {0,0}}), status_codes::SUCCESS);
-    rc = ReceiveCommand({Actions::MOVE_BY_DICE, first});
+    ASSERT_EQ(ReceiveCommand(Command(0,0)), status_codes::SUCCESS);
+    rc = ReceiveCommand(Command(first));
     EXPECT_EQ(rc, status_codes::NO_LEGAL_MOVES_LEFT) << "couldn't move from head";
 
     brd = ZeroWhite1BlackBoard();
@@ -55,8 +55,8 @@ TEST_F(TestBuilder, Legality_MovePreventsCompletion)
 
     StatusReport();
 
-    ASSERT_EQ(ReceiveCommand({Actions::SELECT_SLOT, {0,0}}), status_codes::SUCCESS);
-    EXPECT_EQ(ReceiveCommand({Actions::SELECT_SLOT, {0,2}}), status_codes::PREVENTS_COMPLETION);
+    ASSERT_EQ(ReceiveCommand(Command(0,0)), status_codes::SUCCESS);
+    EXPECT_EQ(ReceiveCommand(Command(0,2)), status_codes::PREVENTS_COMPLETION);
 }
 
 TEST_F(TestBuilder, PreventsCompletion)
@@ -65,19 +65,19 @@ TEST_F(TestBuilder, PreventsCompletion)
   status_codes outcome = StartOfTurn(white, brd, 1, 2);
   ASSERT_EQ(outcome, status_codes::SUCCESS) << "forced all on roll - preventions1";
 
-  outcome = ReceiveCommand(Command(Actions::SELECT_SLOT, {0, 0}));
+  outcome = ReceiveCommand(Command(0, 0));
   ASSERT_EQ(outcome, status_codes::SUCCESS) << "unable to select head - preventions1";
 
-  outcome = ReceiveCommand(Command(Actions::SELECT_SLOT, {0, 2}));
+  outcome = ReceiveCommand(Command(0, 2));
   EXPECT_EQ(outcome, status_codes::PREVENTS_COMPLETION);
 
   DisplayBoard(preventions2);
   outcome = StartOfTurn(white, preventions2, 1, 2);
   ASSERT_EQ(outcome, status_codes::SUCCESS);
 
-  outcome = ReceiveCommand(Command(Actions::SELECT_SLOT, {0, 3}));
+  outcome = ReceiveCommand(Command(0, 3));
   ASSERT_EQ(outcome, status_codes::SUCCESS) << "unable to select start - preventions2";
 
-  outcome = ReceiveCommand(Command(Actions::SELECT_SLOT, {0, 5}));
+  outcome = ReceiveCommand(Command(0, 5));
   EXPECT_EQ(outcome, status_codes::PREVENTS_COMPLETION) << "should be no available 1 moves";
 }

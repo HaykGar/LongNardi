@@ -9,25 +9,18 @@ Game::PreventionMonitor::PreventionMonitor(Game& g) : _g(g), turn_last_updated({
 
 bool Game::PreventionMonitor::CheckNeeded()
 {
-    return (!_g.doubles_rolled && _g.arbiter.CanUseMockDice(0) && _g.arbiter.CanUseMockDice(1) && TurnCompletable() );
+    return (!_g.doubles_rolled && _g.arbiter.CanUseDice(0) && _g.arbiter.CanUseDice(1) && TurnCompletable() );
 }
 
 bool Game::PreventionMonitor::Illegal(const Coord& start, bool dice_idx)
 {
-    if(CheckNeeded() && !MakesSecondStep(start))
+    if(CheckNeeded() && _g.arbiter.LegalMove_2step(start).first != status_codes::SUCCESS)
     {
         _g.MockAndUpdateBlock(start, dice_idx); // moves or removes as needed
 
-        // std::cout << "board in prev check\n";
-        // DisplayBoard(_g.board._mockBoard.View());
-
-        std::unordered_set<Coord> other_dice_options = _g.PlayerGoesByMockDice(!dice_idx);
-
-        // std::cout<< "options:\n";
-        // for(const auto& coord : other_dice_options)
-        //     coord.Print();
-
+        std::unordered_set<Coord> other_dice_options = _g.PlayerGoesByDice(!dice_idx);
         std::unordered_set<Coord>::iterator it = other_dice_options.begin();
+
         while(it != other_dice_options.end())
         {
             if( _g.arbiter.BoardAndBlockLegal(*it, !dice_idx) != status_codes::SUCCESS)
@@ -56,72 +49,33 @@ void Game::PreventionMonitor::SetCompletable()
 {
     if( turn_last_updated.at(_g.board.PlayerIdx()) != _g.turn_number.at(_g.board.PlayerIdx()) )
     {
-        // std::array<std::unordered_set<Coord>, 2> options = { _g.PlayerGoesByMockDice(0), _g.PlayerGoesByMockDice(1) };
-
-        // auto CompleteFromDice = [&] (bool dice_idx) -> bool
-        // {  
-        //     for(const auto& coord : options.at(dice_idx))
-        //     {
-        //         if(_g.board._mockBoard.ValidStart(coord) == status_codes::SUCCESS && !_g.arbiter.IllegalBlocking(coord, dice_idx))
-        //         {   // brd and block legal
-        //             _g.SilentMock(coord, dice_idx);
-        //             std::unordered_set<Coord> second_coords = _g.PlayerGoesByMockDice(1);
-        //             for(const auto& coord2 : second_coords)
-        //             {
-        //                 if( _g.board._mockBoard.ValidStart(coord2) == status_codes::SUCCESS && 
-        //                     !_g.arbiter.IllegalBlocking(coord2, !dice_idx))  // board and block legal continuation
-        //                 {
-        //                     _g.UndoSilentMock(coord, dice_idx);
-        //                     return true;
-        //                 }
-        //             }
-        //             _g.UndoSilentMock(coord, dice_idx);
-        //         }
-        //     }
-        //     return false;
-        // };
-        // _completable = ( CompleteFromDice(0) || CompleteFromDice(1) );
-
-        int steps_left = (_g.arbiter.CanUseMockDice(0) + _g.arbiter.CanUseMockDice(1)) * (1 + _g.doubles_rolled);
+        int steps_left = (_g.arbiter.CanUseDice(0) + _g.arbiter.CanUseDice(1)) * (1 + _g.doubles_rolled);
         _completable = (steps_left <= _g.legal_turns.MaxLen());
 
         turn_last_updated.at(_g.board.PlayerIdx()) = _g.turn_number.at(_g.board.PlayerIdx());
     }
 }
 
-bool Game::PreventionMonitor::MakesSecondStep(const Coord& start) const
-{
-    Coord end = _g.board._realBoard.CoordAfterDistance(start, _g.dice[0] + _g.dice[1]);
-    return (_g.board._mockBoard.WellDefinedEnd(start, end) == status_codes::SUCCESS && !_g.arbiter.IllegalBlocking(start, end) );
-}
-
 ///////////// Bad Block /////////////
 
-Game::BadBlockMonitor::BadBlockMonitor(Game& g) : _g(g), _isSolidified(false), _state(block_state::CLEAR) {}
+Game::BadBlockMonitor::BadBlockMonitor(Game& g) : _g(g), _state(block_state::CLEAR) {}
 
 void Game::BadBlockMonitor::Reset()
 {
     _blockedAll = false;
-    _isSolidified = false;
     _blockLength = 0;
     _state = block_state::CLEAR;
 }
 
 void Game::BadBlockMonitor::Solidify()
 {
-    // std::cout << "solidifying \n\n\n";
-
     Reset();
     _blockedAll = BlockingAll();
-    _isSolidified = true;
 
     if(_blockedAll)
         WillBeFixable();    // set block state
     else
         _state = block_state::CLEAR;
-
-    // std::cout << "blocking all? " << std::boolalpha << _blockedAll << "\n";
-    // std::cout << "block length? " << _blockLength << "\n";
 }
 
 bool Game::BadBlockMonitor::BlockingAll()
@@ -134,17 +88,17 @@ bool Game::BadBlockMonitor::BlockingAll()
     Coord coord(_g.board.PlayerIdx(), COLS - 1);
     unsigned streak = 0;
     
-    for(; coord.InBounds(); coord = _g.board._realBoard.CoordAfterDistance(coord, -1, other_player))
+    for(; coord.InBounds(); coord = _g.board.CoordAfterDistance(coord, -1, other_player))
     {
-        if(_g.board._mockBoard.at(coord) * player_sign > 0)
+        if(_g.board.at(coord) * player_sign > 0)
         {
             ++streak;
             if(streak == 6 && (BlockageAround(coord) && !PieceAhead()) )  // will go over this location and set vars accordingly
             {
-                while (coord.InBounds() && _g.board._mockBoard.at(coord) * player_sign > 0)
+                while (coord.InBounds() && _g.board.at(coord) * player_sign > 0)
                 {
                     _blockStart = coord;
-                    coord = _g.board._realBoard.CoordAfterDistance(coord, -1, other_player);
+                    coord = _g.board.CoordAfterDistance(coord, -1, other_player);
                 }     
 
                 return true; 
@@ -159,7 +113,7 @@ bool Game::BadBlockMonitor::BlockingAll()
 
 bool Game::BadBlockMonitor::PreConditions()
 {
-    return _g.board._mockBoard.ReachedEnemyHome().at(! _g.board.PlayerIdx() ) == 0; // not possible once enemy entered home 
+    return _g.board.ReachedEnemyHome().at(! _g.board.PlayerIdx() ) == 0; // not possible once enemy entered home 
 }
 
 bool Game::BadBlockMonitor::Illegal(const Coord& start, bool dice_idx)
@@ -188,18 +142,18 @@ bool Game::BadBlockMonitor::Illegal(const Coord& start, const Coord& end)
 
 bool Game::BadBlockMonitor::CheckMockedState()
 {
-    if(_isSolidified && _blockedAll)
+    if(_blockedAll)
         return !Unblocked() && !WillBeFixable();
-    else
+    else    // maybe just always take this branch??? `
         return ( BlockingAll() && !PieceAhead() && !WillBeFixable() );
 }
 
 bool Game::BadBlockMonitor::Unblocked()
 {
     Coord start = _blockStart;
-    for(int i = 0; i < 6 && start.InBounds(); ++i, start = _g.board._mockBoard.CoordAfterDistance(start, 1, !_g.board.PlayerIdx()))
+    for(int i = 0; i < 6 && start.InBounds(); ++i, start = _g.board.CoordAfterDistance(start, 1, !_g.board.PlayerIdx()))
     {
-        if(_g.board._mockBoard.at(start) * _g.board.PlayerSign() <= 0)  // empty or enemy, should only ever be friendly or empty
+        if(_g.board.at(start) * _g.board.PlayerSign() <= 0)  // empty or enemy, should only ever be friendly or empty
             return true;
     }
 
@@ -208,22 +162,16 @@ bool Game::BadBlockMonitor::Unblocked()
 
 bool Game::BadBlockMonitor::Unblocks(const Coord& start, const Coord& end)
 {
-    if( _g.board.PlayerSign() * _g.board._realBoard.at(start) != 1 )
+    if( _g.board.PlayerSign() * _g.board.at(start) != 1 )
         return false;   // not even vacating square
 
-    // std::cout << "checking if " << start.AsStr() << " unblocks\n";
-    auto dist = _g.board._realBoard.GetDistance(_blockStart, start, !_g.board.PlayerIdx()); 
+    auto dist = _g.board.GetDistance(_blockStart, start, !_g.board.PlayerIdx()); 
 
-    // std::cout << "block starts at ";
-    // _blockStart.Print();
-
-    // std::cout << "dist: " << dist << "\n";
     if(dist >= 0 && dist < 6)   // start is a blocking piece, at most the 6th one
     {
-        unsigned blocked_after = _blockLength - dist - 1;
-        // std::cout << "blocked after: " << blocked_after << "\n";
+        int blocked_after = _blockLength - dist - 1;
 
-        if(end == _g.board._realBoard.CoordAfterDistance(_blockStart, _blockLength) )
+        if(end == _g.board.CoordAfterDistance(_blockStart, _blockLength) )
             ++blocked_after;    // start piece blocks at the end, doesn't actually get subtracted
 
         return (blocked_after < 6);
@@ -234,7 +182,7 @@ bool Game::BadBlockMonitor::Unblocks(const Coord& start, const Coord& end)
 
 bool Game::BadBlockMonitor::BlockageAround(const Coord& end)
 {
-    if(_g.board._mockBoard.at(end) * _g.board.PlayerSign() <= 0)
+    if(_g.board.at(end) * _g.board.PlayerSign() <= 0)
         return false;   //not occupying end
 
     _blockLength = 1;   // end coord itself
@@ -244,22 +192,18 @@ bool Game::BadBlockMonitor::BlockageAround(const Coord& end)
     int player_sign = _g.board.PlayerSign();
     bool other_player = !_g.board.PlayerIdx();
 
-    Coord coord = _g.board._realBoard.CoordAfterDistance(end, 1, other_player);
+    Coord coord = _g.board.CoordAfterDistance(end, 1, other_player);
 
     // check ahead of end
-    for(; !coord.OutOfBounds() && _g.board._mockBoard.at(coord) * player_sign > 0; coord = _g.board._realBoard.CoordAfterDistance(coord, 1, other_player))
+    for(; !coord.OutOfBounds() && _g.board.at(coord) * player_sign > 0; coord = _g.board.CoordAfterDistance(coord, 1, other_player))
         ++n_ahead;
     
     //check behind end
-    coord = _g.board._realBoard.CoordAfterDistance(end, -1, other_player);
-    for(; !coord.OutOfBounds() && _g.board._mockBoard.at(coord) * player_sign > 0; coord = _g.board._realBoard.CoordAfterDistance(coord, -1, other_player))
+    coord = _g.board.CoordAfterDistance(end, -1, other_player);
+    for(; !coord.OutOfBounds() && _g.board.at(coord) * player_sign > 0; coord = _g.board.CoordAfterDistance(coord, -1, other_player))
         ++n_behind;
-
-    // std::cout << "n ahead: " << n_ahead << ", n behind: " << n_behind << "\n";
     
-    _blockStart = _g.board._realBoard.CoordAfterDistance(end, -n_behind, other_player);
-    // std::cout << "block starts at ";
-    // _blockStart.Print();
+    _blockStart = _g.board.CoordAfterDistance(end, -n_behind, other_player);
     _blockLength += n_ahead + n_behind;
     
     return (_blockLength >= 6);
@@ -267,11 +211,11 @@ bool Game::BadBlockMonitor::BlockageAround(const Coord& end)
 
 bool Game::BadBlockMonitor::PieceAhead() 
 {
-    Coord after_block = _g.board._realBoard.CoordAfterDistance(_blockStart, _blockLength, !_g.board.PlayerIdx());
+    Coord after_block = _g.board.CoordAfterDistance(_blockStart, _blockLength, !_g.board.PlayerIdx());
 
-    for(; !after_block.OutOfBounds(); after_block = _g.board._realBoard.CoordAfterDistance(after_block, 1, !_g.board.PlayerIdx()))
+    for(; !after_block.OutOfBounds(); after_block = _g.board.CoordAfterDistance(after_block, 1, !_g.board.PlayerIdx()))
     {
-        if(_g.board._mockBoard.at(after_block) * _g.board.PlayerSign() < 0){
+        if(_g.board.at(after_block) * _g.board.PlayerSign() < 0){
             return true;
         }
     }
@@ -286,11 +230,11 @@ bool Game::BadBlockMonitor::WillBeFixable() // reminder the block is already moc
 
     std::pair<int, int> times_usable = {0, 0};
     if(_g.doubles_rolled)
-        times_usable.first = 4 - (_g.times_mockdice_used[0] + _g.times_mockdice_used[1]);
+        times_usable.first = 4 - (_g.times_dice_used[0] + _g.times_dice_used[1]);
     else
     {
-        times_usable.first  = (_g.times_mockdice_used[0] == 0) ? 1 : 0;
-        times_usable.second = (_g.times_mockdice_used[1] == 0) ? 1 : 0;
+        times_usable.first  = (_g.times_dice_used[0] == 0) ? 1 : 0;
+        times_usable.second = (_g.times_dice_used[1] == 0) ? 1 : 0;
     }
 
     Coord coord;
@@ -298,13 +242,8 @@ bool Game::BadBlockMonitor::WillBeFixable() // reminder the block is already moc
 
 
     auto TryDice = [&](bool d_idx, const Coord& c) -> bool {
-
-        // std::cout << "trying to move from " << c.AsStr() << "by " << _g.dice[d_idx] << " in willbefixable\n";
-
-        Coord dest = _g.board._mockBoard.CoordAfterDistance(c, _g.dice[d_idx], _g.board.PlayerIdx());
-        auto rc = _g.board._mockBoard.WellDefinedEnd(c, dest);
-        // DispErrorCode(rc);
-        if(rc == status_codes::SUCCESS)
+        Coord dest = _g.board.CoordAfterDistance(c, _g.dice[d_idx]);
+        if(_g.board.WellDefinedEnd(c, dest) == status_codes::SUCCESS)
         {
             _g.SilentMock(c, dest);
             success =  WillBeFixable();
@@ -323,8 +262,8 @@ bool Game::BadBlockMonitor::WillBeFixable() // reminder the block is already moc
 
     for( int d = 0; d < 6; ++d )
     {
-        coord = _g.board._mockBoard.CoordAfterDistance(_blockStart, d, !_g.board.PlayerIdx());
-        if(_g.board._mockBoard.ValidStart(coord) != status_codes::SUCCESS)
+        coord = _g.board.CoordAfterDistance(_blockStart, d, !_g.board.PlayerIdx());
+        if(_g.board.ValidStart(coord) != status_codes::SUCCESS)
             continue;
         if(times_usable.first > 0 && TryDice(0, coord))
             return PrepReturn(true);
@@ -339,21 +278,19 @@ bool Game::BadBlockMonitor::WillBeFixable() // reminder the block is already moc
 bool Game::BadBlockMonitor::StillBlocking()
 {
     Coord start = _blockStart;
-    while( start.InBounds() && _g.board.PlayerSign() * _g.board._mockBoard.at(start) <= 0)
+    while( start.InBounds() && _g.board.PlayerSign() * _g.board.at(start) <= 0)
     {
-        // std::cout << "shifting start, blockstart is still: "; _blockStart.Print();
-
-        start = _g.board._mockBoard.CoordAfterDistance(start, 1, !_g.board.PlayerIdx() );
+        start = _g.board.CoordAfterDistance(start, 1, !_g.board.PlayerIdx() );
     }   // sometimes this spot is unblocked by willbefixable recursions, so we find the next blocked one
     if(start.OutOfBounds())
         return false;
 
-    Coord coord = _g.board._mockBoard.CoordAfterDistance(start, 1, !_g.board.PlayerIdx() );
+    Coord coord = _g.board.CoordAfterDistance(start, 1, !_g.board.PlayerIdx() );
     for(int d = 1; d < 6 && coord.InBounds(); ++d)
     {
-        if(_g.board.PlayerSign() * _g.board._mockBoard.at(coord) <= 0)
+        if(_g.board.PlayerSign() * _g.board.at(coord) <= 0)
             return false;
-        coord = _g.board._mockBoard.CoordAfterDistance(coord, 1, !_g.board.PlayerIdx() );
+        coord = _g.board.CoordAfterDistance(coord, 1, !_g.board.PlayerIdx() );
     }
 
     return true;

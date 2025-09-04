@@ -24,16 +24,16 @@ void TerminalRW::AnimateDice() const  // assumes proper values of dice fed in
 }
 
 
-void TerminalRW::AwaitUserCommand()
+status_codes TerminalRW::AwaitUserCommand()
 {
     std::getline(std::cin, input);
     Command cmd = Input_to_Command();
     status_codes code = status_codes::MISC_FAILURE;
 
     if(cmd.action != Actions::NO_OP) // avoid wasteful passing flow to control
-        code = ctrl.ReceiveCommand(cmd);
-
-    DispErrorCode(code);
+        return ctrl.ReceiveCommand(cmd);
+    else
+        return code;
 }
 
 Command TerminalRW::Input_to_Command() const
@@ -48,9 +48,6 @@ Command TerminalRW::Input_to_Command() const
         
         else if(ch == 'r')
             return Command(Actions::ROLL_DICE);
-        
-        else if(ch == 'u')
-            return Command(Actions::UNDO);
 
         else if(ch == 'p')
         {
@@ -59,13 +56,13 @@ Command TerminalRW::Input_to_Command() const
         }
 
         else if(isdigit(ch))
-            return Command(Actions::MOVE_BY_DICE, ch - '0');
+            return Command(static_cast<bool>(ch - '0'));
 
         else
             return Actions::NO_OP;
     }
     else if(input_pieces.size() == 2 && isNumeric(input_pieces[0]) && isNumeric(input_pieces[1]) )
-        return Command( Actions::SELECT_SLOT, Coord( stoi(input_pieces[0]), stoi(input_pieces[1]) ) );
+        return Command( stoi(input_pieces[0]), stoi(input_pieces[1]) );
     
     else
         return Command(Actions::NO_OP);

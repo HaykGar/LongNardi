@@ -39,6 +39,7 @@ enum class Actions
     ROLL_DICE,
     SELECT_SLOT, 
     MOVE_BY_DICE,
+    AUTOPLAY,
     NO_OP
 };   // later: add resign offer, mars offer
 
@@ -69,7 +70,7 @@ using MoveSequence = std::vector<StartAndDice>;
 
 }   // namespace Nardi
 
-namespace std 
+namespace std
 {
     template<>
     struct hash<Nardi::Coord>
@@ -91,12 +92,13 @@ namespace Nardi
 struct Command // considering making this std::variant or something... 
 {
     Command(Actions a) : action(a) {}
-    Command(Actions a, Coord coord);
-    Command(Actions a, int r, int c);
-    Command(Actions a, bool dice_idx);
+    Command(Coord coord);
+    Command(int r, int c);
+    Command(bool dice_idx);
+    Command(std::string final_config);
 
     Actions action;
-    std::variant<std::monostate, Coord, bool> payload;
+    std::variant<std::monostate, Coord, bool, std::string> payload;
 };
 
 void VisualToGameCoord(Coord& coord); // not needed currently, but for graphics later

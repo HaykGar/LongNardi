@@ -12,7 +12,7 @@ class ReaderWriter
         ReaderWriter(const Game& game, Controller& c) : g(game), ctrl(c) {}
         virtual ~ReaderWriter() {}
 
-        virtual void AwaitUserCommand() = 0;
+        virtual status_codes AwaitUserCommand() = 0;
 
         virtual void ReAnimate() const = 0;         // show the current state of the game
         virtual void AnimateDice() const = 0; // get rid of this maybe, or make it reanimate wrapper in most cases?

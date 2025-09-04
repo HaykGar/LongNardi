@@ -31,7 +31,6 @@ status_codes TestBuilder::StartOfTurn(bool p_idx, const std::array<std::array<in
 status_codes TestBuilder::withDice(int d1, int d2)
 {
     _game->SetDice(d1, d2);
-    _game->board.ResetMock();
 
     status_codes outcome = _game->OnRoll();
 
@@ -53,9 +52,9 @@ void TestBuilder::withPlayer(bool p_idx)
 
 void TestBuilder::withBoard(const std::array<std::array<int, COLS>, ROWS>& b)
 {
-    _game->board._realBoard.head_used = false;
-    _game->board._realBoard.SetData(b);
-    _game->board._mockBoard = _game->board._realBoard;
+    _game->board.head_used = false;
+    _game->board.SetData(b);
+    _game->board = _game->board;
 }
 
 void TestBuilder::ResetControllerState()

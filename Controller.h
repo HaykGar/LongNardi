@@ -16,6 +16,8 @@ class Controller
         virtual status_codes ReceiveCommand(const Command& cmd);
         bool QuitRequested() const;
 
+        void SwitchTurns();
+
         friend class TestBuilder;
     private:
         Game& g;
@@ -24,7 +26,6 @@ class Controller
         bool dice_rolled;
         bool quit_requested;
 
-        void SwitchTurns();
 };
 
 

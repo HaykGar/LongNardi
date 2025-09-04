@@ -64,7 +64,7 @@ const int& TestBuilder::GetBoardAt(int r, int c) const
 inline
 const std::array<std::array<int, COLS>, ROWS>& TestBuilder::GetBoard() const
 {
-    return _game->board._realBoard.data;
+    return _game->board.data;
 }
 
 inline 
