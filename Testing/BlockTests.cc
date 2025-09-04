@@ -245,4 +245,3 @@ TEST_F(TestBuilder, Mars)
     rc = ReceiveCommand(Command(second));
     ASSERT_EQ(rc, status_codes::NO_LEGAL_MOVES_LEFT);
 }
-// need valid blocks - mars ` ` `

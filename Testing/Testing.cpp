@@ -8,101 +8,38 @@ using namespace Nardi;
 
 //////////////// Initialization ////////////////
 
-TestBuilder::TestBuilder()
-{
-    _game = std::make_unique<Game>(1);
-    _ctrl = std::make_unique<Controller>(*_game);
-    _game->turn_number = {2, 2}; // avoiding first turn case unless explicitly requested
-}
-
-void TestBuilder::StartPreRoll(bool p_idx, const std::array<std::array<int, COLS>, ROWS>& b)
-{
-    withPlayer(p_idx);
-    withBoard(b);
-    ResetControllerState();
-}
+TestBuilder::TestBuilder() : _bldr(), _game(_bldr.GetGame()), _ctrl(_bldr.GetCtrl())
+{}
 
 status_codes TestBuilder::StartOfTurn(bool p_idx, const std::array<std::array<int, COLS>, ROWS>& b, int d1, int d2)
 {
-    StartPreRoll(p_idx, b);
-    return withDice(d1, d2);
+    return _bldr.withScenario(p_idx, b, d1, d2, 0, 0);
 }
 
 status_codes TestBuilder::withDice(int d1, int d2)
 {
-    _game->SetDice(d1, d2);
-
-    status_codes outcome = _game->OnRoll();
-
-    PrintBoard();
-
-    if(outcome == status_codes::NO_LEGAL_MOVES_LEFT)
-        _ctrl->SwitchTurns();
-    else
-        _ctrl->dice_rolled = true;
-
-    return outcome;
+    return _bldr.withDice(d1, d2);
 }
 
-void TestBuilder::withPlayer(bool p_idx)
-{
-    if(_game->board.PlayerIdx() != p_idx)
-        _game->board.SwitchPlayer();
-}
-
-void TestBuilder::withBoard(const std::array<std::array<int, COLS>, ROWS>& b)
-{
-    _game->board.head_used = false;
-    _game->board.SetData(b);
-    _game->board = _game->board;
-}
-
-void TestBuilder::ResetControllerState()
-{
-    _ctrl->start_selected = false;
-    _ctrl->dice_rolled = false; 
-    _ctrl->quit_requested = false;
-}
 
 void TestBuilder::withFirstTurn()
 {
-    _game->turn_number = {0, 0};
+    _bldr.withFirstTurn();
 }
 
 //////////////// Actions ////////////////
 
 status_codes TestBuilder::ReceiveCommand(const Command& cmd)
 {
-    // std::cout << "\n\n\n\n";
-    // std::cout << "received command: " << static_cast<int>(cmd.action) << "\n";
-
-    auto rc = _ctrl->ReceiveCommand(cmd);
-    DispErrorCode(rc);
-    return rc;
+    return _bldr.ReceiveCommand(cmd);
 }
 
 void TestBuilder::PrintBoard() const
 {
-    auto& brd = _game->GetBoardRef();
-    for(int r = 0; r < ROWS; ++r)
-    {
-        for (int c = 0; c < COLS; ++c)
-        {
-            std::cout << brd.at(r, c) << "\t";
-        }
-        std::cout << "\n\n";
-    }
-    std::cout << "\n\n\n";
+    _bldr.PrintBoard();
 }
 
 void TestBuilder::StatusReport() const
 {
-    std::cout << "player: " << _game->board.PlayerIdx() << "\n";
-
-    std::cout << "dice: " << _game->dice[0] << " " << _game->dice[1] << "\n";
-
-    std::cout << "dice used: " << _game->times_dice_used[0] << ", " << _game->times_dice_used[1] << "\n";
-
-    std::cout << "board: \n";
-    PrintBoard();
+   _bldr.StatusReport();
 }

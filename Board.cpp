@@ -342,7 +342,7 @@ void Board::ConstructAvailabilitySets()
 
         if(CurrPlayerInEndgame())
         {
-            std::cout << "endgame case detected for player " << player_idx << "\n";
+            std::cout << "endgame case detected for player " << player_sign << "\n";
 
             SetMaxOcc();
             if(max_num_occ.at(player_idx) > 0)
@@ -356,13 +356,6 @@ void Board::ConstructAvailabilitySets()
             }
         }
 
-        std::cout << "result for player " << player_idx << "\n";
-        for(int i = 0; i < 6; ++i)
-        {
-            std::cout << "dist: " << i+1 << "\n";
-            for (const auto& coord : goes_idx_plusone[player_idx][i])
-                coord.Print();
-        }
         SwitchPlayer();
     }
 }

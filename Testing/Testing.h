@@ -1,8 +1,6 @@
 #pragma once
 
-#include "../Game.h"
-#include "../Controller.h"
-#include "TestGlobals.h"
+#include "ScenarioBuilder.h"
 
 #include <gtest/gtest.h>
 
@@ -30,45 +28,39 @@ class TestBuilder : public testing::Test
         const int& GetBoardAt(const Coord& coord) const;
         const int& GetBoardAt(int r, int c) const;
 
-        const std::array<std::array<int, COLS>, ROWS>& GetBoard() const;
+        const boardConfig GetBoard() const;
 
         void StatusReport() const;
 
         const Game& GetGame() const;
         
     private:
-        std::unique_ptr<Game> _game;
-        std::unique_ptr<Controller> _ctrl;
-
-        void StartPreRoll(bool p_idx, const std::array<std::array<int, COLS>, ROWS>& b );
-
-        void withPlayer(bool p_idx);
-        void withBoard(const std::array<std::array<int, COLS>, ROWS>& b);
-        void ResetControllerState();
+        ScenarioBuilder _bldr;
+        Game& _game;
+        Controller& _ctrl;
 };
 
 inline 
 const int& TestBuilder::GetBoardAt(const Coord& coord) const
 {
-    auto& brd = _game->GetBoardRef();
-    return brd.at(coord);
+    return _bldr.GetBoardAt(coord);
 }
 
 inline 
 const int& TestBuilder::GetBoardAt(int r, int c) const
 {
-    auto& brd = _game->GetBoardRef();
+    auto& brd = _game.GetBoardRef();
     return brd.at(r, c);
 }
 
 inline
-const std::array<std::array<int, COLS>, ROWS>& TestBuilder::GetBoard() const
+const boardConfig TestBuilder::GetBoard() const
 {
-    return _game->board.data;
+    return _bldr.GetBoard();
 }
 
 inline 
 const Game& TestBuilder::GetGame() const
-{ return *_game; }
+{ return _game; }
 
 }   // namespace Nardi

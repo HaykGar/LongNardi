@@ -18,7 +18,7 @@ class Controller
 
         void SwitchTurns();
 
-        friend class TestBuilder;
+        friend class ScenarioBuilder;
     private:
         Game& g;
         Coord start;

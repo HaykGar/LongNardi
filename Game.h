@@ -4,16 +4,19 @@
 #include "Board.h"
 
 #include <array>
+#include <stack>
 #include <algorithm>
 #include <ranges>
-#include <stack>
 #include <unordered_set>
 #include <unordered_map>
 #include <random>
-#include <memory>
 
 /*
-FIXME max dice not enforced right now ! ! ! ` ` ` ` ` `
+Add Command for displaying all the legal move seqs and how they end...
+
+Get rid of mock board + dice altogether and just keep track of real?
+
+status_codes TryMakeMove(const Coord& start, const Coord& end); do and implement controls... or maybe leave in controller?
 
 During endgame, if it's a valid start just check if there's a forced move from here, will streamline play
 
@@ -47,8 +50,10 @@ class Game
         status_codes RollDice();
         status_codes OnRoll();
         status_codes TryStart(const Coord& s);
-        status_codes TryFinishMove(const Coord& start, const Coord& end);     // No Removals
-        status_codes TryFinishMove(const Coord& start, bool dice);                 // Removals and regular moves
+        status_codes TryFinishMove(const Coord& start, const Coord& end);   // No Removals
+        status_codes TryFinishMove(const Coord& start, bool dice);          // Removals and regular moves
+
+        bool AutoPlayTurn(std::string key); // currently unused, useful later though
         
         void SwitchPlayer();
 
@@ -64,12 +69,9 @@ class Game
         const ReaderWriter* GetConstRW();
 
         // Friend class for testing
-        friend class TestBuilder;
+        friend class ScenarioBuilder;
 
-    private:
-
-        class Arbiter;
-        
+    private:        
         // Exception Monitors
 
         class PreventionMonitor
@@ -78,15 +80,14 @@ class Game
                 PreventionMonitor(Game& g);
 
                 bool Illegal(const Coord& start, bool dice_idx);
-                bool CheckNeeded();
             private:
                 Game& _g;
                 bool _completable;
                 std::array<int, 2> turn_last_updated;
      
-                bool MakesSecondStep(const Coord& start) const;   
                 bool TurnCompletable();
                 void SetCompletable();
+                bool CheckNeeded();
         };
 
         class BadBlockMonitor
@@ -98,12 +99,10 @@ class Game
                     CLEAR,
                     FIXABLE_BLOCK,
                     BAD_BLOCK
-                };
+                };  // useless ?
 
                 bool Illegal(const Coord& start, bool dice_idx);
                 bool Illegal(const Coord& start, const Coord& end);
-                
-                bool PreConditions();
 
                 void Reset();
                 void Solidify();
@@ -113,11 +112,12 @@ class Game
             private:
                 Game& _g;                
                 bool _blockedAll;
-                bool _isSolidified;
                 block_state _state;
 
                 unsigned _blockLength;
                 Coord _blockStart;
+
+                bool PreConditions();
 
                 bool CheckMockedState();
 
@@ -136,15 +136,15 @@ class Game
         struct LegalSeqComputer
         {
             public:
-                LegalSeqComputer(Game& g, Arbiter& a);
+                LegalSeqComputer(Game& g);
                 void ComputeAllLegalMoves();
 
                 int MaxLen() const;
                 const std::unordered_map<std::string, MoveSequence>& BrdsToSeqs() const;
+                std::unordered_map<std::string, MoveSequence>& BrdsToSeqs();
             
             private:
                 Game& _g;
-                Arbiter& _arb;
                 bool _maxDice;
                 std::array<bool, 2> _dieIdxs;
                 std::unordered_set<std::string> _encountered;
@@ -162,84 +162,42 @@ class Game
             public:
                 Arbiter(Game& gm);
 
-                
                 status_codes CheckForcedMoves();
-
 
                 // Legality Checks and helpers
                 status_codes BoardAndBlockLegal(const Coord& start, bool dice_idx);
+                status_codes BoardAndBlockLegalEnd(const Coord& start, bool dice_idx);
 
+                status_codes CanStartFrom(const Coord& start);
                 std::pair<status_codes, Coord> CanMoveByDice(const Coord& start, bool dice_idx);
-                std::pair<status_codes, Coord> CanFinishByDice   (const Coord& start, bool dice_idx);
                 std::pair<status_codes, std::array<int, 2>> LegalMove(const Coord& start, const Coord& end);
                 std::pair<status_codes, Coord> LegalMove_2step(const Coord& start);
 
                 bool DiceRemovesFrom(const Coord& start, bool d_idx);
 
-                bool CanUseMockDice(bool idx, int n_times = 1) const;
-
-                bool IllegalBlocking(const Coord& start, bool d_idx);
-                bool IllegalBlocking(const Coord& start, const Coord& end);
+                bool CanUseDice(bool idx, int n_times = 1) const;
 
                 // Updates and Actions
                 status_codes OnRoll();
                 void SolidifyBlock();
-
-                // friend class for testing
-                friend class TestBuilder;
 
             private:
                 Game& _g;
 
                 PreventionMonitor   _prevMonitor;
                 BadBlockMonitor     _blockMonitor;
+
+                std::pair<status_codes, Coord> CanFinishByDice(const Coord& start, bool dice_idx);
         };
 
-        struct BoardWithMocker
-        {
-            public:
-                BoardWithMocker(Game& g);
-
-                // boards 
-                Board _realBoard;
-                Board _mockBoard;
-
-                // wrap with real Board for convenience
-                bool PlayerIdx() const;
-                int PlayerSign() const;
-
-                bool IsPlayerHead(const Coord& c) const;
-
-                // check
-                bool MisMatch() const;
-
-                // Updates and Actions
-                void ResetMock();
-                void RealizeMock();
-            
-                void Move(const Coord& start, const Coord& end);
-                void Remove(const Coord& to_remove);
-
-                void Mock_Move(const Coord& start, const Coord& end);
-                void Mock_UndoMove(const Coord& start, const Coord& end);
-
-                void Mock_Remove(const Coord& to_remove);
-                void Mock_UndoRemove(const Coord& to_remove);
-
-                void SwitchPlayer();
-
-            private:
-                Game& _game;
-        };
-
-        BoardWithMocker board;                      // contains real and mock boards
+        Board board;
+        // std::stack<std::variant< StartAndDice, std::pair<Coord, Coord> > > mock_hist;    implement and use me `
 
         std::mt19937 rng;                           // Mersenne Twister engine
         std::uniform_int_distribution<int> dist;    // uniform distribution for dice
 
         std::array<int, 2> dice; 
         std::array<int, 2> times_dice_used;
-        std::array<int, 2> times_mockdice_used;
         std::array<int, 2> turn_number;
 
         bool doubles_rolled;
@@ -252,7 +210,6 @@ class Game
 
 
         // Getters
-        const std::unordered_set<Coord>& PlayerGoesByMockDice(bool dice_idx) const;
         const std::unordered_set<Coord>& PlayerGoesByDice(bool dice_idx) const;
 
         Coord PlayerHead() const;
@@ -269,8 +226,9 @@ class Game
         // Moving
         status_codes MakeMove(const Coord& start, const Coord& end);
         status_codes MakeMove(const Coord& start, bool dice_idx);
-
         status_codes RemovePiece(const Coord& start);
+
+        status_codes OnMoveOrRemove();
 
         // Mocking
         bool SilentMock(const Coord& start, const Coord& end);
@@ -283,8 +241,6 @@ class Game
         // void UndoMockAndUpdate(const Coord& start, const Coord& end);
         void MockAndUpdateBlock(const Coord& start, bool dice_idx);
         void UndoMockAndUpdateBlock(const Coord& start, bool dice_idx);
-        void RealizeMock();
-        void ResetMock();
 };
 
 

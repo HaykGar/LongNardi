@@ -556,6 +556,9 @@ void Game::LegalSeqComputer::dfs(std::vector<StartAndDice>& seq)
     
     for(int i = 0; i < 2; ++i)
     {
+        if(!_g.arbiter.CanUseDice(_dieIdxs[i]))
+            continue;
+
         std::unordered_set<Coord>::iterator it = options.at(_dieIdxs[i]).begin();
         while(it != options.at(_dieIdxs[i]).end())
         {

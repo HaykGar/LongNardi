@@ -61,7 +61,7 @@ public:
     // operators
     bool operator==(const Board& other) const;
 
-    friend class TestBuilder;
+    friend class ScenarioBuilder;
 private:
     boardConfig data;
 
