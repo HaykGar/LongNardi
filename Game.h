@@ -210,8 +210,6 @@ class Game
 
 
         // Getters
-        const std::unordered_set<Coord>& PlayerGoesByDice(bool dice_idx) const;
-
         Coord PlayerHead() const;
 
         // Dice Actions

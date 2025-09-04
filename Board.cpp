@@ -4,20 +4,12 @@ using namespace Nardi;
 
 ///////////// Constructor /////////////
 
-Board::Board() :      data {{ { PIECES_PER_PLAYER, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}, 
-                                        {-PIECES_PER_PLAYER, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0} }},
+Board::Board() :      data {{   { PIECES_PER_PLAYER, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}, 
+                                {-PIECES_PER_PLAYER, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0} }},
                                 pieces_per_player{ {PIECES_PER_PLAYER, PIECES_PER_PLAYER} },
-                                // data {{ { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}, 
-                                //         {-PIECES_PER_PLAYER, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 2} }},
                                 player_idx(0), player_sign(BoolToSign(player_idx)), head_used(false),
                                 reached_enemy_home{0, 0}, pieces_left{PIECES_PER_PLAYER, PIECES_PER_PLAYER}
-{
-    for(int p = 0; p < 2; ++p)
-        for(int i = 0; i < 6; ++i)
-            goes_idx_plusone[p][i].emplace(p, 0);   // "head" can move any of the numbers initially 
-    // CalcPiecesLeftandReached();
-    // ConstructAvailabilitySets();
-}
+{}
 
 Board::Board(const std::array<std::array<int, COLS>, ROWS>& d) : player_idx(0), player_sign(BoolToSign(player_idx)), head_used(false)
 {
@@ -38,9 +30,8 @@ void Board::OnMove(const Coord& start, const Coord& end)
     if(end.row != player_idx && end.col >= 6 && (start.col < 6 || start.row != end.row) )  // moved to home from outside
         ++reached_enemy_home[player_idx];
 
-    FlagHeadIfNeeded(start);
-
-    UpdateAvailabilitySets(start, end);
+    if(!head_used && IsPlayerHead(start))
+        head_used = true; 
 }
 
 void Board::UndoMove(const Coord& start, const Coord& end)
@@ -57,109 +48,27 @@ void Board::OnUndoMove(const Coord& start, const Coord& end)
 
     if(IsPlayerHead(start))
         head_used = false;
-
-    UpdateAvailabilitySets(end, start);
 }
 
 void Board::Remove(const Coord& to_remove)
 {
     data.at(to_remove.row).at(to_remove.col) -= player_sign;
     --pieces_left.at(player_idx);
-    OnRemove(to_remove);
 }
 
 void Board::UndoRemove(const Coord& to_remove)
 {
     data.at(to_remove.row).at(to_remove.col) += player_sign;
     ++pieces_left.at(player_idx);
-    OnUndoRemove(to_remove);
 }
 
-void Board::OnUndoRemove(const Coord& to_remove)
+int Board::MaxNumOcc() const
 {
-    UpdateAvailabilityDest(to_remove);
-}
-
-void Board::OnRemove(const Coord& to_remove)
-{
-    UpdateAvailabilityStart(to_remove);
-}
-
-void Board::UpdateAvailabilitySets(const Coord& start, const Coord& dest)
-{   // only to be called within MakeMove()
-    UpdateAvailabilityStart(start);
-    UpdateAvailabilityDest(dest);
-}
-
-void Board::UpdateAvailabilityStart(const Coord start)  // not reference since we destroy stuff
-{
-    if (at(start) == 0) // start square vacated
-    {
-        for(int i = 0; i < 6; ++i)  // update player's options - can no longer move from this square
-            goes_idx_plusone[player_idx][i].erase(start);   // no op if it wasn't in the set
+    int max_num_occ = 6;
+    while(max_num_occ > 0 && player_sign * at(!player_idx, COLS - max_num_occ) <= 0 )   // slot empty or enemy
+        --max_num_occ;
         
-        // update other player's options - can now move to this square
-        int d = 1;
-        Coord coord = CoordAfterDistance(start, -d, !player_idx);
-
-        while( !coord.OutOfBounds() && d <= 6 )
-        {
-            if(at(coord) * player_sign < 0 && WellDefinedEnd(coord, start, !player_idx) == status_codes::SUCCESS)
-                goes_idx_plusone[!player_idx][d-1].insert(coord);   // enemy piece at coord brd legal to move to start
-
-            ++d;
-            coord = CoordAfterDistance(start, -d, !player_idx);
-        }
-    }
-
-    if(CurrPlayerInEndgame())
-    {
-        SetMaxOcc();
-        if(max_num_occ.at(player_idx) > 0)
-        {
-            for(int i = max_num_occ.at(player_idx); i <= 6; ++i)
-                goes_idx_plusone[player_idx][i-1].insert({!player_idx, COLS - max_num_occ.at(player_idx)}); 
-
-            for(int i = 1; i < max_num_occ.at(player_idx); ++i)
-                if(at(!player_idx, COLS - i) * player_sign  > 0)    // player occupies square
-                    goes_idx_plusone[player_idx][i-1].insert({!player_idx, COLS - i});
-        }
-    }
-}
-
-void Board::UpdateAvailabilityDest(const Coord& dest)
-{
-    if ( at(dest) * player_sign == 1 )  // dest newly filled, note both ifs can be true
-    {
-        // update player's options - can now possibly move from dest square
-        int d = 1;
-        Coord coord = CoordAfterDistance(dest, d);
-        while( !coord.OutOfBounds() && d <= 6 )
-        {
-            if(WellDefinedEnd(dest, coord) == status_codes::SUCCESS)    // brd legal to move from newly filled slot to coord
-                goes_idx_plusone[player_idx][d-1].insert(dest);
-            
-            ++d;
-            coord = CoordAfterDistance(dest, d);
-        }
-        // update other player's options - can no longer move to dest square
-        d = 1;
-        coord = CoordAfterDistance(dest, -d, !player_idx);
-        while( !coord.OutOfBounds() && d <= 6 )
-        {
-            goes_idx_plusone[!player_idx][d-1].erase(coord);   // pieces at coord can no longer travel here
-                // no-op if coord wasn't already contained in it
-            ++d;
-            coord = CoordAfterDistance(dest, -d, !player_idx);
-        }
-    }
-}
-
-void Board::SetMaxOcc()
-{
-    max_num_occ[player_idx] = 6;
-    while(max_num_occ[player_idx] > 0 && player_sign * at(!player_idx, COLS - max_num_occ[player_idx]) <= 0 )   // slot empty or enemy
-        --max_num_occ[player_idx];   
+    return max_num_occ;
 }
 
 ///////////// Legality /////////////
@@ -251,7 +160,7 @@ int Board::GetDistance(const Coord& start, const Coord& end, bool player) const
 
 unsigned Board::MovablePieces(const Coord& start) const
 {
-    if(at(start) == 0)
+    if(at(start) * player_sign <= 0)   // no pieces or enemy pieces
         return 0;
     else
         return IsPlayerHead(start) ? 1 : abs(at(start));
@@ -261,16 +170,11 @@ unsigned Board::MovablePieces(const Coord& start) const
 
 bool Board::operator== (const Board& other) const
 {
-
-    if (!(this->data == other.data && this->player_idx == other.player_idx && this->head_used == other.head_used))
-        return false;
-
-    for(int plyr = 0; plyr < 2; ++ plyr)
-        for(int i = 0; i < 6; ++i)
-            if(this->goes_idx_plusone[plyr][i] != other.goes_idx_plusone[plyr][i])
-                return false;
-    
-    return true;
+    return  (
+                this->data == other.data &&
+                this->player_idx == other.player_idx &&
+                this->head_used == other.head_used
+            );
 }
 
 // testing
@@ -280,7 +184,6 @@ void Board::SetData(const std::array<std::array<int, COLS>, ROWS>& b)
     data = b;
     CalcPiecesLeftandReached();
     pieces_per_player = pieces_left;
-    ConstructAvailabilitySets();
 }
 
 void Board::CalcPiecesLeftandReached()
@@ -308,56 +211,6 @@ void Board::CalcPiecesLeftandReached()
         pieces_left[at(starts[0]) < 0] += abs(at(starts[0]));   // no-op if 0
         pieces_left[at(starts[1]) < 0] += abs(at(starts[1]));
     }
-
-    std::cout << "pieces left white: " << pieces_left[0] << "\n";
-    std::cout << "pieces left black: " << pieces_left[1] << "\n";
-
-    std::cout << "pieces reached white: " << reached_enemy_home[0] << "\n";
-    std::cout << "pieces reached black: " << reached_enemy_home[1] << "\n";
-}
-
-void Board::ConstructAvailabilitySets()
-{
-    for(int i = 0; i < 6; ++i)
-    {
-        goes_idx_plusone[0][i].clear();
-        goes_idx_plusone[1][i].clear();
-    }
-    for(int plyr = 0; plyr < 2; ++plyr)
-    {
-        Coord start(player_idx, 0);
-        while (!start.OutOfBounds())
-        {
-            if(ValidStart(start) == status_codes::SUCCESS)
-            {
-                for(int d = 1; d <= 6; ++d)
-                {
-                    Coord dest = CoordAfterDistance(start, d, player_idx);
-                    if(WellDefinedEnd(start, dest) == status_codes::SUCCESS)
-                        goes_idx_plusone[player_idx][d-1].insert(start);
-                }
-            }
-            start = CoordAfterDistance(start, 1, player_idx);
-        }
-
-        if(CurrPlayerInEndgame())
-        {
-            std::cout << "endgame case detected for player " << player_sign << "\n";
-
-            SetMaxOcc();
-            if(max_num_occ.at(player_idx) > 0)
-            {
-                for(int i = max_num_occ.at(player_idx); i <= 6; ++i)
-                    goes_idx_plusone[player_idx][i-1].insert({!player_idx, COLS - max_num_occ.at(player_idx)}); 
-
-                for(int i = 1; i < max_num_occ.at(player_idx); ++i)
-                    if(at(!player_idx, COLS - i) * player_sign  > 0)
-                        goes_idx_plusone[player_idx][i-1].insert({!player_idx, COLS - i});
-            }
-        }
-
-        SwitchPlayer();
-    }
 }
 
 
@@ -383,9 +236,6 @@ int Board::PlayerSign() const
 
 bool Board::HeadUsed() const
 {   return head_used;   }
-
-const std::array<int, 2>& Board::MaxNumOcc() const
-{   return max_num_occ;   }
  
 const std::array<int, 2>& Board::ReachedEnemyHome() const
 {   return reached_enemy_home;   }
@@ -395,15 +245,6 @@ const std::array<int, 2>& Board::PiecesLeft() const
 {   return pieces_left;   }
 
 
-const std::array< std::array< std::unordered_set<Coord>, 6 >, 2 >& Board::GoesIdxPlusOne() const
-{   
-    return goes_idx_plusone;   
-}
-
-const std::unordered_set<Coord>& Board::PlayerGoesByDist(size_t dist) const
-{   
-    return goes_idx_plusone.at(player_idx).at(dist - 1);   
-}
 
 void Board::Print() const
 {
@@ -418,13 +259,6 @@ void Board::SwitchPlayer()
     player_idx = !player_idx;
     player_sign = BoolToSign(player_idx);
     head_used = false;
-}
-
- 
-void Board::FlagHeadIfNeeded(const Coord& start)
-{ 
-    if(!head_used && IsPlayerHead(start))
-        head_used = true; 
 }
 
 ///////////// Legality Helpers /////////////

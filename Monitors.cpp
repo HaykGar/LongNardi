@@ -18,22 +18,17 @@ bool Game::PreventionMonitor::Illegal(const Coord& start, bool dice_idx)
     {
         _g.MockAndUpdateBlock(start, dice_idx); // moves or removes as needed
 
-        std::unordered_set<Coord> other_dice_options = _g.PlayerGoesByDice(!dice_idx);
-        std::unordered_set<Coord>::iterator it = other_dice_options.begin();
-
-        while(it != other_dice_options.end())
+        for(Coord coord(_g.board.PlayerIdx(), 0); coord.InBounds(); coord = _g.board.CoordAfterDistance(coord, 1))
         {
-            if( _g.arbiter.BoardAndBlockLegal(*it, !dice_idx) != status_codes::SUCCESS)
-                it = other_dice_options.erase(it);
-            else
+            if(_g.arbiter.BoardAndBlockLegal(coord, !dice_idx) == status_codes::SUCCESS)
             {
                 _g.UndoMockAndUpdateBlock(start, dice_idx);
                 return false;
             }
         }
-
+        
         _g.UndoMockAndUpdateBlock(start, dice_idx);
-        return other_dice_options.empty();  // always true here
+        return true;
     }
     
     return false;

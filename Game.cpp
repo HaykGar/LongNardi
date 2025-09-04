@@ -33,10 +33,6 @@ int Game::GetDice(bool idx) const
 const ReaderWriter* Game::GetConstRW() 
 {   return rw;   }
 
-const std::unordered_set<Coord>& Game::PlayerGoesByDice(bool dice_idx) const
-{   
-    return board.PlayerGoesByDist(dice[dice_idx]);   
-}
 
 Coord Game::PlayerHead() const
 {   return {board.PlayerIdx(), 0};   }
@@ -222,6 +218,8 @@ bool Game::SilentMock(const Coord& start, bool dice_idx)
 {
     Coord dest = board.CoordAfterDistance(start, dice[dice_idx]);
 
+    std::cout << "mocking from " << start.AsStr() << " to " << dest.AsStr() << "\n";
+
     if(board.CurrPlayerInEndgame() && arbiter.DiceRemovesFrom(start, dice_idx))
         board.Remove(start);
     else if(board.WellDefinedEnd(start, dest) == status_codes::SUCCESS)
@@ -239,6 +237,8 @@ bool Game::SilentMock(const Coord& start, bool dice_idx)
 bool Game::UndoSilentMock(const Coord& start, bool dice_idx)
 {
     Coord dest = board.CoordAfterDistance(start, dice[dice_idx]);
+
+    std::cout << "undoing the mocking from " << start.AsStr() << " to " << dest.AsStr() << "\n";
 
     if(arbiter.DiceRemovesFrom(start, dice_idx))
         board.UndoRemove(start);
@@ -300,7 +300,7 @@ Game::Arbiter::Arbiter(Game& g) :  _g(g), _prevMonitor(_g), _blockMonitor(_g)
 
 status_codes Game::Arbiter::CanStartFrom(const Coord& start)
 {
-    if(_g.first_move_exception && start == Coord(_g.board.PlayerIdx(), 0) && _g.board.at(start) > PIECES_PER_PLAYER - 2)
+    if(_g.first_move_exception && start == _g.PlayerHead() && _g.board.at(start) > PIECES_PER_PLAYER - 2)
         return status_codes::SUCCESS;
 
     return _g.board.ValidStart(start);
@@ -342,7 +342,7 @@ status_codes Game::Arbiter::BoardAndBlockLegalEnd(const Coord& start, bool dice_
     }
     else if(_g.first_move_exception)
     {
-        if(start == Coord(_g.board.PlayerIdx(), 0) && abs(_g.board.at(start)) > PIECES_PER_PLAYER - 2)
+        if(start == _g.PlayerHead() && abs(_g.board.at(start)) > PIECES_PER_PLAYER - 2)
             return status_codes::SUCCESS;
         else if (   _g.dice[0] == 4 && start == Coord(_g.board.PlayerIdx(), 4) && 
                     abs(_g.board.at(start)) * _g.board.PlayerSign() > 0  )
@@ -391,7 +391,7 @@ bool Game::Arbiter::DiceRemovesFrom(const Coord& start, bool dice_idx)
     
     int pos_from_end = COLS - start.col;
     return (pos_from_end == _g.dice[dice_idx] ||  // dice val exactly
-            (pos_from_end >= _g.board.MaxNumOcc().at(_g.board.PlayerIdx()) && _g.dice[dice_idx] > pos_from_end) );  
+            (pos_from_end >= _g.board.MaxNumOcc() && _g.dice[dice_idx] > pos_from_end) );  
                 // largest available is less than dice
 }
 
@@ -438,7 +438,7 @@ std::pair<status_codes, Coord> Game::Arbiter::LegalMove_2step(const Coord& start
         return {status_codes::MISC_FAILURE, {} };
     else if (_g.first_move_exception)
     {
-        if(_g.dice[0] == 4 && start == Coord(_g.board.PlayerIdx(), 0) && abs(_g.board.at(start)) > PIECES_PER_PLAYER - 2)
+        if(_g.dice[0] == 4 && start == _g.PlayerHead() && abs(_g.board.at(start)) > PIECES_PER_PLAYER - 2)
             return {status_codes::SUCCESS, _g.board.CoordAfterDistance(start, 8)};
         else
             return {status_codes::MISC_FAILURE, {} };
@@ -520,6 +520,9 @@ std::unordered_map<std::string, MoveSequence>& Game::LegalSeqComputer::BrdsToSeq
 
 void Game::LegalSeqComputer::ComputeAllLegalMoves()
 {
+    Board original(_g.board);   // erase me `
+
+
     _brdsToSeqs.clear();
     _encountered.clear();
 
@@ -547,11 +550,12 @@ void Game::LegalSeqComputer::ComputeAllLegalMoves()
             _g.maxdice_exception = true;
         }
     }
+
+    std::cout << "dfs preserved board? " << std::boolalpha << (original == _g.board) << "\n";
 }
 
 void Game::LegalSeqComputer::dfs(std::vector<StartAndDice>& seq)
 {
-    std::array<std::unordered_set<Coord>, 2> options = { _g.PlayerGoesByDice(0), _g.PlayerGoesByDice(1) }; 
     size_t oldSize = seq.size();
     
     for(int i = 0; i < 2; ++i)
@@ -559,13 +563,9 @@ void Game::LegalSeqComputer::dfs(std::vector<StartAndDice>& seq)
         if(!_g.arbiter.CanUseDice(_dieIdxs[i]))
             continue;
 
-        std::unordered_set<Coord>::iterator it = options.at(_dieIdxs[i]).begin();
-        while(it != options.at(_dieIdxs[i]).end())
+        for(Coord coord = _g.PlayerHead(); coord.InBounds(); coord = _g.board.CoordAfterDistance(coord, 1))
         {
-            Coord coord = *it;
-            if(_g.arbiter.BoardAndBlockLegal(*it, _dieIdxs[i]) != status_codes::SUCCESS)
-                it = options.at(_dieIdxs[i]).erase(it);
-            else
+            if(_g.arbiter.BoardAndBlockLegal(coord, _dieIdxs[i]) == status_codes::SUCCESS)
             {
                 seq.emplace_back(coord, _dieIdxs[i]);
                 _g.MockAndUpdateBlock(coord, _dieIdxs[i]);
@@ -579,8 +579,6 @@ void Game::LegalSeqComputer::dfs(std::vector<StartAndDice>& seq)
 
                 _g.UndoMockAndUpdateBlock(coord, _dieIdxs[i]);
                 seq.pop_back();
-
-                ++it;
             }
         }
     }
@@ -602,9 +600,6 @@ bool Game::LegalSeqComputer::FirstMoveException()   // fixme re-compute mid turn
 {
     if (_g.turn_number[_g.board.PlayerIdx()] == 1 && _g.doubles_rolled && (_g.dice[0] == 4 || _g.dice[0] == 6 ) ) // first move exception
     {
-        std::cout << "in firstmoveexception\n";
-        DisplayBoard(_g.board.View());
-
         Coord head(_g.board.PlayerIdx(), 0);
         Coord dest(_g.board.PlayerIdx(), _g.dice[0]);
         MoveSequence seq;
@@ -641,7 +636,6 @@ bool Game::LegalSeqComputer::FirstMoveException()   // fixme re-compute mid turn
         }
 
         _g.first_move_exception = true;
-        std::cout << "firstmoveexception flagged\n";
         return true;
     }
 
