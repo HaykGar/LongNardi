@@ -18,17 +18,17 @@ class TestBuilder : public testing::Test
         void withFirstTurn();
 
         // setting internals explicitly
-        status_codes StartOfTurn(bool p_idx, const std::array<std::array<int, COLS>, ROWS>& b, int d1, int d2);
+        status_codes StartOfTurn(bool p_idx, const BoardConfig& b, int d1, int d2);
         status_codes withDice(int d1, int d2);
 
         status_codes ReceiveCommand(const Command& c);
 
         void PrintBoard() const;
 
-        const int& GetBoardAt(const Coord& coord) const;
-        const int& GetBoardAt(int r, int c) const;
+        const int GetBoardAt(const Coord& coord) const;
+        const int GetBoardAt(int r, int c) const;
 
-        const boardConfig GetBoard() const;
+        const BoardConfig GetBoard() const;
 
         void StatusReport() const;
 
@@ -41,20 +41,19 @@ class TestBuilder : public testing::Test
 };
 
 inline 
-const int& TestBuilder::GetBoardAt(const Coord& coord) const
+const int TestBuilder::GetBoardAt(const Coord& coord) const
 {
     return _bldr.GetBoardAt(coord);
 }
 
 inline 
-const int& TestBuilder::GetBoardAt(int r, int c) const
+const int TestBuilder::GetBoardAt(int r, int c) const
 {
-    auto& brd = _game.GetBoardRef();
-    return brd.at(r, c);
+    return _bldr.GetBoardAt(r, c);
 }
 
 inline
-const boardConfig TestBuilder::GetBoard() const
+const BoardConfig TestBuilder::GetBoard() const
 {
     return _bldr.GetBoard();
 }

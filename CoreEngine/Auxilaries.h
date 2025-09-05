@@ -4,6 +4,8 @@
 #include <array>
 #include <variant>
 #include <string>
+#include <cstdint> // Required for int8_t
+
 
 namespace Nardi
 {
@@ -20,7 +22,8 @@ constexpr int PIECES_PER_PLAYER = 15;
 // Useful Aliases
 ////////////////////////////////////////////////////////////////////////////////
 
-using boardConfig = std::array< std::array<int, COLS>, ROWS>;
+using BoardConfig = std::array< std::array<int8_t, COLS>, ROWS>;
+using BoardKey    = std::array<std::array<uint8_t, ROWS*COLS + 1>, 2>;
 
 ////////////////////////////////////////////////////////////////////////////////
 // Meaningful bools for colors and dice
@@ -86,26 +89,28 @@ struct StartAndDice
 
 using MoveSequence = std::vector<StartAndDice>;
 
-}   // namespace Nardi
-
-namespace std
+// Helper function to combine hashes
+template <class T>
+inline void hash_combine(std::size_t& seed, const T& v)
 {
-    template<>
-    struct hash<Nardi::Coord>
+    std::hash<T> hasher;
+    seed ^= hasher(v) + 0x9e3779b9 + (seed << 6) + (seed >> 2);
+}
+
+// Hash function for BoardKey
+struct BoardKeyHash 
+{
+    std::size_t operator()(const BoardKey& key) const
     {
-        constexpr std::size_t operator()(const Nardi::Coord& c) const noexcept
+        std::size_t seed = 0;
+        for(const auto& inner_container : key)
         {
-            if(c.row < 0 || c.col < 0){
-                std::cerr << "Bad Coord hashed\n";
-                return Nardi::ROWS*Nardi::COLS + 1;  // one after any valid coord
-            }
-            return Nardi::COLS * c.row + c.col;
+            for(const auto& num : inner_container)
+                hash_combine(seed, num);
         }
-    };
-} // namespace std
-
-namespace Nardi
-{
+        return seed;
+    }
+};
 
 struct Command // considering making this std::variant or something... 
 {
@@ -113,19 +118,19 @@ struct Command // considering making this std::variant or something...
     Command(Coord coord);
     Command(int r, int c);
     Command(bool dice_idx);
-    Command(std::string final_config);
+    Command(BoardKey final_config);
 
     Actions action;
-    std::variant<std::monostate, Coord, bool, std::string> payload;
+    std::variant<std::monostate, Coord, bool, BoardKey> payload;
 };
 
 void VisualToGameCoord(Coord& coord); // not needed currently, but for graphics later
 int BoolToSign(bool p_idx);
 void DispErrorCode(status_codes code);
 
-void DisplayBoard(const std::array<std::array<int, COLS>, ROWS>& b);
+void DisplayBoard(const BoardConfig& b);
+void DisplayKey(const BoardKey& bk);
 
-std::string Board2Str(const boardConfig& b);
 
 }   // namespace Nardi
 
@@ -143,16 +148,16 @@ using namespace Nardi;
 ////////////////////////////////////////////////////////////////////////////////
 
 inline 
-boardConfig ZeroWhite1BlackBoard() {
-    boardConfig b{};
+BoardConfig ZeroWhite1BlackBoard() {
+    BoardConfig b{};
     for (auto& r : b) r.fill(0);
     b[1][0] = -1;
     return b;
 }
 
 inline
-boardConfig SafeBoard() {
-    boardConfig b{};
+BoardConfig SafeBoard() {
+    BoardConfig b{};
     for (auto& r : b) r.fill(0);
     b[1][0] = -1;   // no game over
     b[1][1] = 1;    // to prevent forcing moves
@@ -161,7 +166,7 @@ boardConfig SafeBoard() {
 }
 
 inline
-boardConfig HeadScenarioBoard()
+BoardConfig HeadScenarioBoard()
 {
     /* 
         minimal board:
@@ -169,7 +174,7 @@ boardConfig HeadScenarioBoard()
         extra white piles @ col 3,5 so we can move without ending turn
         black head @ (1,0) but otherwise empty
     */
-    boardConfig b{};
+    BoardConfig b{};
     for (auto& r : b) r.fill(0);
     b[0][0] = 5;    // white head
     b[0][3] = 2;
@@ -184,57 +189,57 @@ boardConfig HeadScenarioBoard()
 
 inline constexpr 
                      //          0  1  2  3  4. 5. 6. 7. 8. 9. 10 11   
-boardConfig start_brd = {{    { 15, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}, 
+BoardConfig start_brd = {{    { 15, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}, 
                               {-15, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0} }};
 
 inline constexpr 
                          //           0  1  2  3  4. 5. 6. 7. 8. 9. 10 11   
-boardConfig board_legal = {{       { 10, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, -1}, 
+BoardConfig board_legal = {{       { 10, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, -1}, 
                                    {-12, 0, 0, 0, 1,-1,-1,-1, 0, 0, 1, 1} }};
 
 inline constexpr 
                               //     0  1  2  3  4. 5. 6. 7. 8. 9. 10 11   
-boardConfig starts_check = {{      { 0, 0, 0, 4, 0, 0, 0, 0, 0, 0, 0, 0}, 
+BoardConfig starts_check = {{      { 0, 0, 0, 4, 0, 0, 0, 0, 0, 0, 0, 0}, 
                                    {-5, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0} }};
 
 inline constexpr 
                        //         0     1  2  3  4. 5. 6. 7. 8. 9. 10 11   
-boardConfig preventions1 = {{ { 15 - 2, 0, 0,-1, 0, 0, 1,-1, 0, 0, 0, 1}, 
+BoardConfig preventions1 = {{ { 15 - 2, 0, 0,-1, 0, 0, 1,-1, 0, 0, 0, 1}, 
                               {-(15-2), 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0} }};
 
 inline constexpr 
                        //         0     1  2  3  4. 5. 6. 7. 8. 9. 10 11   
-boardConfig preventions2 = {{ { 15 - 3,-1, 0, 1, 0, 0,-1, 1,-1, 0, 0, 1}, 
+BoardConfig preventions2 = {{ { 15 - 3,-1, 0, 1, 0, 0,-1, 1,-1, 0, 0, 1}, 
                               {-(15-3), 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0} }};  
 
 
                               inline constexpr 
                        //        0  1  2  3  4  5  6  7  8  9 10 11   
-boardConfig preventions3 = {{ {  0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 3}, 
+BoardConfig preventions3 = {{ {  0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 3}, 
                               {-12, 1,-1,-1, 0,-1, 2, 0, 2, 2, 2, 2} }};  
 
 inline constexpr std::array<int, 2> prev3dice = {6, 5};
 
 inline constexpr 
                          //     0  1  2  3  4. 5. 6. 7. 8. 9. 10 11   
-boardConfig block_check1 = {{ {14, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}, 
+BoardConfig block_check1 = {{ {14, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}, 
                               {-8, 0, 0,-1, 1,-1,-1,-1,-1, 0,-1,-1} }};
 
 inline constexpr 
                          //     0  1  2  3  4. 5. 6. 7. 8. 9. 10 11   
-boardConfig block_check2 = {{ {11, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0}, 
+BoardConfig block_check2 = {{ {11, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0}, 
                               {-9, 0, 0, 0, 0,-1,-1,-1, 0,-1,-1,-1} }};
 
 inline constexpr 
                           //    0  1  2  3  4. 5. 6. 7. 8. 9. 10 11   
-boardConfig block_check3 = {{ { 2, 2, 2, 2, 2, 0, 2, 2, 2, 2, 2, 2}, 
+BoardConfig block_check3 = {{ { 2, 2, 2, 2, 2, 0, 2, 2, 2, 2, 2, 2}, 
                               {-9, 0, 0, 0, 0,-1,-1,-1, 0,-1,-1,-1} }};
 
 inline constexpr std::array<int, 2> block3_dice = {6, 5};
 
 inline constexpr
                    //      0  1  2  3  4. 5. 6. 7. 8. 9. 10 11   
-boardConfig block_wrap1 = {{  { 10, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0}, 
+BoardConfig block_wrap1 = {{  { 10, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0}, 
                               {-12, 0, 0, 0, 0,-1,-1,-1, 1, 0, 1, 1} }};
 
 inline constexpr std::array<int, 2> wrap_dice1 = {1, 6};
@@ -243,16 +248,16 @@ inline constexpr std::array<int, 2> wrap_dice3 = {1, 4};
 
 inline constexpr 
                          //      0  1  2  3  4. 5. 6. 7. 8. 9. 10 11   
-boardConfig block_wrap2 = {{  { 10, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0}, 
+BoardConfig block_wrap2 = {{  { 10, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0}, 
                               {-12, 0, 0, 0, 1,-1,-1,-1, 0, 0, 1, 1} }};
 
 inline constexpr 
                          //     0  1  2  3  4. 5. 6. 7. 8. 9. 10 11   
-boardConfig block_doub1 = {{  {12, 1, 0, 1, 1, 0, 0, 0, 0, 0, 0, 0}, 
+BoardConfig block_doub1 = {{  {12, 1, 0, 1, 1, 0, 0, 0, 0, 0, 0, 0}, 
                               {-1, 0,-2, 0, 0,-2,-2,-2, 0,-2,-2,-2} }};
 
 inline constexpr
-boardConfig doubles_stacked = {{   { 13, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}, 
+BoardConfig doubles_stacked = {{   { 13, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}, 
                                    {-15, 0, 2, 0, 0, 0, 0, 0, 0, 0, 0, 0} }};
 inline constexpr std::array<int, 2> ds = {3, 3};
 

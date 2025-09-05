@@ -83,7 +83,7 @@ TEST_F(TestBuilder, DoublesLegalMove)
     auto rc = ReceiveCommand(Command(0, 0));
     ASSERT_EQ(rc, status_codes::SUCCESS);
 
-    rc = ReceiveCommand((1, 3));
+    rc = ReceiveCommand(Command(1, 3));
     std::cout << "weirdness...\n\n\n\n";
     DispErrorCode(rc);
     ASSERT_EQ(rc, status_codes::SUCCESS);
@@ -96,7 +96,7 @@ TEST_F(TestBuilder, DoublesLegalMove)
 
 TEST_F(TestBuilder, EndgameWeirdness)
 {
-    boardConfig seg = {{ {0, 0,	0, 0, 0,-1, 0,-1, 0, 0, 0, 0},
+    BoardConfig seg = {{ {0, 0,	0, 0, 0,-1, 0,-1, 0, 0, 0, 0},
     	                 {0, 0,	0, 0, 0, 0,	0, 0, 0, 0,	0, PIECES_PER_PLAYER} }};
 
     auto rc = StartOfTurn(white, seg, 4, 3);
@@ -105,7 +105,7 @@ TEST_F(TestBuilder, EndgameWeirdness)
 
     std::cout << "on to the second one :) \n\n\n";
 
-    boardConfig at_zsh = {{ {0,	0,	0,	0,	0,	0,	0,	0,	-1,	0,	0,	0},	
+    BoardConfig at_zsh = {{ {0,	0,	0,	0,	0,	0,	0,	0,	-1,	0,	0,	0},	
                             {0,	0,	0,	0,	0,	1,	0,	1,	0,	0,	0,	0}}};
 
     rc = StartOfTurn(white, at_zsh, 6, 1);

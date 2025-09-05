@@ -39,8 +39,7 @@ Command::Command(int r, int c) : action(Actions::SELECT_SLOT)
 
 Command::Command(bool dice_idx) : action(Actions::MOVE_BY_DICE), payload(dice_idx) {}
 
-Command::Command(std::string end_key) : action(Actions::AUTOPLAY), payload(end_key) {}
-
+Command::Command(BoardKey end_key) : action(Actions::AUTOPLAY), payload(end_key) {}
 
 ///////////// Misc Utilities /////////////
 
@@ -103,30 +102,26 @@ void DispErrorCode(status_codes c)
     std::cout << "\n\n";
 }
 
-void DisplayBoard(const std::array<std::array<int, COLS>, ROWS>& brd)
+void DisplayBoard(const BoardConfig& brd)
 {
     for(int i = 0; i < ROWS; ++i)
     {
         for (int j = 0; j < COLS; ++j)
         {
-            std::cout << brd[i][j] << "\t";
+            std::cout << static_cast<int>(brd[i][j]) << "\t";
         }
         std::cout<< "\n\n";
     }
     std::cout<< "\n\n\n\n";
 }
 
-std::string Board2Str(const boardConfig& b)
+void DisplayKey(const BoardKey& bk)
 {
-    std::string ret;
-    for(int r = 0; r < ROWS; ++r)
+    for(const auto& ctr : bk)
     {
-        for(int c = 0; c < COLS; ++c)
-        {
-            ret += std::to_string(b.at(r).at(c)) + " ";
-        }
+        for (const auto& n : ctr)
+            std::cout << static_cast<int>(n) << " ";
+        std::cout << "\n";
     }
-    return ret;
 }
-
 }   // namespace Nardi

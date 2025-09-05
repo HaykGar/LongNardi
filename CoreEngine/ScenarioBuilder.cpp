@@ -10,14 +10,14 @@ ScenarioBuilder::ScenarioBuilder() : _game(), _ctrl(_game)
     _game.turn_number = {2, 2}; // avoiding first turn case unless explicitly requested
 }
 
-void ScenarioBuilder::StartPreRoll(bool p_idx, const boardConfig& b)
+void ScenarioBuilder::StartPreRoll(bool p_idx, const BoardConfig& b)
 {
     withPlayer(p_idx);
     withBoard(b);
     ResetControllerState();
 }
 
-status_codes ScenarioBuilder::withScenario(bool p_idx, const boardConfig& b, int d1, int d2, int d1u, int d2u)
+status_codes ScenarioBuilder::withScenario(bool p_idx, const BoardConfig& b, int d1, int d2, int d1u, int d2u)
 {
     StartPreRoll(p_idx, b);
     return withDice(d1, d2, d1u, d2u);
@@ -55,7 +55,7 @@ void ScenarioBuilder::withPlayer(bool p_idx)
         _game.board.SwitchPlayer();
 }
 
-void ScenarioBuilder::withBoard(const std::array<std::array<int, COLS>, ROWS>& b)
+void ScenarioBuilder::withBoard(const BoardConfig& b)
 {
     _game.board.head_used = false;
     _game.board.SetData(b);
@@ -81,18 +81,19 @@ status_codes ScenarioBuilder::ReceiveCommand(const Command& cmd)
     return _ctrl.ReceiveCommand(cmd);
 }
 
+void ScenarioBuilder::Reset()
+{
+    withBoard(TestGlobals::start_brd);
+    withPlayer(white);
+    _game.times_dice_used = {0, 0};
+    withFirstTurn();
+
+    ResetControllerState();
+}
+
 void ScenarioBuilder::PrintBoard() const
 {
-    auto& brd = _game.GetBoardRef();
-    for(int r = 0; r < ROWS; ++r)
-    {
-        for (int c = 0; c < COLS; ++c)
-        {
-            std::cout << brd.at(r, c) << "\t";
-        }
-        std::cout << "\n\n";
-    }
-    std::cout << "\n\n\n";
+    DisplayBoard(_game.board.data);
 }
 
 void ScenarioBuilder::StatusReport() const
@@ -107,20 +108,17 @@ void ScenarioBuilder::StatusReport() const
     PrintBoard();
 }
 
- 
-const int& ScenarioBuilder::GetBoardAt(const Coord& coord) const
+const int ScenarioBuilder::GetBoardAt(const Coord& coord) const
 {
-    auto& brd = _game.GetBoardRef();
-    return brd.at(coord);
+    return _game.board.at(coord);
 }
  
-const int& ScenarioBuilder::GetBoardAt(int r, int c) const
+const int ScenarioBuilder::GetBoardAt(int r, int c) const
 {
-    auto& brd = _game.GetBoardRef();
-    return brd.at(r, c);
+    return _game.board.at(r, c);
 }
 
-const std::array<std::array<int, COLS>, ROWS>& ScenarioBuilder::GetBoard() const
+const BoardConfig& ScenarioBuilder::GetBoard() const
 {
     return _game.board.data;
 }

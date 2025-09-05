@@ -17,11 +17,6 @@ void Controller::SwitchTurns()
 
 status_codes Controller::ReceiveCommand(const Command& cmd)
 {
-    //std::cout << "received command: " << static_cast<int>(cmd.action) << "\n";
-    //std::cout << "start selected? " << std::boolalpha << start_selected << "\n";
-    //std::cout << "dice rolled? " << std::boolalpha << dice_rolled << "\n";
-    //std::cout << "Game Over? "   << std::boolalpha << g.GameIsOver() << "\n";
-
     if(g.GameIsOver())
         return status_codes::NO_LEGAL_MOVES_LEFT; 
 
@@ -44,17 +39,14 @@ status_codes Controller::ReceiveCommand(const Command& cmd)
         break;
     case Actions::SELECT_SLOT:
     case Actions::MOVE_BY_DICE:
-        //std::cout << "trying to select or move\n";
         if (!dice_rolled)   // no attempts to move before rolling
             break;
         
         else if(start_selected)
         {
-            //std::cout << "\n\nstart_selected\n\n";
             if(std::holds_alternative<Coord>(cmd.payload))
                 outcome = g.TryFinishMove(start, std::get<Coord>(cmd.payload) ); // this makes the move if possible, triggering redraws
             else if (std::holds_alternative<bool>(cmd.payload)){
-                //std::cout << "\n\nattempting movebydice\n\n";
                 outcome = g.TryFinishMove(start, std::get<bool>(cmd.payload));
             }
 
@@ -65,7 +57,6 @@ status_codes Controller::ReceiveCommand(const Command& cmd)
         }
         else if(std::holds_alternative<Coord>(cmd.payload))
         {
-            //std::cout << "trying start select\n";
             outcome = g.TryStart(std::get<Coord>(cmd.payload));
             if (outcome == status_codes::SUCCESS)
             {
@@ -75,9 +66,9 @@ status_codes Controller::ReceiveCommand(const Command& cmd)
         }
         break;
     case Actions::AUTOPLAY:
-        if(std::holds_alternative<std::string>(cmd.payload))
+        if(std::holds_alternative<BoardKey>(cmd.payload))
         {
-            bool auto_played = g.AutoPlayTurn(std::get<std::string>(cmd.payload));
+            bool auto_played = g.AutoPlayTurn(std::get<BoardKey>(cmd.payload));
             outcome = auto_played ? status_codes::NO_LEGAL_MOVES_LEFT : status_codes::MISC_FAILURE;
         }
         break;

@@ -11,15 +11,16 @@ class Board
 public:
     // Constructor
     Board();
-    Board(const std::array<std::array<int, COLS>, ROWS>& d);
+    Board(const BoardConfig& d);
 
     // Getters
-    const int& at(const Coord& s) const;
-    const int& at(size_t r, size_t c) const;
-    const boardConfig& View() const;
+    const int8_t& at(const Coord& s) const;
+    const int8_t& at(size_t r, size_t c) const;
+    const BoardConfig& View() const;
+    const BoardKey AsKey() const;
 
     bool PlayerIdx() const;
-    int PlayerSign() const;
+    int8_t PlayerSign() const;
     bool HeadUsed() const;
 
     int MaxNumOcc() const;
@@ -61,10 +62,10 @@ public:
 
     friend class ScenarioBuilder;
 private:
-    boardConfig data;
+    BoardConfig data;
 
     bool player_idx;
-    int player_sign;
+    int8_t player_sign;
     bool head_used;
     std::array<int, 2> pieces_per_player;
     std::array<int, 2> reached_enemy_home;
@@ -78,7 +79,7 @@ private:
     bool Bad_RowChangeTo(bool er, bool player) const;
 
     // Manaul Initialization
-    void SetData(const std::array<std::array<int, COLS>, ROWS>& b);
+    void SetData(const BoardConfig& b);
     void CalcPiecesLeftandReached();
 };
 

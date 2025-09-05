@@ -11,7 +11,7 @@ using namespace Nardi;
 TestBuilder::TestBuilder() : _bldr(), _game(_bldr.GetGame()), _ctrl(_bldr.GetCtrl())
 {}
 
-status_codes TestBuilder::StartOfTurn(bool p_idx, const std::array<std::array<int, COLS>, ROWS>& b, int d1, int d2)
+status_codes TestBuilder::StartOfTurn(bool p_idx, const BoardConfig& b, int d1, int d2)
 {
     return _bldr.withScenario(p_idx, b, d1, d2, 0, 0);
 }

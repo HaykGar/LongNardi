@@ -11,7 +11,7 @@ Board::Board() :      data {{   { PIECES_PER_PLAYER, 0, 0, 0, 0, 0, 0, 0, 0, 0, 
                                 reached_enemy_home{0, 0}, pieces_left{PIECES_PER_PLAYER, PIECES_PER_PLAYER}
 {}
 
-Board::Board(const std::array<std::array<int, COLS>, ROWS>& d) : player_idx(0), player_sign(BoolToSign(player_idx)), head_used(false)
+Board::Board(const BoardConfig& d) : player_idx(0), player_sign(BoolToSign(player_idx)), head_used(false)
 {
     SetData(d);
 }
@@ -179,7 +179,7 @@ bool Board::operator== (const Board& other) const
 
 // testing
 
-void Board::SetData(const std::array<std::array<int, COLS>, ROWS>& b)
+void Board::SetData(const BoardConfig& b)
 {
     data = b;
     CalcPiecesLeftandReached();
@@ -217,13 +217,13 @@ void Board::CalcPiecesLeftandReached()
 ///////////// Getters /////////////
 
 
-const int& Board::at(size_t r, size_t c) const
+const int8_t& Board::at(size_t r, size_t c) const
 {   return data.at(r).at(c);   }
 
-const int& Board::at (const Coord& s) const
+const int8_t& Board::at (const Coord& s) const
 {   return at(s.row, s.col);   }
 
-const boardConfig& Board::View() const
+const BoardConfig& Board::View() const
 {
     return data;
 }
@@ -231,7 +231,7 @@ const boardConfig& Board::View() const
 bool Board::PlayerIdx() const
 {   return player_idx;   }
 
-int Board::PlayerSign() const
+int8_t Board::PlayerSign() const
 {   return player_sign;   }
 
 bool Board::HeadUsed() const
@@ -239,16 +239,35 @@ bool Board::HeadUsed() const
  
 const std::array<int, 2>& Board::ReachedEnemyHome() const
 {   return reached_enemy_home;   }
-
  
 const std::array<int, 2>& Board::PiecesLeft() const
 {   return pieces_left;   }
 
 
-
 void Board::Print() const
 {
     DisplayBoard(data);
+}
+
+const BoardKey Board::AsKey() const
+{
+    BoardKey key;
+    Coord start(player_idx, 0);
+
+    for(int i = 0; i < ROWS*COLS && start.InBounds(); ++i)
+    {
+        bool enemy_occupies = (at(start) * player_sign < 0);
+
+        key[enemy_occupies][i] = abs(at(start));    // if not enemy occupied, channel 0, else channel 1
+        key[!enemy_occupies][i] = 0;                // other channel gets 0
+
+        start = CoordAfterDistance(start, 1);
+    }
+
+    key[0][ROWS*COLS] = pieces_per_player[player_idx] - pieces_left[player_idx];
+    key[1][ROWS*COLS] = pieces_per_player[!player_idx] - pieces_left[!player_idx];
+
+    return key;
 }
 
 ///////////// Updates and Actions /////////////

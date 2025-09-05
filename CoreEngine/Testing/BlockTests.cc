@@ -43,13 +43,19 @@ TEST_F(TestBuilder, BlockadeHomeEntry)
 
     DisplayBoard(brd);
 
+    std::cout << "problematic part\n\n";
+
     rc = StartOfTurn(black, brd, 3, 6);
     ASSERT_EQ(rc, status_codes::SUCCESS);
+
+    StatusReport();
 
     // Select (1,3), should be success
     ASSERT_EQ(ReceiveCommand(Command(1,3)), status_codes::SUCCESS);
     // Move by dice second (6)
     ASSERT_EQ(ReceiveCommand(Command(second)), status_codes::SUCCESS);   // create blockage
+
+    StatusReport();
 
     // Select slot (1,11), try to move by dice first (3), should NOT be success
     ASSERT_EQ(ReceiveCommand(Command(1,11)), status_codes::SUCCESS);
@@ -188,7 +194,7 @@ TEST_F(TestBuilder, UnliftableWithDoubles)
 
 TEST_F(TestBuilder, BlockEndOfTurn)
 {
-    boardConfig blockUnblock = {{   {3, 2, 2, 2, 2, 0, 0, 0, 0, 0, 0, 0}, 
+    BoardConfig blockUnblock = {{   {3, 2, 2, 2, 2, 0, 0, 0, 0, 0, 0, 0}, 
                                     {0, 0, 0, 0, 0, 0, 0, 0, 0, 0,-1,-1}}};
 
     StartOfTurn(white, blockUnblock, 5, 1);
@@ -208,7 +214,7 @@ TEST_F(TestBuilder, BlockEndOfTurn)
 
 TEST_F(TestBuilder, BlockUnblock)
 {
-    boardConfig blockUnblock = {{   {3, 2, 2, 2, 2, 0, 0, 0, 0, 0, 0, 0}, 
+    BoardConfig blockUnblock = {{   {3, 2, 2, 2, 2, 0, 0, 0, 0, 0, 0, 0}, 
                                     {0, 0, 0, 0, 0, 0, 0, 0, 0, 0,-1,-1}}};
 
     StartOfTurn(white, blockUnblock, 5, 1);
@@ -228,7 +234,7 @@ TEST_F(TestBuilder, BlockUnblock)
 
 TEST_F(TestBuilder, Mars)
 {
-    boardConfig mars = {{   {3, 2, 2, 2, 2, 0,-1, 0, 0, 0, 0, 0}, 
+    BoardConfig mars = {{   {3, 2, 2, 2, 2, 0,-1, 0, 0, 0, 0, 0}, 
                             {0, 0, 0, 0, 0, 0, 0, 0, 0, 0,-1,-1}}};
 
     StartOfTurn(white, mars, 5, 1);

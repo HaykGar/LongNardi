@@ -12,21 +12,6 @@ using namespace Nardi;
 
 int main()
 {
-    // NardiMVC manager(TerminalRWFactory);
-
-    // manager.Animate();
-
-    // while(!manager.QuitRequested() && !manager.GameIsOver())
-    // {
-    //     manager.Animate();
-    //     std::cout << "Awaiting command\n";
-    //     manager.AwaitUserCommand();
-    //     std::cout << "Command received\n\n\n";    // can be more specific later
-    // }
-
-    // if(manager.GameIsOver())
-    //     std::cout << "Game Over\n";
-
     Game model;
     Controller ctrl(model);
     TerminalRW view(model, ctrl);
@@ -55,10 +40,9 @@ int main()
                 {
                     std::uniform_int_distribution<size_t> dist(0, b2s.size() - 1);
                     size_t random_offset = dist(gen);
-                    std::unordered_map<std::string, MoveSequence>::iterator it = b2s.begin();
+                    std::unordered_map<BoardKey, MoveSequence, BoardKeyHash>::iterator it = b2s.begin();
                     std::advance(it, random_offset);
 
-                    std::cout << "computer randomly selects board configuration:\n" << it->first << "\n";
                     status = ctrl.ReceiveCommand(Command(it->first));
                     DispErrorCode(status);
                 }
@@ -83,6 +67,31 @@ int main()
 
         isComputerTurn = !isComputerTurn;
     }
+
+    // ScenarioBuilder builder;
+
+    // builder.withFirstTurn();
+    // status_codes outcome = builder.withScenario(white, TestGlobals::start_brd, 4, 4, 0, 0);
+
+    // builder.StatusReport();
+
+    // builder.ReceiveCommand(Command(0, 0));
+    // builder.ReceiveCommand(Command(0, 8));
+    // builder.ReceiveCommand(Command(0, 0));
+    // builder.ReceiveCommand(Command(first));
+
+    // builder.StatusReport();
+
+    // outcome = builder.ReceiveCommand(Command(0, 4));
+    // outcome = builder.ReceiveCommand(Command(first));
+
+    // DispErrorCode(outcome);
+
+    // builder.StatusReport();
+
+    // auto brd = builder.GetBoard();
+
+    // DisplayBoard(brd);
 
     return 0;
 }

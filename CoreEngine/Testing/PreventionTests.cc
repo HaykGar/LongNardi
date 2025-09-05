@@ -27,7 +27,7 @@ TEST_F(TestBuilder, Legality_MovePreventsCompletion)
     rc = ReceiveCommand(Command(second));
     DispErrorCode(rc);
     ASSERT_NE(rc, status_codes::SUCCESS) << "move 6 from head prevents completion";
-    ASSERT_EQ(GetBoardAt(0, 6), 0);
+    ASSERT_EQ( static_cast<int>(GetBoardAt(0, 6)), 0);
 
     StatusReport();
 

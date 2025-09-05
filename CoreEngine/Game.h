@@ -12,11 +12,9 @@
 #include <random>
 
 /*
+Undo Mock via stack
+
 Add Command for displaying all the legal move seqs and how they end...
-
-Get rid of mock board + dice altogether and just keep track of real?
-
-status_codes TryMakeMove(const Coord& start, const Coord& end); do and implement controls... or maybe leave in controller?
 
 During endgame, if it's a valid start just check if there's a forced move from here, will streamline play
 
@@ -25,10 +23,6 @@ more than 1 block at a time?????
 endgame testing: include case of starting endgame mid-turn, and also in forced checking
 
 Logging services... log everything in files instead of cout
-
-Automate dice rolling from controller ?
-
-On select start, check forced moves from there, return this if valid start?
 
 undo move feature
 */
@@ -53,17 +47,18 @@ class Game
         status_codes TryFinishMove(const Coord& start, const Coord& end);   // No Removals
         status_codes TryFinishMove(const Coord& start, bool dice);          // Removals and regular moves
 
-        bool AutoPlayTurn(std::string key); // currently unused, useful later though
+        bool AutoPlayTurn(const BoardKey& key); // currently unused, useful later though
         
         void SwitchPlayer();
 
         // State Checks
         bool GameIsOver() const;
+        bool IsMars() const;
 
         // Getters
         const Board& GetBoardRef() const;
-        const auto ViewAllLegalMoveSeqs() const;
-        const std::unordered_map<std::string, MoveSequence>& GetBoards2Seqs() const;
+        BoardKey GetBoardAsKey() const;
+        const std::unordered_map<BoardKey, MoveSequence, BoardKeyHash>& GetBoards2Seqs() const;
 
         int GetDice(bool idx) const;
         const ReaderWriter* GetConstRW();
@@ -140,17 +135,19 @@ class Game
                 void ComputeAllLegalMoves();
 
                 int MaxLen() const;
-                const std::unordered_map<std::string, MoveSequence>& BrdsToSeqs() const;
-                std::unordered_map<std::string, MoveSequence>& BrdsToSeqs();
+                const std::unordered_map<BoardKey, MoveSequence, BoardKeyHash>& BrdsToSeqs() const;
+
+
+                std::unordered_map<BoardKey, MoveSequence, BoardKeyHash>& BrdsToSeqs();
             
             private:
                 Game& _g;
                 bool _maxDice;
                 std::array<bool, 2> _dieIdxs;
-                std::unordered_set<std::string> _encountered;
+                std::unordered_set<BoardKey, BoardKeyHash> _encountered;
 
                 int _maxLen;
-                std::unordered_map<std::string, MoveSequence> _brdsToSeqs; // possible board configs map to move sequence that form them
+                std::unordered_map<BoardKey, MoveSequence, BoardKeyHash> _brdsToSeqs; // possible board configs map to move sequence that form them
 
                 void dfs(std::vector<StartAndDice>& seq);
                 bool FirstMoveException();
