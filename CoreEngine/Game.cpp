@@ -82,8 +82,8 @@ void Game::UseDice(bool idx, int n)
 
 bool Game::AutoPlayTurn(const BoardKey& key)
 {
-
     auto& b2s = legal_turns.BrdsToSeqs();
+    auto original_brd = board.View();
 
     if(!b2s.contains(key))
         return false;
@@ -93,7 +93,15 @@ bool Game::AutoPlayTurn(const BoardKey& key)
             auto status = arbiter.CanMoveByDice(sd._from, sd._diceIdx).first;
             if( status != status_codes::SUCCESS){
                 DispErrorCode(status);
-                std::cout << "fme is " << first_move_exception << "\n";
+                std::cout << "fme is " << first_move_exception << ", current board:\n";
+                DisplayBoard(board.View());
+                std::cout << "original board:\n";
+                DisplayBoard(original_brd);
+                std::cout << "attempted move: " << sd._from.AsStr() << " by " << dice[sd._diceIdx] << "\n";
+
+                std::cout << "full sequence of moves attempting:\n";
+                for (const auto& mv : b2s[key])
+                    std::cout << mv._from.AsStr() << " by " << dice[mv._diceIdx] << "\n";
 
                 throw std::runtime_error("AutoPlay attempted illegal move");
             }
@@ -161,7 +169,7 @@ status_codes Game::OnMoveOrRemove()
     return arbiter.CheckForcedMoves();
 }
 
-bool Game::SilentMock(const Coord& start, const Coord& end)
+bool Game::MockMove(const Coord& start, const Coord& end)
 {
     if(end.OutOfBounds() || start.OutOfBounds())
     {
@@ -182,7 +190,7 @@ bool Game::SilentMock(const Coord& start, const Coord& end)
         times_dice_used[0] += d / dice[0];
     else
     {
-        std::cout << "!!!!\nunexpected input to SilentMock\n";
+        std::cout << "!!!!\nunexpected input to MockMove\n";
         return false;
     }
 
@@ -194,7 +202,7 @@ bool Game::SilentMock(const Coord& start, const Coord& end)
 }
 
 
-bool Game::UndoSilentMock(const Coord& start, const Coord& end)
+bool Game::UndoMockMove(const Coord& start, const Coord& end)
 {
     if(end.OutOfBounds() || start.OutOfBounds())
     {
@@ -215,14 +223,14 @@ bool Game::UndoSilentMock(const Coord& start, const Coord& end)
         times_dice_used[0] -= d / dice[0];
     else
     {
-        std::cout << "!!!!\nunexpected input to UndoSilentMock\n";
+        std::cout << "!!!!\nunexpected input to UndoMockMove\n";
         return false;
     }
     board.UndoMove(start, end);
     return true;
 }
 
-bool Game::SilentMock(const Coord& start, bool dice_idx)
+bool Game::MockMove(const Coord& start, bool dice_idx)
 {
     Coord dest = board.CoordAfterDistance(start, dice[dice_idx]);
 
@@ -240,7 +248,7 @@ bool Game::SilentMock(const Coord& start, bool dice_idx)
     return true;
 }
 
-bool Game::UndoSilentMock(const Coord& start, bool dice_idx)
+bool Game::UndoMockMove(const Coord& start, bool dice_idx)
 {
     Coord dest = board.CoordAfterDistance(start, dice[dice_idx]);
 
@@ -253,18 +261,6 @@ bool Game::UndoSilentMock(const Coord& start, bool dice_idx)
 
     --times_dice_used[dice_idx];
     return true;
-}
-
-void Game::MockAndUpdateBlock(const Coord& start, bool dice_idx)
-{
-    SilentMock(start, dice_idx);
-    arbiter.SolidifyBlock();
-}
-
-void Game::UndoMockAndUpdateBlock(const Coord& start, bool dice_idx)
-{
-    UndoSilentMock(start, dice_idx);
-    arbiter.SolidifyBlock();
 }
 
 bool Game::GameIsOver() const 
@@ -496,10 +492,6 @@ status_codes Game::Arbiter::OnRoll()
     return CheckForcedMoves();
 }
 
-void Game::Arbiter::SolidifyBlock()
-{
-    _blockMonitor.Solidify();
-}
 
 ///////////// Forced Moves /////////////
 
@@ -576,7 +568,7 @@ void Game::LegalSeqComputer::dfs(std::vector<StartAndDice>& seq)
             if(_g.arbiter.BoardAndBlockLegal(coord, _dieIdxs[i]) == status_codes::SUCCESS)
             {
                 seq.emplace_back(coord, _dieIdxs[i]);
-                _g.MockAndUpdateBlock(coord, _dieIdxs[i]);
+                _g.MockMove(coord, _dieIdxs[i]);
 
                 BoardKey brdkey = _g.board.AsKey();
                 if(! _encountered.contains(brdkey) ) 
@@ -585,7 +577,7 @@ void Game::LegalSeqComputer::dfs(std::vector<StartAndDice>& seq)
                     _encountered.insert(brdkey);
                 }
 
-                _g.UndoMockAndUpdateBlock(coord, _dieIdxs[i]);
+                _g.UndoMockMove(coord, _dieIdxs[i]);
                 seq.pop_back();
             }
         }
@@ -628,7 +620,7 @@ bool Game::LegalSeqComputer::FirstMoveException()   // fixme re-compute mid turn
 
         while( at_head > PIECES_PER_PLAYER - 2)
         {
-            _g.SilentMock(head, 0);
+            _g.MockMove(head, 0);
             seq.emplace_back(head, 0);
             --at_head;
             ++n_moves;
@@ -640,7 +632,7 @@ bool Game::LegalSeqComputer::FirstMoveException()   // fixme re-compute mid turn
             int at_dest = abs(_g.board.at(dest));
             while (at_dest < 2)
             {
-                _g.SilentMock(mid, 0);
+                _g.MockMove(mid, 0);
                 seq.emplace_back(mid, 0);   
                 ++at_dest;
                 ++n_2moves;
@@ -664,13 +656,13 @@ bool Game::LegalSeqComputer::FirstMoveException()   // fixme re-compute mid turn
 
             while(n_2moves > 0)
             {
-                _g.UndoSilentMock(mid, 0);
+                _g.UndoMockMove(mid, 0);
                 --n_2moves;
             }
             
             while(n_moves > 0)
             {
-                _g.UndoSilentMock(head, 0);
+                _g.UndoMockMove(head, 0);
                 --n_moves;
             }
         }

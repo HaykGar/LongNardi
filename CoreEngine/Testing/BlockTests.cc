@@ -251,3 +251,21 @@ TEST_F(TestBuilder, Mars)
     rc = ReceiveCommand(Command(second));
     ASSERT_EQ(rc, status_codes::NO_LEGAL_MOVES_LEFT);
 }
+
+TEST_F(TestBuilder, AutoplayMistake)
+{
+    BoardConfig brd = {{{ 1, 3, 1,-2, 4, 0,-1, 0, 0, 0, 0, 0},
+                        {-2,-1, 6,-1,-2,-2, 0,-1,-1,-2, 0, 0}}};
+
+    StartOfTurn(black, brd, 6, 1);
+
+    auto rc = ReceiveCommand(Command(1,0));
+    ASSERT_EQ(rc, status_codes::SUCCESS);
+    rc = ReceiveCommand(Command(first));
+    ASSERT_EQ(rc, status_codes::SUCCESS);   // move 0,0 -> 0,6 to form a block
+
+    rc = ReceiveCommand(Command(1, 3));
+    ASSERT_EQ(rc, status_codes::SUCCESS);
+    rc = ReceiveCommand(Command(second));   // try to move 1,3 -> 1,4
+    ASSERT_EQ(rc, status_codes::BAD_BLOCK);
+}

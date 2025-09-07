@@ -89,25 +89,15 @@ class Game
         {
             public:
                 BadBlockMonitor(Game& g);
-                enum class block_state
-                {
-                    CLEAR,
-                    FIXABLE_BLOCK,
-                    BAD_BLOCK
-                };  // useless ?
 
                 bool Illegal(const Coord& start, bool dice_idx);
                 bool Illegal(const Coord& start, const Coord& end);
 
                 void Reset();
-                void Solidify();
-
-                block_state State() const;
 
             private:
                 Game& _g;                
                 bool _blockedAll;
-                block_state _state;
 
                 unsigned _blockLength;
                 Coord _blockStart;
@@ -116,14 +106,13 @@ class Game
 
                 bool CheckMockedState();
 
-                bool BlockageAround(const Coord& end);
-                bool PieceAhead();
-                bool WillBeFixable();
+                // bool BlockageAround(const Coord& end);
+                // bool PieceAhead();
+                bool IsFixable();
                 bool BlockingAll();
-                bool StillBlocking();
 
-                bool Unblocks(const Coord& start, const Coord& end);
-                bool Unblocked();
+                // bool Unblocks(const Coord& start, const Coord& end);
+                // bool Unblocked();
         };
 
         // Pre-computing legal moves
@@ -176,7 +165,6 @@ class Game
 
                 // Updates and Actions
                 status_codes OnRoll();
-                void SolidifyBlock();
 
             private:
                 Game& _g;
@@ -226,16 +214,11 @@ class Game
         status_codes OnMoveOrRemove();
 
         // Mocking
-        bool SilentMock(const Coord& start, const Coord& end);
-        bool SilentMock(const Coord& start, bool dice_idx);
+        bool MockMove(const Coord& start, const Coord& end);
+        bool MockMove(const Coord& start, bool dice_idx);
     
-        // void MockAndUpdate(const Coord& start, const Coord& end);
-        bool UndoSilentMock(const Coord& start, const Coord& end);
-        bool UndoSilentMock(const Coord& start, bool dice_idx);
-
-        // void UndoMockAndUpdate(const Coord& start, const Coord& end);
-        void MockAndUpdateBlock(const Coord& start, bool dice_idx);
-        void UndoMockAndUpdateBlock(const Coord& start, bool dice_idx);
+        bool UndoMockMove(const Coord& start, const Coord& end);
+        bool UndoMockMove(const Coord& start, bool dice_idx);
 };
 
 
