@@ -113,21 +113,29 @@ bool Game::BadBlockMonitor::IsFixable() // reminder the block is already mocked 
         return false;
 
     int total_moves_per_die = _g.doubles_rolled ? 4 : 1;
-    int moves_left = total_moves_per_die - _g.times_dice_used[available_dice];
+    int moves_left;
+
+    if(_g.doubles_rolled)
+        moves_left = total_moves_per_die - _g.times_dice_used[0] - _g.times_dice_used[1];
+    else
+        moves_left = total_moves_per_die - _g.times_dice_used[available_dice];
 
     auto CanFixFrom = [&](const Coord& start) -> bool 
     {
         Coord dest = _g.board.CoordAfterDistance(start, _g.dice[available_dice], _g.board.PlayerIdx());   // in player's direction
-        if(abs(_g.board.at(start)) <= moves_left)
+        int n_pieces = abs(_g.board.at(start));
+        if(n_pieces <= moves_left)
         {
             int moves_made = 0;
-            for(int i = 0; i < abs(_g.board.at(start)); ++i)
+            for(int i = 0; i < n_pieces; ++i)
             {
                 if(_g.board.ValidStart(start) == status_codes::SUCCESS && _g.board.WellDefinedEnd(start, dest) == status_codes::SUCCESS)
                 {
                     _g.MockMove(start, available_dice);
                     ++moves_made;
                 }
+                else
+                    break;
             }
 
             bool fixed = (moves_made == moves_left) && !BlockingAll(); 
@@ -179,35 +187,3 @@ bool Game::BadBlockMonitor::CheckMockedState()
 {
     return ( BlockingAll() && !IsFixable() );
 }
-
-// bool Game::BadBlockMonitor::Unblocked()
-// {
-//     Coord start = _blockStart;
-//     for(int i = 0; i < 6 && start.InBounds(); ++i, start = _g.board.CoordAfterDistance(start, 1, !_g.board.PlayerIdx()))
-//     {
-//         if(_g.board.at(start) * _g.board.PlayerSign() <= 0)  // empty or enemy, should only ever be friendly or empty
-//             return true;
-//     }
-
-//     return false;
-// }
-
-// bool Game::BadBlockMonitor::Unblocks(const Coord& start, const Coord& end)
-// {
-//     if( _g.board.PlayerSign() * _g.board.at(start) != 1 )
-//         return false;   // not even vacating square
-
-//     auto dist = _g.board.GetDistance(_blockStart, start, !_g.board.PlayerIdx()); 
-
-//     if(dist >= 0 && dist < 6)   // start is a blocking piece, at most the 6th one
-//     {
-//         int blocked_after = _blockLength - dist - 1;
-
-//         if(end == _g.board.CoordAfterDistance(_blockStart, _blockLength) )
-//             ++blocked_after;    // start piece blocks at the end, doesn't actually get subtracted
-
-//         return (blocked_after < 6);
-//     }
-//     else
-//         return false;   // start is not one of the blockers, or it's after the 6th so we still have blockage
-// }
