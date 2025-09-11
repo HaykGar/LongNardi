@@ -54,7 +54,7 @@ class Game
 
         // State Checks
         bool TurnInProgress() const;
-        
+
         bool GameIsOver() const;
         bool IsMars() const;
 
@@ -166,8 +166,17 @@ class Game
                 std::pair<status_codes, Coord> CanFinishByDice(const Coord& start, bool dice_idx);
         };
 
+        struct TurnData
+        {
+            TurnData(MoveSequence& mv, std::array<int, 2> d) : _moves(mv), _dice(d) {}
+            MoveSequence _moves;
+            std::array<int, 2> _dice;
+        };
+
         Board board;
         // std::stack<std::variant< StartAndDice, std::pair<Coord, Coord> > > mock_hist;    implement and use me `
+        std::vector<StartAndDice> mvs_this_turn;
+        std::stack<TurnData> history;
 
         std::mt19937 rng;                           // Mersenne Twister engine
         std::uniform_int_distribution<int> dist;    // uniform distribution for dice
@@ -198,9 +207,7 @@ class Game
         void AnimateDice();
         
         // Moving
-        status_codes MakeMove(const Coord& start, const Coord& end);
         status_codes MakeMove(const Coord& start, bool dice_idx);
-        status_codes RemovePiece(const Coord& start);
 
         status_codes OnMoveOrRemove();
 
@@ -208,8 +215,8 @@ class Game
         bool MockMove(const Coord& start, const Coord& end);
         bool MockMove(const Coord& start, bool dice_idx);
     
-        bool UndoMockMove(const Coord& start, const Coord& end);
-        bool UndoMockMove(const Coord& start, bool dice_idx);
+        bool UndoMove(const Coord& start, const Coord& end);
+        bool UndoMove(const Coord& start, bool dice_idx);
 };
 
 

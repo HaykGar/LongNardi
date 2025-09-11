@@ -22,12 +22,12 @@ bool Game::PreventionMonitor::Illegal(const Coord& start, bool dice_idx)
         {
             if(_g.arbiter.BoardAndBlockLegal(coord, !dice_idx) == status_codes::SUCCESS)
             {
-                _g.UndoMockMove(start, dice_idx);
+                _g.UndoMove(start, dice_idx);
                 return false;
             }
         }
         
-        _g.UndoMockMove(start, dice_idx);
+        _g.UndoMove(start, dice_idx);
         return true;
     }
     
@@ -131,7 +131,7 @@ bool Game::BadBlockMonitor::IsFixable() // reminder the block is already mocked 
                 // can actually move all of these pieces in the stack and it unblocks
 
             for(int i = 0; i < moves_made; ++i)
-                _g.UndoMockMove(start, available_dice);
+                _g.UndoMove(start, available_dice);
 
             return fixed;
         }
@@ -156,7 +156,7 @@ bool Game::BadBlockMonitor::Illegal(const Coord& start, bool dice_idx)
         return true;
     }
     bool ret = CheckMockedState();
-    _g.UndoMockMove(start, dice_idx);
+    _g.UndoMove(start, dice_idx);
     return ret;
 }
 
@@ -168,7 +168,7 @@ bool Game::BadBlockMonitor::Illegal(const Coord& start, const Coord& end)
         return true;
     }
     bool ret = CheckMockedState();
-    _g.UndoMockMove(start, end);
+    _g.UndoMove(start, end);
     return ret;
 }
 

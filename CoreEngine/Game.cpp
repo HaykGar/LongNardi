@@ -116,6 +116,8 @@ bool Game::AutoPlayTurn(const BoardKey& key)
                 board.Remove(sd._from);
             else
                 board.Move(sd._from, board.CoordAfterDistance(sd._from, dice[sd._diceIdx]) );
+            
+            mvs_this_turn.emplace_back(sd._from, sd._diceIdx);
         }
         return true;
     }
@@ -133,9 +135,41 @@ status_codes Game::TryFinishMove(const Coord& start, const Coord& end) // assume
         return can_move;
     else
     {
-        UseDice(0, times_used[0]); UseDice(1, times_used[1]);
-        return MakeMove(start, end);    // checks for further forced moves internally
+        if(times_used[0] + times_used[1] == 1)
+        {
+            bool used_idx = (times_used[1] == 1);
+            return MakeMove(start, used_idx);
+        }
+        else if(doubles_rolled)
+        {
+            int steps = times_used[0] + times_used[1];
+            Coord from(start);
+            status_codes status;
+            while(steps > 0)
+            {
+                status = MakeMove(from, 0);
+                --steps;
+                from = board.CoordAfterDistance(from, dice[0]);
+            }
+            return status;
+        }
+        else
+        {
+            if(times_used[0] + times_used[1] != 2)
+                throw std::runtime_error("unexpected dice usages in TryFinishMove");
+            
+            bool first_dice = 0;
+            Coord mid = board.CoordAfterDistance(start, dice[first_dice]);
+            if(board.WellDefinedEnd(start, mid) != status_codes::SUCCESS)
+            {
+                first_dice = !first_dice;
+                mid = board.CoordAfterDistance(start, dice[first_dice]);
+            }
+            MakeMove(start, first_dice);
+            return MakeMove(mid, !first_dice);
+        }
     }
+        // return MakeMove(start, end);    // checks for further forced moves internally
 }
 
 status_codes Game::TryFinishMove(const Coord& start, bool dice_idx)
@@ -147,25 +181,15 @@ status_codes Game::TryFinishMove(const Coord& start, bool dice_idx)
         return MakeMove(start, dice_idx);
 }
 
-status_codes Game::MakeMove(const Coord& start, const Coord& end)
-{
-    board.Move(start, end);
-    return OnMoveOrRemove();
-}
-
 status_codes Game::MakeMove(const Coord& start, bool dice_idx)
 {
-    UseDice(dice_idx);
-    if(arbiter.DiceRemovesFrom(start, dice_idx))
-        return RemovePiece(start);
+    if(MockMove(start, dice_idx))
+    {
+        mvs_this_turn.emplace_back(start, dice_idx);
+        return OnMoveOrRemove();
+    }
     else
-        return MakeMove(start, board.CoordAfterDistance(start, dice[dice_idx]) );
-}
-
-status_codes Game::RemovePiece(const Coord& start)
-{
-    board.Remove(start);
-    return OnMoveOrRemove();
+        return status_codes::MISC_FAILURE;
 }
 
 status_codes Game::OnMoveOrRemove()
@@ -183,16 +207,16 @@ bool Game::MockMove(const Coord& start, const Coord& end)
     }
     int d = board.GetDistance(start, end);
     if(d == dice[0])
-        ++times_dice_used[0];
+        UseDice(0);
     else if(d == dice[1])
-        ++times_dice_used[1];
+        UseDice(1);
     else if(d == dice[0] + dice[1])
     {
-        ++times_dice_used[0];
-        ++times_dice_used[1];
+        UseDice(0);
+        UseDice(1);
     }
     else if(doubles_rolled && d % dice[0] == 0 && arbiter.CanUseDice(0, d / dice[0]) )
-        times_dice_used[0] += d / dice[0];
+        UseDice(0, d / dice[0]);
     else
     {
         std::cout << "!!!!\nunexpected input to MockMove\n";
@@ -201,13 +225,11 @@ bool Game::MockMove(const Coord& start, const Coord& end)
 
     board.Move(start, end);
 
-    // mock_hist.push(std::pair<Coord, Coord>(start, end)); `
-
     return true;
 }
 
 
-bool Game::UndoMockMove(const Coord& start, const Coord& end)
+bool Game::UndoMove(const Coord& start, const Coord& end)
 {
     if(end.OutOfBounds() || start.OutOfBounds())
     {
@@ -228,7 +250,7 @@ bool Game::UndoMockMove(const Coord& start, const Coord& end)
         times_dice_used[0] -= d / dice[0];
     else
     {
-        std::cout << "!!!!\nunexpected input to UndoMockMove\n";
+        std::cout << "!!!!\nunexpected input to UndoMove\n";
         return false;
     }
     board.UndoMove(start, end);
@@ -246,14 +268,12 @@ bool Game::MockMove(const Coord& start, bool dice_idx)
     else
         return false;
 
-    ++times_dice_used[dice_idx];
-
-    // mock_hist.push(StartAndDice(start, dice_idx)); `
+    UseDice(dice_idx);
 
     return true;
 }
 
-bool Game::UndoMockMove(const Coord& start, bool dice_idx)
+bool Game::UndoMove(const Coord& start, bool dice_idx)
 {
     Coord dest = board.CoordAfterDistance(start, dice[dice_idx]);
 
@@ -270,7 +290,7 @@ bool Game::UndoMockMove(const Coord& start, bool dice_idx)
 
 bool Game::TurnInProgress() const
 {
-    return (times_dice_used[0] != 0 || times_dice_used[1] != 0);
+    return (times_dice_used[0] != 0 || times_dice_used[1] != 0 || !mvs_this_turn.empty());
 }
 
 bool Game::GameIsOver() const 
@@ -289,6 +309,9 @@ void Game::SwitchPlayer()
     board.SwitchPlayer();
     times_dice_used[0] = 0;
     times_dice_used[1] = 0;
+
+    history.emplace(mvs_this_turn, dice);
+    mvs_this_turn.clear();
 }
 
 void Game::IncrementTurnNumber()
@@ -579,7 +602,7 @@ void Game::LegalSeqComputer::dfs(std::vector<StartAndDice>& seq)
                     _encountered.insert(brdkey);
                 }
 
-                _g.UndoMockMove(coord, _dieIdxs[i]);
+                _g.UndoMove(coord, _dieIdxs[i]);
                 seq.pop_back();
             }
         }
@@ -658,13 +681,13 @@ bool Game::LegalSeqComputer::FirstMoveException()   // fixme re-compute mid turn
 
             while(n_2moves > 0)
             {
-                _g.UndoMockMove(mid, 0);
+                _g.UndoMove(mid, 0);
                 --n_2moves;
             }
             
             while(n_moves > 0)
             {
-                _g.UndoMockMove(head, 0);
+                _g.UndoMove(head, 0);
                 --n_moves;
             }
         }
