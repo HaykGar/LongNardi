@@ -27,10 +27,7 @@ std::string Coord::AsStr() const
 
 ///////////// Command /////////////
 
-Command::Command(Coord coord) : action(Actions::SELECT_SLOT)
-{
-    payload.emplace<Coord>( coord );
-}
+Command::Command(const Coord& coord) : action(Actions::SELECT_SLOT), payload(coord) {}
 
 Command::Command(int r, int c) : action(Actions::SELECT_SLOT)
 {
@@ -40,6 +37,8 @@ Command::Command(int r, int c) : action(Actions::SELECT_SLOT)
 Command::Command(bool dice_idx) : action(Actions::MOVE_BY_DICE), payload(dice_idx) {}
 
 Command::Command(BoardKey end_key) : action(Actions::AUTOPLAY), payload(end_key) {}
+
+Command::Command(std::array<int, 2> to_set) : action(Actions::SET_DICE), payload(to_set) {}
 
 ///////////// Misc Utilities /////////////
 

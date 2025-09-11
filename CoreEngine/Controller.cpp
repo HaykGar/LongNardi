@@ -37,6 +37,15 @@ status_codes Controller::ReceiveCommand(const Command& cmd)
                 dice_rolled = true;
         }
         break;
+    case Actions::SET_DICE:
+        if(!dice_rolled && std::holds_alternative< std::array<int, 2> >(cmd.payload))
+        {
+            auto dice_to = std::get<std::array<int, 2>>(cmd.payload);
+            outcome = g.SimDice(dice_to);
+            if(outcome != status_codes::NO_LEGAL_MOVES_LEFT)
+                dice_rolled = true;
+        }
+        break;
     case Actions::SELECT_SLOT:
     case Actions::MOVE_BY_DICE:
         if (!dice_rolled)   // no attempts to move before rolling

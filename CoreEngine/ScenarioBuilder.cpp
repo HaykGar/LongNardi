@@ -25,23 +25,25 @@ status_codes ScenarioBuilder::withScenario(bool p_idx, const BoardConfig& b, int
 
 status_codes ScenarioBuilder::withDice(int d1, int d2, int d1_used, int d2_used)
 {
-    _game.SetDice(d1, d2);
-
     int max_uses = (_game.doubles_rolled + 1) * 2;
 
     if(d1_used < 0 || d2_used < 0 || d1_used + d2_used > max_uses)
         std::cerr << "bad dice used values in withDice\n";
     else
-        _game.times_dice_used = {d1_used, d2_used};
+        _game.times_dice_used = { d1_used, d2_used };
 
-    status_codes outcome = _game.OnRoll();
+    return _ctrl.ReceiveCommand(std::array<int, 2>{d1, d2});
 
-    if(outcome == status_codes::NO_LEGAL_MOVES_LEFT)
-        _ctrl.SwitchTurns();
-    else
-        _ctrl.dice_rolled = true;
+    // _game.SetDice(d1, d2);
 
-    return outcome;
+    // status_codes outcome = _game.OnRoll();
+
+    // if(outcome == status_codes::NO_LEGAL_MOVES_LEFT)
+    //     _ctrl.SwitchTurns();
+    // else
+    //     _ctrl.dice_rolled = true;
+
+    // return outcome;
 }
 
 status_codes ScenarioBuilder::withDice(int d1, int d2)

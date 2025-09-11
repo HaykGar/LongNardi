@@ -42,6 +42,7 @@ class Game
 
         // Gameplay
         status_codes RollDice();
+        status_codes SimDice(std::array<int, 2> to_set);
         status_codes OnRoll();
         status_codes TryStart(const Coord& s);
         status_codes TryFinishMove(const Coord& start, const Coord& end);   // No Removals
@@ -52,6 +53,8 @@ class Game
         void SwitchPlayer();
 
         // State Checks
+        bool TurnInProgress() const;
+        
         bool GameIsOver() const;
         bool IsMars() const;
 
@@ -91,8 +94,6 @@ class Game
 
                 bool Illegal(const Coord& start, bool dice_idx);
                 bool Illegal(const Coord& start, const Coord& end);
-
-                void Reset();
 
             private:
                 Game& _g;                

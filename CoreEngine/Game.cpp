@@ -56,6 +56,12 @@ status_codes Game::RollDice() // important to force this only once per turn in c
     return OnRoll();
 }
 
+status_codes Game::SimDice(std::array<int, 2> d_to)
+{
+    SetDice(d_to[0], d_to[1]);
+    return OnRoll();
+}
+
 status_codes Game::OnRoll()
 {
     AnimateDice();
@@ -63,15 +69,14 @@ status_codes Game::OnRoll()
 
     first_move_exception = false;
     maxdice_exception = false;
-    return arbiter.OnRoll();
+    return arbiter.CheckForcedMoves();
 }
  
 void Game::SetDice(int d1, int d2)
 {   
     dice[0] = d1; 
     dice[1] = d2;  
-    times_dice_used[0] = 0;
-    times_dice_used[1] = 0;
+    
     doubles_rolled = (dice[0] == dice[1]); 
 }
 
@@ -263,6 +268,11 @@ bool Game::UndoMockMove(const Coord& start, bool dice_idx)
     return true;
 }
 
+bool Game::TurnInProgress() const
+{
+    return (times_dice_used[0] != 0 || times_dice_used[1] != 0);
+}
+
 bool Game::GameIsOver() const 
 {   return (board.PiecesLeft().at(0) == 0 || board.PiecesLeft().at(1) == 0);   }
 
@@ -277,6 +287,8 @@ bool Game::IsMars() const
 void Game::SwitchPlayer()
 {   
     board.SwitchPlayer();
+    times_dice_used[0] = 0;
+    times_dice_used[1] = 0;
 }
 
 void Game::IncrementTurnNumber()
@@ -482,16 +494,6 @@ std::pair<status_codes, Coord> Game::Arbiter::LegalMove_2step(const Coord& start
     // valid midpoint reached
     return { status, end };
 }
-
-///////////// Updates and Actions /////////////
-
-status_codes Game::Arbiter::OnRoll()
-{
-    _blockMonitor.Reset();
-
-    return CheckForcedMoves();
-}
-
 
 ///////////// Forced Moves /////////////
 

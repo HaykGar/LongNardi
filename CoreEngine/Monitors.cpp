@@ -50,12 +50,6 @@ void Game::PreventionMonitor::SetCompletable()
 
 Game::BadBlockMonitor::BadBlockMonitor(Game& g) : _g(g) {}
 
-void Game::BadBlockMonitor::Reset()
-{
-    _blockedAll = false;
-    _blockLength = 0;
-}
-
 bool Game::BadBlockMonitor::PreConditions()
 {
     return _g.board.ReachedEnemyHome().at(! _g.board.PlayerIdx() ) == 0; // not possible once enemy entered home 

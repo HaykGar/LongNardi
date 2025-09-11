@@ -58,6 +58,7 @@ enum class Actions
     QUIT,
     UNDO,
     ROLL_DICE,
+    SET_DICE,
     SELECT_SLOT, 
     MOVE_BY_DICE,
     AUTOPLAY,
@@ -115,13 +116,14 @@ struct BoardKeyHash
 struct Command // considering making this std::variant or something... 
 {
     Command(Actions a) : action(a) {}
-    Command(Coord coord);
+    Command(const Coord& coord);
     Command(int r, int c);
     Command(bool dice_idx);
     Command(BoardKey final_config);
+    Command(std::array<int, 2> set_to);
 
     Actions action;
-    std::variant<std::monostate, Coord, bool, BoardKey> payload;
+    std::variant<std::monostate, Coord, bool, BoardKey, std::array<int, 2> > payload;
 };
 
 void VisualToGameCoord(Coord& coord); // not needed currently, but for graphics later
