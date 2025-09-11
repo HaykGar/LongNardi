@@ -4,7 +4,7 @@ using namespace Nardi;
 
 ///////////// Turn Completion /////////////
 
-Game::PreventionMonitor::PreventionMonitor(Game& g) : _g(g), turn_last_updated({0, 0})
+Game::PreventionMonitor::PreventionMonitor(Game& g) : _g(g)
 {}
 
 bool Game::PreventionMonitor::CheckNeeded()
@@ -42,13 +42,8 @@ bool Game::PreventionMonitor::TurnCompletable()
 
 void Game::PreventionMonitor::SetCompletable()
 {
-    if( turn_last_updated.at(_g.board.PlayerIdx()) != _g.turn_number.at(_g.board.PlayerIdx()) )
-    {
-        int steps_left = (_g.arbiter.CanUseDice(0) + _g.arbiter.CanUseDice(1)) * (1 + _g.doubles_rolled);
-        _completable = (steps_left <= _g.legal_turns.MaxLen());
-
-        turn_last_updated.at(_g.board.PlayerIdx()) = _g.turn_number.at(_g.board.PlayerIdx());
-    }
+    int steps_left = (_g.arbiter.CanUseDice(0) + _g.arbiter.CanUseDice(1)) * (1 + _g.doubles_rolled);
+    _completable = (steps_left <= _g.legal_turns.MaxLen());
 }
 
 ///////////// Bad Block /////////////

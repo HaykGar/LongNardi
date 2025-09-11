@@ -78,7 +78,6 @@ class Game
             private:
                 Game& _g;
                 bool _completable;
-                std::array<int, 2> turn_last_updated;
      
                 bool TurnCompletable();
                 void SetCompletable();
@@ -103,16 +102,9 @@ class Game
                 Coord _blockStart;
 
                 bool PreConditions();
-
                 bool CheckMockedState();
-
-                // bool BlockageAround(const Coord& end);
-                // bool PieceAhead();
                 bool IsFixable();
                 bool BlockingAll();
-
-                // bool Unblocks(const Coord& start, const Coord& end);
-                // bool Unblocked();
         };
 
         // Pre-computing legal moves
@@ -125,8 +117,6 @@ class Game
 
                 int MaxLen() const;
                 const std::unordered_map<BoardKey, MoveSequence, BoardKeyHash>& BrdsToSeqs() const;
-
-
                 std::unordered_map<BoardKey, MoveSequence, BoardKeyHash>& BrdsToSeqs();
             
             private:
