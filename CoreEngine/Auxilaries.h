@@ -115,7 +115,7 @@ struct BoardKeyHash
 
 struct Command // considering making this std::variant or something... 
 {
-    Command(Actions a) : action(a) {}
+    Command(Actions a);
     Command(const Coord& coord);
     Command(int r, int c);
     Command(bool dice_idx);

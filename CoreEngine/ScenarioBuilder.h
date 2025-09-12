@@ -3,6 +3,7 @@
 #include "Game.h"
 #include "Controller.h"
 #include "Auxilaries.h"
+#include <sstream>
 
 namespace Nardi
 {
@@ -11,6 +12,7 @@ class ScenarioBuilder
 {
     public:
         ScenarioBuilder(); 
+        ScenarioBuilder(const ScenarioBuilder& other);
 
         // flags and setup
         void withFirstTurn();
@@ -32,6 +34,7 @@ class ScenarioBuilder
         const BoardConfig& GetBoard() const;
 
         void StatusReport() const;
+        std::string StatusString() const;
 
         Game& GetGame();
         const Game& GetGame() const;

@@ -7,7 +7,15 @@ using namespace Nardi;
 
 ScenarioBuilder::ScenarioBuilder() : _game(), _ctrl(_game)
 {
-    _game.turn_number = {2, 2}; // avoiding first turn case unless explicitly requested
+    _game.turn_number = {5, 5}; // avoiding first turn case unless explicitly requested
+}
+
+ScenarioBuilder::ScenarioBuilder(const ScenarioBuilder& other) : _game(other._game), _ctrl(_game)
+{
+    _ctrl.start_selected = other._ctrl.start_selected;
+    _ctrl.dice_rolled = other._ctrl.dice_rolled;
+    _ctrl.quit_requested = other._ctrl.quit_requested;
+    _ctrl.sim_mode = other._ctrl.sim_mode;
 }
 
 void ScenarioBuilder::StartPreRoll(bool p_idx, const BoardConfig& b)
@@ -62,6 +70,11 @@ void ScenarioBuilder::withBoard(const BoardConfig& b)
     _game.board.head_used = false;
     _game.board.SetData(b);
     _game.board = _game.board;
+
+    _game.mvs_this_turn.clear();
+
+    std::stack<Game::TurnData> empty;
+    std::swap(_game.history, empty);
 }
 
 void ScenarioBuilder::ResetControllerState()
@@ -69,6 +82,7 @@ void ScenarioBuilder::ResetControllerState()
     _ctrl.start_selected = false;
     _ctrl.dice_rolled = false; 
     _ctrl.quit_requested = false;
+    _ctrl.sim_mode = false;
 }
 
 void ScenarioBuilder::withFirstTurn()
@@ -108,6 +122,30 @@ void ScenarioBuilder::StatusReport() const
 
     std::cout << "board: \n";
     PrintBoard();
+}
+
+std::string ScenarioBuilder::StatusString() const
+{
+    std::stringstream ss;
+    ss << "player: " << _game.board.PlayerIdx() << "\n";
+
+    ss << "dice: " << _game.dice[0] << " " << _game.dice[1] << "\n";
+
+    ss << "dice used: " << _game.times_dice_used[0] << ", " << _game.times_dice_used[1] << "\n";
+
+    ss << "board: \n";
+
+    for(int i = 0; i < ROWS; ++i)
+    {
+        for (int j = 0; j < COLS; ++j)
+        {
+            ss << static_cast<int>(_game.board.data[i][j]) << "\t";
+        }
+        ss << "\n\n";
+    }
+    ss << "\n\n\n\n";
+
+    return ss.str();
 }
 
 const int ScenarioBuilder::GetBoardAt(const Coord& coord) const

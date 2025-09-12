@@ -38,6 +38,7 @@ class Game
         // construction and initialization:
         Game(int seed);
         Game();
+        Game(const Game& other);
         void AttachReaderWriter(ReaderWriter* r);
 
         // Gameplay
@@ -49,8 +50,11 @@ class Game
         status_codes TryFinishMove(const Coord& start, bool dice);          // Removals and regular moves
 
         bool AutoPlayTurn(const BoardKey& key); // currently unused, useful later though
-        
+
         void SwitchPlayer();
+        
+        // Undoing
+        status_codes UndoCurrentTurn(); // fixme rename `
 
         // State Checks
         bool TurnInProgress() const;
@@ -114,6 +118,7 @@ class Game
         {
             public:
                 LegalSeqComputer(Game& g);
+                LegalSeqComputer(Game& g, const LegalSeqComputer& other);
                 void ComputeAllLegalMoves();
 
                 int MaxLen() const;
@@ -208,7 +213,6 @@ class Game
         
         // Moving
         status_codes MakeMove(const Coord& start, bool dice_idx);
-
         status_codes OnMoveOrRemove();
 
         // Mocking
@@ -217,6 +221,7 @@ class Game
     
         bool UndoMove(const Coord& start, const Coord& end);
         bool UndoMove(const Coord& start, bool dice_idx);
+        bool UndoMove(const StartAndDice& sd);
 };
 
 

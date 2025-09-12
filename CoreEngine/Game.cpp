@@ -17,6 +17,18 @@ Game::Game() :  board(), rng(std::random_device{}()), dist(1, 6), dice({0, 0}), 
                 times_dice_used({0, 0}), turn_number({0, 0}), rw(nullptr), arbiter(*this), legal_turns(*this)
 {}
 
+Game::Game(const Game& other) : arbiter(*this), legal_turns(*this, other.legal_turns)
+{
+    mvs_this_turn = other.mvs_this_turn;
+    history = other.history;
+    turn_number = other.turn_number;
+    board = other.board;
+    SetDice(other.dice[0], other.dice[1]);
+    times_dice_used = other.times_dice_used;
+    
+    // ommit rw, construct new arbiter and legal_turns
+}
+
 void Game::AttachReaderWriter(ReaderWriter* r)
 {   rw = r;   }
 
@@ -144,8 +156,8 @@ status_codes Game::TryFinishMove(const Coord& start, const Coord& end) // assume
         {
             int steps = times_used[0] + times_used[1];
             Coord from(start);
-            status_codes status;
-            while(steps > 0)
+            status_codes status = status_codes::SUCCESS;
+            while(steps > 0 && status == status_codes::SUCCESS)
             {
                 status = MakeMove(from, 0);
                 --steps;
@@ -169,7 +181,6 @@ status_codes Game::TryFinishMove(const Coord& start, const Coord& end) // assume
             return MakeMove(mid, !first_dice);
         }
     }
-        // return MakeMove(start, end);    // checks for further forced moves internally
 }
 
 status_codes Game::TryFinishMove(const Coord& start, bool dice_idx)
@@ -287,6 +298,40 @@ bool Game::UndoMove(const Coord& start, bool dice_idx)
     --times_dice_used[dice_idx];
     return true;
 }
+
+bool Game::UndoMove(const StartAndDice& sd)
+{
+    return UndoMove(sd._from, sd._diceIdx);
+}
+
+status_codes Game::UndoCurrentTurn()
+{
+    if(TurnInProgress() || history.empty())
+    {
+        std::cout << "unexpected tip or empty hist in UndoCurrentTurn\n";
+        return status_codes::MISC_FAILURE;
+    }
+
+    --turn_number[board.PlayerIdx()];
+    auto [mvs, old_d] = history.top();
+    SetDice(old_d[0], old_d[1]);
+
+    board.SwitchPlayer();
+    while(!mvs.empty())
+    {
+        int last_idx = mvs.size() - 1;
+        UndoMove(mvs[last_idx]);
+        mvs.pop_back();
+    }
+    
+    history.pop();
+    times_dice_used[0] = 0;
+    times_dice_used[1] = 0;
+
+    --turn_number[board.PlayerIdx()];   // other player... incremented in onroll
+    return OnRoll();
+}
+
 
 bool Game::TurnInProgress() const
 {
@@ -535,6 +580,16 @@ status_codes Game::Arbiter::CheckForcedMoves()
 /////////////////////////////////////
 
 Game::LegalSeqComputer::LegalSeqComputer(Game& g) : _g(g) {}
+
+Game::LegalSeqComputer::LegalSeqComputer(Game& g, const LegalSeqComputer& other) : _g(g)
+{
+    _maxDice = other._maxDice;
+    _dieIdxs = other._dieIdxs;
+    _encountered = other._encountered;
+
+    _maxLen = other._maxLen;
+    _brdsToSeqs = other._brdsToSeqs;
+}
 
 int Game::LegalSeqComputer::MaxLen() const {
     return _maxLen;

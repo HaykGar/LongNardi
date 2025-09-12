@@ -2,22 +2,44 @@
 
 using namespace Nardi;
 
-Controller::Controller(Game& game) : g(game), start(), start_selected(false), dice_rolled(false), quit_requested(false)  {}
+Controller::Controller(Game& game) : g(game), start(), start_selected(false), dice_rolled(false), quit_requested(false), sim_mode(false) {}
 
 Controller::~Controller()
 {}
 
+bool Controller::InSimMode() const
+{ return sim_mode; }
+
+void Controller::ToSimMode()
+{ sim_mode = true; }
+
+void Controller::EndSimMode()
+{ sim_mode = false; }
+
+bool Controller::AdvanceSimTurn()   // fixme - need more protections for when we call this eg turn is actually over ` `
+{ 
+    if(!sim_mode)
+        return false;
+
+    SwitchTurns();
+    return true;
+}
+
 void Controller::SwitchTurns()
 {
     g.SwitchPlayer();
-   
+    OnTurnSwitch();
+}
+
+void Controller::OnTurnSwitch()
+{
     dice_rolled = false;
     start_selected = false;
 }
 
 status_codes Controller::ReceiveCommand(const Command& cmd)
 {
-    if(g.GameIsOver())
+    if(g.GameIsOver() && cmd.action != Actions::UNDO)   // can undo terminal positions
         return status_codes::NO_LEGAL_MOVES_LEFT; 
 
     status_codes outcome = status_codes::MISC_FAILURE;
@@ -29,6 +51,17 @@ status_codes Controller::ReceiveCommand(const Command& cmd)
         quit_requested = true;
         outcome = status_codes::NO_LEGAL_MOVES_LEFT;
         break;
+    case Actions::UNDO:
+        if(sim_mode)
+        {
+            outcome = g.UndoCurrentTurn();          // fixme undoing into no legal moves case `
+            if(outcome == status_codes::SUCCESS)
+            {
+                dice_rolled = true;
+                start_selected = false;
+            }
+        }
+        break;
     case Actions::ROLL_DICE:
         if(!dice_rolled)    // treat converse as misc failure
         {
@@ -38,11 +71,10 @@ status_codes Controller::ReceiveCommand(const Command& cmd)
         }
         break;
     case Actions::SET_DICE:
-        if(!dice_rolled && std::holds_alternative< std::array<int, 2> >(cmd.payload))
+        if(!g.TurnInProgress() && std::holds_alternative< std::array<int, 2> >(cmd.payload))
         {
-            auto dice_to = std::get<std::array<int, 2>>(cmd.payload);
-            outcome = g.SimDice(dice_to);
-            if(outcome != status_codes::NO_LEGAL_MOVES_LEFT)
+            outcome = g.SimDice(std::get<std::array<int, 2>>(cmd.payload));
+            if(outcome != status_codes::NO_LEGAL_MOVES_LEFT || sim_mode)
                 dice_rolled = true;
         }
         break;
@@ -86,8 +118,13 @@ status_codes Controller::ReceiveCommand(const Command& cmd)
         break;
     }
 
-    if(outcome == status_codes::NO_LEGAL_MOVES_LEFT)
+    if(outcome == status_codes::NO_LEGAL_MOVES_LEFT && !sim_mode)
         SwitchTurns();
 
     return outcome;
+}
+
+status_codes Controller::ReceiveCommand(Actions act)
+{
+    return ReceiveCommand(Command(act));
 }

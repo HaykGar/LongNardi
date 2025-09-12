@@ -27,6 +27,8 @@ std::string Coord::AsStr() const
 
 ///////////// Command /////////////
 
+Command::Command(Actions a) : action(a) {}
+
 Command::Command(const Coord& coord) : action(Actions::SELECT_SLOT), payload(coord) {}
 
 Command::Command(int r, int c) : action(Actions::SELECT_SLOT)
