@@ -17,16 +17,18 @@ Game::Game() :  board(), rng(std::random_device{}()), dist(1, 6), dice({0, 0}), 
                 times_dice_used({0, 0}), turn_number({0, 0}), rw(nullptr), arbiter(*this), legal_turns(*this)
 {}
 
-Game::Game(const Game& other) : arbiter(*this), legal_turns(*this, other.legal_turns)
+Game::Game(const Game& other) : rng(std::random_device{}()), dist(1, 6), rw(nullptr), 
+                                arbiter(*this), legal_turns(*this, other.legal_turns)
 {
     mvs_this_turn = other.mvs_this_turn;
     history = other.history;
     turn_number = other.turn_number;
     board = other.board;
-    SetDice(other.dice[0], other.dice[1]);
+    dice = other.dice;
+    doubles_rolled = (dice[0] == dice[1]); 
+    first_move_exception = other.first_move_exception;
+    maxdice_exception = other.maxdice_exception;
     times_dice_used = other.times_dice_used;
-    
-    // ommit rw, construct new arbiter and legal_turns
 }
 
 void Game::AttachReaderWriter(ReaderWriter* r)
@@ -111,6 +113,7 @@ bool Game::AutoPlayTurn(const BoardKey& key)
             if( status != status_codes::SUCCESS){
                 DispErrorCode(status);
                 std::cout << "fme is " << first_move_exception << ", current board:\n";
+                std::cout << "dice are " << dice[0] << ", " << dice[1] << "\n";
                 DisplayBoard(board.View());
                 std::cout << "original board:\n";
                 DisplayBoard(original_brd);

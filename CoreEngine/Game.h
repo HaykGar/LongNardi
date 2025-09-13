@@ -84,10 +84,8 @@ class Game
                 bool Illegal(const Coord& start, bool dice_idx);
             private:
                 Game& _g;
-                bool _completable;
      
                 bool TurnCompletable();
-                void SetCompletable();
                 bool CheckNeeded();
         };
 

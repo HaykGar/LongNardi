@@ -12,9 +12,15 @@ bool Game::PreventionMonitor::CheckNeeded()
     return (!_g.doubles_rolled && _g.arbiter.CanUseDice(0) && _g.arbiter.CanUseDice(1) && TurnCompletable() );
 }
 
+bool Game::PreventionMonitor::TurnCompletable()
+{
+    int steps_left = (_g.arbiter.CanUseDice(0) + _g.arbiter.CanUseDice(1)) * (1 + _g.doubles_rolled);
+    return (steps_left <= _g.legal_turns.MaxLen());
+}
+
 bool Game::PreventionMonitor::Illegal(const Coord& start, bool dice_idx)
 {
-    if(CheckNeeded() && _g.arbiter.LegalMove_2step(start).first != status_codes::SUCCESS)
+    if(CheckNeeded())
     {
         _g.MockMove(start, dice_idx); // moves or removes as needed
 
@@ -32,18 +38,6 @@ bool Game::PreventionMonitor::Illegal(const Coord& start, bool dice_idx)
     }
     
     return false;
-}
-
-bool Game::PreventionMonitor::TurnCompletable()
-{
-    SetCompletable();
-    return _completable;
-}
-
-void Game::PreventionMonitor::SetCompletable()
-{
-    int steps_left = (_g.arbiter.CanUseDice(0) + _g.arbiter.CanUseDice(1)) * (1 + _g.doubles_rolled);
-    _completable = (steps_left <= _g.legal_turns.MaxLen());
 }
 
 ///////////// Bad Block /////////////
