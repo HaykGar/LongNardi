@@ -22,6 +22,11 @@ public:
     : _builder()
     {}
 
+    ScenarioBuilder& GetBuilder()
+    {
+        return builder;
+    }
+
     int dice_flattened(int i, int j)
     {
         if(i <= 0 || j <= 0 || i > 6 || j > 6){
