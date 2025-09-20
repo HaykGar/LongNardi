@@ -22,9 +22,9 @@ public:
     : _builder()
     {}
 
-    ScenarioBuilder& GetBuilder()
+    Nardi::ScenarioBuilder& GetBuilder()
     {
-        return builder;
+        return _builder;
     }
 
     int dice_flattened(int i, int j)
@@ -78,6 +78,18 @@ public:
             else 
                 return {6, 6};
         } 
+    }
+
+    py::array_t<uint8_t> dice() const
+    {
+        std::array<int, 2> dice = { _builder.GetGame().GetDice(0), _builder.GetGame().GetDice(1) };
+        py::array_t<uint8_t> arr({py::ssize_t(2)});
+
+        auto buf = arr.mutable_unchecked<1>();
+        buf(0) = dice[0];
+        buf(1) = dice[1];
+
+        return arr;
     }
 
     // Return 2x25 uint8 (player-perspective)
@@ -350,6 +362,8 @@ PYBIND11_MODULE(nardi, m)
         .def(py::init<>())
         .def("board_key",           &NardiEngine::board_key,
              R"(Return 2x25 uint8 board (player-perspective).)")
+        .def("dice",                &NardiEngine::dice,
+             R"(Return 1x2 uint8 dice values.)")
         .def("flat_to_dice",        &NardiEngine::flat_to_dice, 
              R"(Input: int index for flattened dice combo representation. Output: int array length 2, representing dice1, dice2.)")
         .def("roll_and_enumerate",  &NardiEngine::roll_and_enumerate,

@@ -4,15 +4,15 @@ import torch
 from torch import nn
 
 class NardiNet(nn.Module):
-    def __init__(self):
+    def __init__(self, n_h1, n_h2):
         super().__init__()
         self.flatten = nn.Flatten()
         self.trunk = nn.Sequential(
-            nn.Linear(2 * 25, 128),
+            nn.Linear(2 * 25, n_h1),
             nn.SiLU(),
-            nn.Linear(128, 64),
+            nn.Linear(n_h1, n_h2),
             nn.SiLU(),
-            nn.Linear(64, 4)  # 4 logits for outcome probabilities
+            nn.Linear(n_h2, 4)  # 4 logits for outcome probabilities
         )
         # Scoring vector: +1, +2, -1, -2
         self.register_buffer("scores", torch.tensor([1.0, 2.0, -1.0, -2.0]))
