@@ -8,7 +8,7 @@ class NardiNet(nn.Module):
         super().__init__()
         self.flatten = nn.Flatten()
         self.trunk = nn.Sequential(
-            nn.Linear(2 * 25, n_h1),
+            nn.Linear(6 * 25, n_h1),
             nn.SiLU(),
             nn.Linear(n_h1, n_h2),
             nn.SiLU(),
@@ -18,7 +18,7 @@ class NardiNet(nn.Module):
         self.register_buffer("scores", torch.tensor([1.0, 2.0, -1.0, -2.0]))
         
     def forward(self, x: torch.Tensor) -> torch.Tensor: 
-        # x: (B, 2, 25)
+        # x: (B, 6, 25)
         x = x.float()
         x = self.flatten(x)
         logits = self.trunk(x)               # (B, 4)

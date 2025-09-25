@@ -38,19 +38,21 @@ def key_after_moves(bkey, sign, moves):
 
 def to_visual_board(bkey, sgn):
     a = np.asarray(bkey, dtype=np.int8)
-    if a.shape != (2, 25):
-        print(f"invalid board key, expected shape (2, 25), got {a.shape}")
+    if a.shape != (6, 25):
+        print(f"invalid board key, expected shape (6, 25), got {a.shape}")
         return None
     elif sgn not in (-1, 1):
         print(f"invalid sign, expected 1 or -1, got {sgn}")
         return None
     
     a = a[:, :24]
-    if not np.all((a[0] == 0) | (a[1] == 0)):
+    if not np.all((a[0] == 0) | (a[-1] == 0)):
         print(bkey)
         raise ValueError("invalid board: both players have checkers on the same point")
     else: 
-        board = sgn * (a[0] - a[1]).reshape(2, 12)
+        board = sgn * ( (a[0] + a[1] + a[2]) - (a[3] + a[4] + a[5]) ).reshape(2, 12)
+        if sgn == -1:
+            board[[0, 1]] = board[[1, 0]]
         return board
         
 def print_board(board):

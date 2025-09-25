@@ -7,6 +7,7 @@ import numpy as np
 from tqdm import tqdm
 import os
 import argparse
+import matplotlib.pyplot as plt
 
 #####################################    
 ######### command line args #########     
@@ -19,11 +20,25 @@ def positive_int(value):
         raise argparse.ArgumentTypeError(f"{value} must be > 0")
     return ivalue
 
-def valid_dir(path):
+def valid_dir(dirpath):
     """Ensure provided path is a valid directory."""
-    if not os.path.exists(path):
-        os.makedirs(path)
-    return path
+    if dirpath is not None:
+        if not os.path.exists(dirpath):
+            os.makedirs(dirpath)
+    return dirpath
+
+def valid_file(filepath):
+    if not os.path.exists(filepath):
+        print(f"File not found: '{filepath}'. Creating a new empty file.")
+        try:
+            with open(filepath, 'w') as f:
+                pass
+            print(f"Successfully created '{filepath}'.")
+        except IOError as e:
+            print(f"Error creating file '{filepath}': {e}")
+            return None
+    
+    return filepath
 
 parser = argparse.ArgumentParser(
     description="Process two positive integers, a directory path, and an optional filename."
@@ -31,8 +46,8 @@ parser = argparse.ArgumentParser(
 
 parser.add_argument("layer1_size", type=positive_int, help="number of nodes in the first hidden layer")
 parser.add_argument("layer2_size", type=positive_int, help="number of nodes in the second hidden layer")
-parser.add_argument("directory", type=valid_dir, help="Path to an existing directory")
-parser.add_argument("-f", "--file", type=str, help="Optional filename for loading network weights", default=None)
+parser.add_argument("--directory", type=valid_dir, help="Optional path to an existing directory", default=None)
+parser.add_argument("-f", "--file", type=valid_file, help="Optional filename for loading network weights", default=None)
 
 args = parser.parse_args()
 
@@ -68,7 +83,7 @@ output_dir = args.directory
 simulator = SimPlay()
 
 model = NardiNet(args.layer1_size, args.layer2_size)
-if weights_file is not None:
+if weights_file is not None and os.path.getsize(weights_file) != 0:
     model.load_state_dict(torch.load(weights_file))
 
 model.to(simulator.device)
@@ -131,7 +146,8 @@ for stage in tqdm(range(100), desc="Outer Loop"):
     print()    
     
     eval_traces.append(evals)
-    torch.save(model.state_dict(), weights_file)    # save weights to file after each stage
+    if weights_file is not None:
+        torch.save(model.state_dict(), weights_file)    # save weights to file after each stage
     ################################ end stage report + actions ################################     
 
 
@@ -147,57 +163,52 @@ print("total points each: ", points)
 
 # np.save('rand_wins.npy', np.array(simulator.opp_wins, dtype=object), allow_pickle=True)
 
-import matplotlib.pyplot as plt
+if output_dir is not None:
+    
+    win_rates = simulator.win_rates
 
-win_rates = simulator.win_rates
-
-# Plot max_surprise over training stages
-plt.figure(figsize=(10, 4))
-plt.plot(surprises)
-plt.title('Max Surprise Per Stage')
-plt.xlabel('Stage')
-plt.ylabel('Max Surprise')
-plt.grid(True)
-plt.savefig(os.path.join(output_dir, 'max_surprise_per_stage.png'))
-plt.close()  # Close the figure to free up memory
-
-# Plot eval trajectories for select games
-for i, trace in enumerate(eval_traces):
-    plt.figure(figsize=(8, 3))
-    plt.plot(trace, marker='o')
-    plt.title(f'Eval Trajectory - Game {i+1}')
-    plt.xlabel('Move #')
-    plt.ylabel('Eval')
+    # Plot max_surprise over training stages
+    plt.figure(figsize=(10, 4))
+    plt.plot(surprises)
+    plt.title('Max Surprise Per Stage')
+    plt.xlabel('Stage')
+    plt.ylabel('Max Surprise')
     plt.grid(True)
-    plt.savefig(os.path.join(output_dir, f'eval_trajectory_game_{i+1}.png'))
+    plt.savefig(os.path.join(output_dir, 'max_surprise_per_stage.png'))
+    plt.close()  # Close the figure to free up memory
+
+    # Plot eval trajectories for select games
+    for i, trace in enumerate(eval_traces):
+        plt.figure(figsize=(8, 3))
+        plt.plot(trace, marker='o')
+        plt.title(f'Eval Trajectory - Game {i+1}')
+        plt.xlabel('Move #')
+        plt.ylabel('Eval')
+        plt.grid(True)
+        plt.savefig(os.path.join(output_dir, f'eval_trajectory_game_{i+1}.png'))
+        plt.close()
+
+    # Plot win_rate over training stages
+    plt.figure(figsize=(10, 4))
+    plt.plot(win_rates)
+    plt.title('Win Rate Per Stage')
+    plt.xlabel('Stage')
+    plt.ylabel('Win Rate')
+    plt.grid(True)
+    plt.savefig(os.path.join(output_dir, 'win_rate_per_stage.png'))
     plt.close()
 
-# Plot win_rate over training stages
-plt.figure(figsize=(10, 4))
-plt.plot(win_rates)
-plt.title('Win Rate Per Stage')
-plt.xlabel('Stage')
-plt.ylabel('Win Rate')
-plt.grid(True)
-plt.savefig(os.path.join(output_dir, 'win_rate_per_stage.png'))
-plt.close()
-
 # ToDo:
-# add features for longest block and pieces behind it... maybe also pieces moving per dice?
-    # requires changing boardkey in cpp and model shape and everywhere where shape checks happen
+    # add features for longest block and pieces behind it... maybe also pieces moving per dice?
     # maybe block robustness? ie how many pieces in the block have more than one piece on them or something similar
     # Pieces in home or pieces not yet in home... several training games far into simulations failed to detect that it was about to do Mars,
     # but this would be obvious from such features
-# reshape model, change hidden layers to 64 and 16 for 80 hidden units (too large can lead to problems)
-# solver enhancement?
-# eventually may use eval for AGZ style training, but likely not
 
-# based on win rate graph for 64-16 model, it looks like 50 stages was enough self-play, so could slash games per stage in half to 10K
 # substantially larger 256-128 model seems to perform similarly to 64 - 16 but barely half as fast... smaller is better
 
 # instead of solver - resignation threshold, so look at raw probability nodes in the model and based on that decide game outcomes...
     # set this threshold pretty high, at least 90%, and see how AGZ training handled this I think they had a holdout set without this...
 
-# Try lowering lambda ? earlier moves maybe taking too much good or bad credit for luck based swings...
-
-# Mars detection... features should be enough
+# experiment with lower lambda
+# schedule learning rate ?
+# train 2 models - 64 and 16 hidden units for one, 128 and 32 for the other

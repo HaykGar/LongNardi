@@ -111,6 +111,11 @@ status_codes Controller::ReceiveCommand(const Command& cmd)
         {
             bool auto_played = g.AutoPlayTurn(std::get<BoardKey>(cmd.payload));
             outcome = auto_played ? status_codes::NO_LEGAL_MOVES_LEFT : status_codes::MISC_FAILURE;
+            if(!auto_played)
+            {
+                std::cerr << "failed to auto-play with key\n";
+                DisplayKey(std::get<BoardKey>(cmd.payload));
+            }
         }
         break;
     default:

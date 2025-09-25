@@ -92,15 +92,25 @@ public:
         return arr;
     }
 
-    // Return 2x25 uint8 (player-perspective)
+    py::array_t<uint8_t> key_dims()
+    {
+        py::array_t<uint8_t> arr({py::ssize_t(2)});
+        auto buf = arr.mutable_unchecked<1>();
+        buf(0) = Nardi::BK_ROWS;
+        buf(1) = Nardi::BK_COLS;
+        return arr;
+    }
+
+    // Return 6x25 uint8 (player-perspective)
     py::array_t<uint8_t> board_key() const {
         const Nardi::BoardKey key = _builder.GetGame().GetBoardAsKey();
 
-        py::array_t<uint8_t> arr({py::ssize_t(2), py::ssize_t(25)});
+        py::array_t<uint8_t> arr({py::ssize_t(6), py::ssize_t(25)});
         auto buf = arr.mutable_unchecked<2>();
-        for (int i = 0; i < 25; ++i) {
-            buf(0, i) = key[0][i];
-            buf(1, i) = key[1][i];
+        for (int i = 0; i < 25; ++i) 
+        {
+            for(int r = 0; r < 6; ++r)
+                buf(r, i) = key[r][i];
         }
 
         return arr;
@@ -123,14 +133,14 @@ public:
         }
     }
 
-    // Roll dice & return only board keys as [N,2,25] uint8 (end-of-turn leaves).
+    // Roll dice & return only board keys as [N,6,25] uint8 (end-of-turn leaves).
     py::array_t<uint8_t> roll_and_enumerate() {
         const auto status = _builder.ReceiveCommand(Nardi::Command(Nardi::Actions::ROLL_DICE));
 
         return enumerate(status);
     }
 
-    // Set dice & return only board keys as [N,2,25] uint8 (end-of-turn leaves).
+    // Set dice & return only board keys as [N,6,25] uint8 (end-of-turn leaves).
     py::array_t<uint8_t> set_and_enumerate(int d1, int d2) 
     {
         std::array<int, 2> new_dice = {d1, d2};
@@ -142,7 +152,7 @@ public:
     py::array_t<uint8_t> enumerate(Nardi::status_codes status)
     {
         if (status == Nardi::status_codes::NO_LEGAL_MOVES_LEFT) {
-            return py::array_t<uint8_t>({0, 2, 25});
+            return py::array_t<uint8_t>({0, 6, 25});
         } else if (status != Nardi::status_codes::SUCCESS) {
             Nardi::DispErrorCode(status);
             throw std::runtime_error("RollDice: unexpected controller status (should never happen).");
@@ -156,13 +166,14 @@ public:
         keys.reserve(b2s.size());
         for (const auto& kv : b2s) keys.push_back(kv.first);
 
-        py::array_t<uint8_t> boards({py::ssize_t(keys.size()), py::ssize_t(2), py::ssize_t(25)});
+        py::array_t<uint8_t> boards({py::ssize_t(keys.size()), py::ssize_t(6), py::ssize_t(25)});
         auto b = boards.mutable_unchecked<3>();
         for (size_t i = 0; i < keys.size(); ++i) {
             const auto& k = keys[i];
             for (int c = 0; c < 25; ++c) {
-                b(i, 0, c) = k[0][c];
-                b(i, 1, c) = k[1][c];
+                for(int r = 0; r < 6; ++r) {
+                    b(i, r, c) = k[r][c];
+                }   
             }
         }
 
@@ -171,15 +182,15 @@ public:
 
     py::tuple children_to_grandchildren(py::array_t<uint8_t, py::array::c_style | py::array::forcecast> children_np)
     {
-        // --- validate & load children [C,2,25] -> native keys ---
-        if (children_np.ndim() != 3 || children_np.shape(1) != 2 || children_np.shape(2) != 25) {
-            throw std::runtime_error("children must be [C,2,25] uint8");
+        // --- validate & load children [C,6,25] -> native keys ---
+        if (children_np.ndim() != 3 || children_np.shape(1) != 6 || children_np.shape(2) != 25) {
+            throw std::runtime_error("children must be [C,6,25] uint8");
         }
         const int NUM_CHILDREN = static_cast<int>(children_np.shape(0));
         auto U = children_np.unchecked<3>();
         std::vector<Nardi::BoardKey> children(NUM_CHILDREN);
         for (int64_t c = 0; c < NUM_CHILDREN; ++c)
-            for (int r = 0; r < 2; ++r)
+            for (int r = 0; r < 6; ++r)
                 for (int s = 0; s < 25; ++s)
                     children[c][r][s] = U(c, r, s);
 
@@ -248,8 +259,8 @@ public:
                     M(i, j) = counts[i][j];
         }
 
-        // --- flatten buckets into a single boards[N,2,25] in child-major then dice-major order ---
-        py::array_t<uint8_t> boards({py::ssize_t(grand_total), py::ssize_t(2), py::ssize_t(25)});
+        // --- flatten buckets into a single boards[N,6,25] in child-major then dice-major order ---
+        py::array_t<uint8_t> boards({py::ssize_t(grand_total), py::ssize_t(6), py::ssize_t(25)});
         {
             auto B = boards.mutable_unchecked<3>();
             int64_t row = 0;
@@ -258,8 +269,9 @@ public:
                     const auto& vec = buckets[c][d];
                     for (const auto& key : vec) {
                         for (int col = 0; col < 25; ++col) {
-                            B(row, 0, col) = key[0][col];
-                            B(row, 1, col) = key[1][col];
+                            for(int kr = 0; kr < 6; ++kr) {
+                                B(row, kr, col) = key[kr][col];
+                            }
                         }
                         ++row;
                     }
@@ -280,16 +292,18 @@ public:
     }
 
 
-    // Expects [2,25] uint8, converts to BoardKey, applies the sequence via controller.
+    // Expects [6,25] uint8, converts to BoardKey, applies the sequence via controller.
     void apply_board(py::array_t<uint8_t, py::array::c_style | py::array::forcecast> arr) {
-        if (arr.ndim() != 2 || arr.shape(0) != 2 || arr.shape(1) != 25) {
-            throw std::runtime_error("apply_board: expected uint8 array of shape [2,25] (as returned by roll_and_enumerate)");
+        if (arr.ndim() != 2 || arr.shape(0) != 6 || arr.shape(1) != 25) {
+            throw std::runtime_error("apply_board: expected uint8 array of shape [6,25] (as returned by roll_and_enumerate)");
         }
         Nardi::BoardKey key{}; // two rows
         auto v = arr.unchecked<2>();
         for (size_t c = 0; c < 25; ++c) {
-            key[0][c] = v(0, c);
-            key[1][c] = v(1, c);
+            for(size_t r = 0; r < 6; ++r)
+            {
+                key[r][c] = v(r, c);
+            }
         }
         _builder.ReceiveCommand(Nardi::Command(key));
     }
@@ -361,15 +375,17 @@ PYBIND11_MODULE(nardi, m)
     py::class_<NardiEngine>(m, "Engine")
         .def(py::init<>())
         .def("board_key",           &NardiEngine::board_key,
-             R"(Return 2x25 uint8 board (player-perspective).)")
+             R"(Return 6x25 uint8 board (player-perspective).)")
         .def("dice",                &NardiEngine::dice,
              R"(Return 1x2 uint8 dice values.)")
+        .def("key_dims",            &NardiEngine::key_dims,
+             R"(Return 1x2 uint8 dimensions of board key.)")
         .def("flat_to_dice",        &NardiEngine::flat_to_dice, 
              R"(Input: int index for flattened dice combo representation. Output: int array length 2, representing dice1, dice2.)")
         .def("roll_and_enumerate",  &NardiEngine::roll_and_enumerate,
-             R"(Roll dice and return uint8 array of shape [N,2,25] with end-of-turn boards.)")
+             R"(Roll dice and return uint8 array of shape [N,6,25] with end-of-turn boards.)")
         .def("apply_board",         &NardiEngine::apply_board, py::arg("key"),
-             R"(Apply the sequence that reaches the provided board key [2,25] uint8.)")
+             R"(Apply the sequence that reaches the provided board key [6,25] uint8.)")
         .def("children_to_grandchildren", &NardiEngine::children_to_grandchildren, py::arg("children"),
              R"(Given children, return grandchildren for 1-ply lookahead evaluation.)")
         .def("with_sim_mode",       &NardiEngine::with_sim_mode,
@@ -377,11 +393,11 @@ PYBIND11_MODULE(nardi, m)
         .def("end_sim_mode",        &NardiEngine::end_sim_mode,
              R"(Set controller sim mode true)")
         .def("step_forward",        &NardiEngine::step_forward, py::arg("key"),
-             R"(In simulation mode, apply the sequence that reaches the provided board key [2,25] uint8, return whether successful)")
+             R"(In simulation mode, apply the sequence that reaches the provided board key [6,25] uint8, return whether successful)")
         .def("step_back",           &NardiEngine::step_back,
              R"(In simulation mode, undo the last full turn sequence, return whether successful)")
         .def("set_and_enumerate",   &NardiEngine::set_and_enumerate,
-             R"(Set dice and return uint8 array of shape [N,2,25] with end-of-turn boards.)")
+             R"(Set dice and return uint8 array of shape [N,6,25] with end-of-turn boards.)")
         .def("status_report",       &NardiEngine::status_report)
         .def("status_str",          &NardiEngine::status_str)
         .def("is_terminal",         &NardiEngine::is_terminal)

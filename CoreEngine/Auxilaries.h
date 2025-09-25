@@ -23,7 +23,28 @@ constexpr int PIECES_PER_PLAYER = 15;
 ////////////////////////////////////////////////////////////////////////////////
 
 using BoardConfig = std::array< std::array<int8_t, COLS>, ROWS>;
-using BoardKey    = std::array<std::array<uint8_t, ROWS*COLS + 1>, 2>;
+
+constexpr int BK_ROWS = 6;
+constexpr int BK_COLS = ROWS*COLS + 1;
+using BoardKey = std::array< std::array<uint8_t, BK_COLS>, BK_ROWS >;
+
+
+/*
+Representation:
+
+------ 1-pieces w ------| pieces off w 
+........................|       .
+------ 2-pieces w ------| pieces off w 
+........................|       .
+------ 3-pieces w ------| total sq occupied w
+........................|       .
+------ 1-pieces b ------| total sq occupied b
+........................|       .
+------ 2-pieces b ------| pieces not reached w
+........................|       .
+------ 3-pieces b ------| pieces not reached b
+........................|       .
+*/
 
 ////////////////////////////////////////////////////////////////////////////////
 // Meaningful bools for colors and dice
