@@ -1,6 +1,9 @@
 from sim_play import SimPlay
 from nardi_net import NardiNet
 import torch
+import utils
+
+import numpy as np
 
 # # Load the file back into a NumPy object array
 # loaded_arrays_obj = np.load('rand_wins.npy', allow_pickle=True)
@@ -15,40 +18,68 @@ import torch
 
 simulator = SimPlay()
 
-def model_vs_model(model1, m1_name, model2, m2_name, ng=100):
+def model_vs_model(model1, m1_name, model2, m2_name, ng=1000):
     print(m1_name, " vs ", m2_name)
-    score1, score2 = simulator.benchmark(model1=model1, model_strat="lookahead", other_model=model2, opponent_strat="lookahead", num_games=ng, )
+    score1, score2 = simulator.benchmark(model1=model1, model_strat="lookahead", other_model=model2, opponent_strat="lookahead", num_games=ng)
     print(m1_name, " scored ", score1, " while ", m2_name, " scored ", score2)
     print(f"Respective win rates are {score1 / (score1 + score2)} and {score2 / (score1 + score2)}")
     print("\n\n")
     return score1, score2
 
-m1 = NardiNet(128, 64)
-m1.load_state_dict(torch.load('nardi_model.pt'))
-m1.eval()
-m1_score = 0
+def model_vs_heuristic(model, name, ng=1000):
+    print(name, " vs heuristic")
+    model_score, heur_score = simulator.benchmark(model1=model, model_strat="lookahead", opponent_strat="heuristic", num_games=ng)
+    print(name, " scored ", model_score, " while the heuristic scored ", heur_score)
+    print(f"Model win rates is {model_score / (model_score + heur_score)}")
+    print("\n\n")
+    return model_score, heur_score
 
-m2 = NardiNet(64, 16)
-m2.load_state_dict(torch.load('nardi_model2.pt'))
+
+m1 = NardiNet(64, 16)
+m1_name = "64-16"
+m1.load_state_dict(torch.load('mw64_16.pt'))
+m1.eval()
+
+m2 = NardiNet(128, 32)
+m2_name = "128-32"
+m2.load_state_dict(torch.load('mw128_32.pt'))
 m2.eval()
+
+heuristic_score = 0
+m1_score = 0
 m2_score = 0
 
-m3 = NardiNet(256, 128)
-m3.load_state_dict(torch.load('nardi_model_256128.pt'))
-m3.eval()
-m3_score = 0
+d, h = model_vs_heuristic(m1, m1_name)
+m1_score += d
+heuristic_score += h
 
-d1, d2 = model_vs_model(m1, "128-64", m2, "64-16", ng=1)
+d, h = model_vs_heuristic(m2, m2_name)
+m2_score += d
+heuristic_score += h
+
+d1, d2 = model_vs_model(m1, m1_name, m2, m2_name)
 m1_score += d1
 m2_score += d2
-
-d1, d3 = model_vs_model(m1, "128-64", m3, "256-128", ng=1)
-m1_score += d1
-m3_score += d3
-
-d2, d3 = model_vs_model(m2, "64-16", m3, "256-128", ng=1)
-m2_score += d2
-m3_score += d3
 
 print(f"Final scores: ")
-print("128-64: ", m1_score, ", 64-16: ", m2_score, ", 256-128: ", m3_score)
+print(m1_name, ": ", m1_score, ", ", m2_name, ": ", m2_score, ", heuristic: ", heuristic_score)
+
+# eng = simulator.eng
+# sign = 1
+
+# while not eng.is_terminal():
+#     key = eng.board_key()
+#     print("key: ", key)
+#     print("board:")
+#     utils.print_from_key(key, sign)
+#     options = eng.roll_and_enumerate()
+#     print("successfully called roll_and_enumerate")
+#     print("options are\n", options)
+#     if options.shape[0] != 0:
+#         rand_idx = np.random.choice(len(options))
+#         eng.apply_board(options[rand_idx])
+#         print("made move")
+#     sign *= -1
+
+# print("final board: ")
+# utils.print_from_key(eng.board_key(), sign)

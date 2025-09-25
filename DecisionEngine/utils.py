@@ -27,13 +27,44 @@ def key_after_moves(bkey, sign, moves):
         return bkey
 
     plyr_row = (sign == -1) # 1 for black 0 for white
-    for mv in moves:
-        row_from = mv[0] if plyr_row == 0 else not mv[0]
-        pos_from = 12*row_from + mv[1]
+    for mv in moves:        
+        # mv[0] is row from, mv[1] is col from, mv[2] is distance
+        pos_from = 12*mv[0] + mv[1]
         pos_to = min(pos_from + mv[2], 24) # in case of removal, this should always be 24, the "removed" count
-        bkey[0][pos_from] -= 1
-        bkey[0][pos_to] += 1
+        dest_was_empty = False
         
+        # decrement start pos
+        if bkey[2][pos_from] > 0:
+            bkey[2][pos_from] -= 1
+        elif bkey[1][pos_from] < 0:
+            bkey[1][pos_from] -= 1
+        elif bkey[0][pos_from] > 0:
+            bkey[0][pos_from] -= 1
+        else:
+            print(f"invalid move attempted, no pieces to move from this start coord")
+            return bkey
+        
+        # increment destination pos
+        if pos_to == 24:    # removing piece
+            bkey[0][24] += 1
+        elif bkey[1][pos_to] == 1:  # >= 2 pieces
+            bkey[2][pos_to] += 1
+        elif bkey[0][pos_to] == 1:  # >= 1 piece, not >= 2 so exactly 1
+            bkey[1][pos_to] += 1
+        else:
+            bkey[0][pos_to] += 1
+            dest_was_empty = True
+        
+        # set squares occupied
+        if dest_was_empty and bkey[0][pos_from] > 0:
+            bkey[2][-1] += 1 # another square occupied
+        elif not dest_was_empty and bkey[0][pos_from] == 0:
+            bkey[2][-1] -= 1 # vacated start square
+
+        # set pieces not reached home
+        if pos_from < 18 and pos_to >= 18:  # from outside home to home
+            bkey[4][-1] -= 1    # another piece reached home
+
     return bkey
 
 def to_visual_board(bkey, sgn):
@@ -51,8 +82,6 @@ def to_visual_board(bkey, sgn):
         raise ValueError("invalid board: both players have checkers on the same point")
     else: 
         board = sgn * ( (a[0] + a[1] + a[2]) - (a[3] + a[4] + a[5]) ).reshape(2, 12)
-        if sgn == -1:
-            board[[0, 1]] = board[[1, 0]]
         return board
         
 def print_board(board):

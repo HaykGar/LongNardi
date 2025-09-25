@@ -11,11 +11,6 @@ import utils
 class SimPlay:
     def __init__(self):
         self.device = torch.device("cpu") # "mps" if torch.backends.mps.is_available() else "cpu")
-        # self.model = NardiNet(layer1_size, layer2_size)
-        # self.load_file = load_file
-        # if load_file != '':
-        #     self.model.load_state_dict(torch.load(load_file))
-        # self.model.to(self.device)
         self.eng = nardi.Engine()
         
         self.sign = 1            # represents player's turn and change in perspective
@@ -44,7 +39,7 @@ class SimPlay:
     def advance_turn(self):
         self.sign *= -1
         self.turn_num += 1
-        
+
     def apply_greedy_move(self, model, eval_only=True):
         options = self.eng.roll_and_enumerate() # no negation since we are looking from current perspective
         if options.shape[0] != 0:
@@ -139,7 +134,16 @@ class SimPlay:
             rand_idx = np.random.choice(len(options))
             self.eng.apply_board(options[rand_idx])
         self.advance_turn()
-
+    
+    def max_coverage_move(self):
+        options = self.eng.roll_and_enumerate()
+        if options.shape[0] != 0:               # at least 1 possible move   
+            sq_occ = options[:, 2, -1]
+            self.eng.apply_board(options[int(sq_occ.argmax().item())])
+        self.advance_turn()
+        
+    # TODO add more sophisticated heuristics and tie breakers for the above
+        
     def human_move(self):                       # very rudimentary, just for testing
         options = self.eng.roll_and_enumerate()
         if options.shape[0] > 1:
@@ -174,7 +178,7 @@ class SimPlay:
             self.eng.apply_board(options[0])
         self.advance_turn()
 
-    def benchmark(self, model1 : NardiNet, model_strat = "greedy", other_model=None, opponent_strat = "random", num_games = 0):
+    def benchmark(self, model1 : NardiNet, model_strat = "greedy", other_model=None, opponent_strat = "heuristic", num_games = 100):
         mod_score = 0
         opp_score = 0  
         
@@ -190,6 +194,8 @@ class SimPlay:
 
         if opponent_strat == "random":
             opp_move = self.play_random_move
+        elif opponent_strat == 'heuristic':
+            opp_move = self.max_coverage_move
         elif opponent_strat == "human":
             opp_move = self.human_move
         elif other_model is not None:
@@ -228,7 +234,10 @@ class SimPlay:
                 else:
                     opp_score += self.eng.winner_result()
                     history.append(utils.to_visual_board(self.eng.board_key(), self.sign))
-                    self.opp_wins.append(history)       
+                    self.opp_wins.append(history)    
+                    
+                if opponent_strat == "human":
+                    print(f"game {model_first*num_games + game} is over\n\n")   
 
         wr = mod_score / (mod_score + opp_score)
         print(f"win rate: {wr*100}%")

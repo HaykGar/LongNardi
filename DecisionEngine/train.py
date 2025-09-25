@@ -56,7 +56,9 @@ args = parser.parse_args()
 #################################
 
 LAMBDA = 0.7        # Temporal Difference parameter
-ALPHA = 0.01        # Learning Rate
+alpha = 0.01        # Learning Rate
+alpha_0 = alpha     # initial learning rate
+alpha_min = 0.001   # minimum learning rate
 
 K = 24              # Turns per game with Noise
 eps = 0.25          # mixing parameter for noise
@@ -81,6 +83,8 @@ output_dir = args.directory
 ################################
 
 simulator = SimPlay()
+last_wr = 0
+no_improve = 0
 
 model = NardiNet(args.layer1_size, args.layer2_size)
 if weights_file is not None and os.path.getsize(weights_file) != 0:
@@ -98,7 +102,7 @@ for stage in tqdm(range(100), desc="Outer Loop"):
     eps = eps_min + (eps0 - eps_min) * 2.0**(-stage / h_e)  
     temperature = t_min + (t0 - t_min) * 2.0**(-stage / h_t)
     
-    for game in tqdm(range(10000), desc=f"Inner Loop {stage+1}", leave=False):
+    for game in tqdm(range(5000), desc=f"Inner Loop {stage+1}", leave=False):
         simulator.reset()
         
         Y_new, g = simulator.eval_and_grad(model)
@@ -112,9 +116,9 @@ for stage in tqdm(range(100), desc="Outer Loop"):
             
             torch._foreach_mul_(accum_grad, LAMBDA)        # e ← λ e  
             torch._foreach_add_(accum_grad, g)          # e ← e + ∇V_t-1  
-                        
-            simulator.apply_noisy_move(K, eps, temperature, model)
             
+            simulator.apply_noisy_move(K, eps, temperature, model)
+
             if not simulator.eng.is_terminal():
                 Y_new, g = simulator.eval_and_grad(model)
             else:
@@ -129,11 +133,11 @@ for stage in tqdm(range(100), desc="Outer Loop"):
             
             if abs(delta) > simulator.max_surprise:
                 max_surprise = abs(delta)
-                
+
             delta = torch.clamp(delta, min=-1, max=1)
             
             with torch.no_grad():
-                torch._foreach_add_(list(model.parameters()), accum_grad, alpha=ALPHA * float(delta)) 
+                torch._foreach_add_(list(model.parameters()), accum_grad, alpha=alpha * float(delta)) # w = w + alpha*delta*accum_grad
     
     ################################ per stage report + actions ################################     
     print()
@@ -141,9 +145,17 @@ for stage in tqdm(range(100), desc="Outer Loop"):
     print("max surprise of ", max_surprise)
     
     print(f"results of simulation {stage+1}")
-    mod_score, rand_score = simulator.benchmark(model1=model, num_games=1000)
+    mod_score, rand_score = simulator.benchmark(model1=model, num_games=1000)    
     print(f"model score: {mod_score}, random score: {rand_score}")
-    print()    
+    print()
+    
+    wr = 100 * mod_score / (mod_score + rand_score)
+    if wr - last_wr < 0.1:
+        no_improve += 1
+        if no_improve > 5:
+            alpha = alpha_min + 0.7 * (alpha - alpha_min)
+            no_improve = 0
+    last_wr = wr
     
     eval_traces.append(evals)
     if weights_file is not None:
@@ -212,3 +224,5 @@ if output_dir is not None:
 # experiment with lower lambda
 # schedule learning rate ?
 # train 2 models - 64 and 16 hidden units for one, 128 and 32 for the other
+
+# pruning in lookahead search?
