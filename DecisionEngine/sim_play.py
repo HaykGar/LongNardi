@@ -7,6 +7,7 @@ from functools import partial
 from nardi_net import NardiNet
 import nardi
 import utils
+from tqdm import tqdm
 
 class SimPlay:
     def __init__(self):
@@ -176,11 +177,55 @@ class SimPlay:
         elif options.shape[0] == 1:
             print("forcing move")
             self.eng.apply_board(options[0])
-        self.advance_turn()
+        self.advance_turn()    
+        
+    def model_strat_to_func(self, model, strat):
+        if model is None:
+            if strat == "random":
+                return self.play_random_move
+            elif strat == 'heuristic':
+                return self.max_coverage_move
+            elif strat == "human":
+                return self.human_move
+        else:   # model is not None:
+            if strat == "greedy":
+                return partial(self.apply_greedy_move, model=model)
+            elif strat == "lookahead":
+                return partial(self.apply_lookahead_move, model=model)
+            
+        print("invalid model and strat provided, no valid function call found")
+        return None
+
+    def simulate_game(self, model1 : NardiNet, model_strat = "greedy", other_model=None, opponent_strat = "heuristic"):
+        mod_score = 0
+        opp_score = 0  
+        
+        model_move = self.model_strat_to_func(model1, model_strat)
+        opp_move = self.model_strat_to_func(other_model, opponent_strat)
+        
+        if model_move is None or opp_move is None:
+            print("failure initializing model and opp moves, aborting simulation")
+            return None
+
+        self.reset()
+        while not self.eng.is_terminal():
+            is_mod_move = (self.sign == 1)
+            if is_mod_move:
+                model_move()
+            else:
+                opp_move()
+            
+        # game over
+        if(is_mod_move):
+            mod_score += self.eng.winner_result()
+        else:
+            opp_score += self.eng.winner_result()
+    
+        return mod_score, opp_score
 
     def benchmark(self, model1 : NardiNet, model_strat = "greedy", other_model=None, opponent_strat = "heuristic", num_games = 100):
         mod_score = 0
-        opp_score = 0  
+        opp_score = 0
         
         if model_strat == "greedy":
             model_move = partial(self.apply_greedy_move, model=model1)
@@ -211,12 +256,12 @@ class SimPlay:
         if num_games <= 0:
             num_games = 100
 
-        for model_first in range(2):
+        for model_first in tqdm(range(2), desc="Outer Loop"):
             model_is_first = bool(model_first)
             self.reset()
             m_sign = 1 if bool(model_is_first) else -1
 
-            for game in range(num_games):
+            for game in tqdm(range(num_games), desc="Inner Loop", leave=False):
                 self.reset()
                 history = []
 
