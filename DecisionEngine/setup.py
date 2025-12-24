@@ -11,6 +11,7 @@ ext = Extension(
         "../CoreEngine/Game.cpp",
         "../CoreEngine/Monitors.cpp",
         "../CoreEngine/ReaderWriter.cpp",
+        "../CoreEngine/TerminalRW.cpp",
         "../CoreEngine/ScenarioBuilder.cpp",
     ],
     include_dirs=[

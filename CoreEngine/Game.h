@@ -40,6 +40,7 @@ class Game
         Game();
         Game(const Game& other);
         void AttachReaderWriter(ReaderWriter* r);
+        void AttachReaderWriter(std::shared_ptr<ReaderWriter> r);
 
         // Gameplay
         status_codes RollDice();

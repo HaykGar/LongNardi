@@ -34,6 +34,11 @@ Game::Game(const Game& other) : rng(std::random_device{}()), dist(1, 6), rw(null
 void Game::AttachReaderWriter(ReaderWriter* r)
 {   rw = r;   }
 
+void Game::AttachReaderWriter(std::shared_ptr<ReaderWriter> r)
+{
+    rw = r.get();
+}
+
 ///////////// Getters /////////////
 
 const Board& Game::GetBoardRef() const
@@ -134,6 +139,7 @@ bool Game::AutoPlayTurn(const BoardKey& key)
             
             mvs_this_turn.emplace_back(sd._from, sd._diceIdx);
         }
+        ReAnimate();
         return true;
     }
 }

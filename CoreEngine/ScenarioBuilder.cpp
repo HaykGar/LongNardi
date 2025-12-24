@@ -107,6 +107,14 @@ void ScenarioBuilder::Reset()
     ResetControllerState();
 }
 
+void ScenarioBuilder::AttachTRW()
+{
+    _view = std::make_shared<TerminalRW>(_game, _ctrl);
+    _game.AttachReaderWriter(_view);
+}
+
+void ScenarioBuilder::ReAnimate() { if(_view) _view->ReAnimate(); }
+
 void ScenarioBuilder::PrintBoard() const
 {
     DisplayBoard(_game.board.data);
@@ -174,3 +182,6 @@ Controller& ScenarioBuilder::GetCtrl()
  
 const Controller& ScenarioBuilder::GetCtrl() const
 { return _ctrl; }
+
+std::shared_ptr<ReaderWriter> ScenarioBuilder::GetView() { return _view; }
+const std::shared_ptr<ReaderWriter> ScenarioBuilder::GetView() const { return _view; }

@@ -82,7 +82,9 @@ class SimPlay:
         old_status = self.eng.status_str()
 
         children = self.eng.roll_and_enumerate()
-        after_roll = self.eng.status_str()
+        
+        # FIXME REMOVE THIS
+        dice = self.eng.dice()
 
         if len(children) == 0:
             self.advance_turn()
@@ -145,39 +147,12 @@ class SimPlay:
         
     # TODO add more sophisticated heuristics and tie breakers for the above
         
-    def human_move(self):                       # very rudimentary, just for testing
-        options = self.eng.roll_and_enumerate()
-        if options.shape[0] > 1:
-            print("you rolled: ", self.eng.dice())
-            print("current board:")
-            utils.print_from_key(self.eng.board_key(), self.sign)  
-            
-            moves = input("input separated by space from.row from.col distance from2.row etc: ").split()
-            seqs = []
-            for i in range(0, len(moves), 3):
-                seqs.append([int(x) for x in moves[i:i+3]])
-                                
-            new_brd = utils.key_after_moves(self.eng.board_key(), self.sign, seqs)
-            
-            move_made = False
-            
-            for child in options:
-                if (child == new_brd).all():
-                    self.eng.apply_board(new_brd)
-                    move_made = True
-                    
-            if not move_made:
-                print("failed to find matching board among children")
-                print("child options were:\n\n")
-                for child in options:
-                    utils.print_from_key(child, self.sign)
-                print("playing first child")
-                self.eng.apply_board(options[0])
-            
-        elif options.shape[0] == 1:
-            print("forcing move")
-            self.eng.apply_board(options[0])
-        self.advance_turn()    
+    def human_move(self):
+        self.eng.roll()
+        self.eng.ReAnimate()
+        while self.eng.human_move():
+            continue
+        self.advance_turn()
         
     def model_strat_to_func(self, model, strat):
         if model is None:
@@ -211,8 +186,10 @@ class SimPlay:
         while not self.eng.is_terminal():
             is_mod_move = (self.sign == 1)
             if is_mod_move:
+                print("mod")
                 model_move()
             else:
+                print("human")
                 opp_move()
             
         # game over

@@ -3,6 +3,8 @@
 #include "Game.h"
 #include "Controller.h"
 #include "Auxilaries.h"
+#include "ReaderWriter.h"
+#include "TerminalRW.h"
 #include <sstream>
 
 namespace Nardi
@@ -18,13 +20,14 @@ class ScenarioBuilder
         void withFirstTurn();
 
         // setting internals explicitly
-        status_codes withScenario(bool p_idx, const BoardConfig& b, int d1, int d2, int d1u, int d2u);
+        status_codes withScenario(bool p_idx, const BoardConfig& b, int d1, int d2, int d1u=0, int d2u=0);
         status_codes withDice(int d1, int d2, int d1_used, int d2_used);
         status_codes withDice(int d1, int d2);
 
         // Actions
         status_codes ReceiveCommand(const Command& c);
         void Reset();
+        void AttachTRW();
 
         void PrintBoard() const;
 
@@ -42,9 +45,15 @@ class ScenarioBuilder
         Controller& GetCtrl();
         const Controller& GetCtrl() const;
 
+        std::shared_ptr<ReaderWriter> GetView();
+        const std::shared_ptr<ReaderWriter> GetView() const;
+
+        void ReAnimate();
+
     private:
         Game _game;
         Controller _ctrl;
+        std::shared_ptr<ReaderWriter> _view;
 
         void StartPreRoll(bool p_idx, const BoardConfig& b );
 

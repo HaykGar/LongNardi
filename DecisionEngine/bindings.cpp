@@ -14,13 +14,19 @@ namespace py = pybind11;
 #include "../CoreEngine/Game.h"
 #include "../CoreEngine/Controller.h"
 #include "../CoreEngine/Auxilaries.h"
+#include "../CoreEngine/ReaderWriter.h"
+#include "../CoreEngine/TerminalRW.h"
 
 // A thin wrapper that owns a live Game and provides Python-friendly methods.
 class NardiEngine {
 public:
     NardiEngine()
     : _builder()
-    {}
+    {
+        _builder.withFirstTurn();
+        _builder.AttachTRW();
+        _view = _builder.GetView().get();
+    }
 
     Nardi::ScenarioBuilder& GetBuilder()
     {
@@ -131,6 +137,14 @@ public:
             }
             std::cout << "----------------------\n";
         }
+    }
+
+    void ReAnimate() {
+        _builder.ReAnimate();
+    }
+
+    void roll() {
+        _builder.ReceiveCommand(Nardi::Command(Nardi::Actions::ROLL_DICE));
     }
 
     // Roll dice & return only board keys as [N,6,25] uint8 (end-of-turn leaves).
@@ -291,7 +305,6 @@ public:
         return py::make_tuple(boards, child_lo_np, win_results);
     }
 
-
     // Expects [6,25] uint8, converts to BoardKey, applies the sequence via controller.
     void apply_board(py::array_t<uint8_t, py::array::c_style | py::array::forcecast> arr) {
         if (arr.ndim() != 2 || arr.shape(0) != 6 || arr.shape(1) != 25) {
@@ -308,6 +321,15 @@ public:
         _builder.ReceiveCommand(Nardi::Command(key));
     }
 
+    bool human_move() {
+        if(!_view)
+            throw std::runtime_error("Tried human moves without initializing view");
+
+        std::cout << "Awaiting command\n";
+        Nardi::status_codes status = _view->AwaitUserCommand();
+        return status != Nardi::status_codes::NO_LEGAL_MOVES_LEFT;
+    }
+    
     void with_sim_mode()
     {
         _builder.GetCtrl().ToSimMode();
@@ -362,9 +384,15 @@ public:
         return _builder.StatusString();
     }
 
+    bool should_continue_game()
+    {
+        return !(_builder.GetCtrl().QuitRequested() || _builder.GetGame().GameIsOver());
+    }
+
 private:
     static constexpr int N_DICE_COMB = 21;
     Nardi::ScenarioBuilder _builder;
+    Nardi::ReaderWriter* _view;
 };
 
 // ---- pybind11 module ----
@@ -382,10 +410,16 @@ PYBIND11_MODULE(nardi, m)
              R"(Return 1x2 uint8 dimensions of board key.)")
         .def("flat_to_dice",        &NardiEngine::flat_to_dice, 
              R"(Input: int index for flattened dice combo representation. Output: int array length 2, representing dice1, dice2.)")
+        .def("ReAnimate",           &NardiEngine::ReAnimate,
+             R"(Roll dice.)")
+        .def("roll",                &NardiEngine::roll,
+             R"(Roll dice.)")
         .def("roll_and_enumerate",  &NardiEngine::roll_and_enumerate,
              R"(Roll dice and return uint8 array of shape [N,6,25] with end-of-turn boards.)")
         .def("apply_board",         &NardiEngine::apply_board, py::arg("key"),
              R"(Apply the sequence that reaches the provided board key [6,25] uint8.)")
+        .def("human_move",          &NardiEngine::human_move,
+             R"(Prompt human user for move and return false if their turn is over, true otherwise)")
         .def("children_to_grandchildren", &NardiEngine::children_to_grandchildren, py::arg("children"),
              R"(Given children, return grandchildren for 1-ply lookahead evaluation.)")
         .def("with_sim_mode",       &NardiEngine::with_sim_mode,
@@ -402,5 +436,6 @@ PYBIND11_MODULE(nardi, m)
         .def("status_str",          &NardiEngine::status_str)
         .def("is_terminal",         &NardiEngine::is_terminal)
         .def("winner_result",       &NardiEngine::winner_result)
-        .def("reset",               &NardiEngine::reset);
+        .def("reset",               &NardiEngine::reset)
+        .def("should_continue_game",&NardiEngine::should_continue_game);
 }

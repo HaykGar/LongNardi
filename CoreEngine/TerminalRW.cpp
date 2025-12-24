@@ -5,24 +5,72 @@ TerminalRW::TerminalRW(const Game& game, Controller& c) : ReaderWriter(game, c) 
 void TerminalRW::ReAnimate() const
 {
     const auto& board = g.GetBoardRef();
-    bool player_row = board.PlayerIdx();
+    bool row = board.PlayerIdx();
     
-    for(int c = COLS - 1; c >= 0; --c)
-        std::cout << board.at(player_row, c) << "\t";
+    std::cout << "________________________________________________________________________________________________\n";
+    std::cout << "________________________________________________________________________________________________\n";
 
-    std::cout << "\n\n";
+    auto draw_row = [&](int layer, bool top)
+    {
+        int c; 
+        int dir;
+        int sign;
+        if(top) {
+            c = COLS - 1;
+            dir = -1;
+        }
+        else{
+            c = 0;
+            dir = 1;
+        }
+        for(; c >= 0 && c < COLS; c += dir)
+        {
+            int raw = static_cast<int>(board.at(row, c));
+            int val = abs(raw) - layer;
 
-    for(int c = 0; c < COLS; ++c)
-        std::cout << board.at(!player_row, c) << "\t";
+            if (raw > 0)
+                sign = 1;
+            else
+                sign = -1;
+
+            if(layer == 0)
+            {
+                if (val + layer > 0)
+                    std::cout << sign << "\t";
+                else
+                    std::cout << 0 << "\t";
+            }
+            else if(val <= 0)
+                std::cout << "\t";
+            else if (val > 0)
+            {   
+                if (layer == 1)
+                    std::cout << sign << "\t";
+                else if (layer == 2)
+                    std::cout << sign * val << "\t";
+            }
+        }
+        std::cout<<"\n";
+    };
+    
+    for(int i = 0; i < 3; ++i)
+        draw_row(i, true);
+    std::cout<<"\n\n\n";
+    row = !row;
+
+    for(int i = 2; i >= 0; --i)
+        draw_row(i, false);
+
+    std::cout << "________________________________________________________________________________________________\n";
+    std::cout << "________________________________________________________________________________________________\n";
 
     std::cout << "\n\n\n\n\n";
 }
 
 void TerminalRW::AnimateDice() const  // assumes proper values of dice fed in
 {
-    std::cout << "Player " << g.GetBoardRef().PlayerSign() << ", you rolled: " << g.GetDice(0) << " " << g.GetDice(1) << std::endl;
+    std::cout << "Player " << static_cast<int>(g.GetBoardRef().PlayerSign()) << ", you rolled: " << g.GetDice(0) << " " << g.GetDice(1) << std::endl;
 }
-
 
 status_codes TerminalRW::AwaitUserCommand()
 {
