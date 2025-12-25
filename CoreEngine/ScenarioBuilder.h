@@ -29,6 +29,8 @@ class ScenarioBuilder
         void Reset();
         void AttachTRW();
 
+        void DetachRW();
+
         void PrintBoard() const;
 
         const int GetBoardAt(const Coord& coord) const;

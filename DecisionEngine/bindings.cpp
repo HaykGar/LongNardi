@@ -24,13 +24,19 @@ public:
     : _builder()
     {
         _builder.withFirstTurn();
+        _view = nullptr;
+    }
+
+    void AttachTRW()
+    {
         _builder.AttachTRW();
         _view = _builder.GetView().get();
     }
 
-    Nardi::ScenarioBuilder& GetBuilder()
+    void DetachRW()
     {
-        return _builder;
+        _builder.DetachRW();
+        _view = nullptr;
     }
 
     int dice_flattened(int i, int j)
@@ -402,6 +408,10 @@ PYBIND11_MODULE(nardi, m)
 
     py::class_<NardiEngine>(m, "Engine")
         .def(py::init<>())
+        .def("AttachTRW",           &NardiEngine::AttachTRW,
+             R"(Attaches TerminalRW for terminal view of game state.)")
+        .def("DetachRW",            &NardiEngine::DetachRW,
+             R"(Detaches ReaderWriter removing any view of game.)")
         .def("board_key",           &NardiEngine::board_key,
              R"(Return 6x25 uint8 board (player-perspective).)")
         .def("dice",                &NardiEngine::dice,

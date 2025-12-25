@@ -110,8 +110,10 @@ void ScenarioBuilder::Reset()
 void ScenarioBuilder::AttachTRW()
 {
     _view = std::make_shared<TerminalRW>(_game, _ctrl);
-    _game.AttachReaderWriter(_view);
+    _game.AttachReaderWriter(_view.get());
 }
+
+void ScenarioBuilder::DetachRW() { _game.rw = nullptr; _view = nullptr; }
 
 void ScenarioBuilder::ReAnimate() { if(_view) _view->ReAnimate(); }
 

@@ -9,7 +9,7 @@ import nardi
 import utils
 from tqdm import tqdm
 
-class SimPlay:
+class Simulator:
     def __init__(self):
         self.device = torch.device("cpu") # "mps" if torch.backends.mps.is_available() else "cpu")
         self.eng = nardi.Engine()
@@ -19,7 +19,6 @@ class SimPlay:
         self.turn_num = 0        # turn number in current game
         
         self.win_rates = []
-        self.opp_wins = []
         
     def to_tensor(self, board_np):
         t = torch.from_numpy(board_np).to(device=self.device, dtype=torch.float32)
@@ -154,7 +153,7 @@ class SimPlay:
             continue
         self.advance_turn()
         
-    def model_strat_to_func(self, model, strat):
+    def strat_to_func(self, model, strat):
         if model is None:
             if strat == "random":
                 return self.play_random_move
@@ -171,97 +170,60 @@ class SimPlay:
         print("invalid model and strat provided, no valid function call found")
         return None
 
-    def simulate_game(self, model1 : NardiNet, model_strat = "greedy", other_model=None, opponent_strat = "heuristic"):
-        mod_score = 0
-        opp_score = 0  
-        
-        model_move = self.model_strat_to_func(model1, model_strat)
-        opp_move = self.model_strat_to_func(other_model, opponent_strat)
-        
-        if model_move is None or opp_move is None:
+    def simulate_game(self, p1_move, p2_move, swap_order : bool):        
+        if p1_move is None or p2_move is None:
             print("failure initializing model and opp moves, aborting simulation")
             return None
 
         self.reset()
         while not self.eng.is_terminal():
-            is_mod_move = (self.sign == 1)
-            if is_mod_move:
-                print("mod")
-                model_move()
+            is_p1_move = (self.sign == 1 and not swap_order) or (self.sign == -1 and swap_order)
+            if is_p1_move:
+                p1_move()
             else:
-                print("human")
-                opp_move()
+                p2_move()
             
-        # game over
-        if(is_mod_move):
-            mod_score += self.eng.winner_result()
-        else:
-            opp_score += self.eng.winner_result()
-    
-        return mod_score, opp_score
+        # game over, return true if first player won, false if second player won
+        return is_p1_move
 
-    def benchmark(self, model1 : NardiNet, model_strat = "greedy", other_model=None, opponent_strat = "heuristic", num_games = 100):
-        mod_score = 0
-        opp_score = 0
-        
-        if model_strat == "greedy":
-            model_move = partial(self.apply_greedy_move, model=model1)
-        elif model_strat == "lookahead":
-            model_move = partial(self.apply_lookahead_move, model=model1)  
-        else:
-            print("invalid model strategy, please select among greedy and lookahead")
-            return
-        
-        opp_move = None
-
-        if opponent_strat == "random":
-            opp_move = self.play_random_move
-        elif opponent_strat == 'heuristic':
-            opp_move = self.max_coverage_move
-        elif opponent_strat == "human":
-            opp_move = self.human_move
-        elif other_model is not None:
-            if opponent_strat == "greedy":
-                opp_move = partial(self.apply_greedy_move, model=other_model)
-            elif opponent_strat == "lookahead":
-                opp_move = partial(self.apply_lookahead_move, model=other_model)
-        
-        if opp_move is None:
-            print("invalid opponent strategy, please select among random and human for computer or valid model options with model arg")
-            return None
-                
+    def benchmark(self, p1, p1_strat : str, p2, p2_strat : str, num_games = 100):
         if num_games <= 0:
             num_games = 100
 
+        p1_score = 0
+        p2_score = 0
+        
+        p1_move = self.strat_to_func(p1, p1_strat)
+        p2_move = self.strat_to_func(p2, p2_strat)
+        
+        if p1_strat == "human" or p2_strat == "human":
+            self.eng.AttachTRW()
+
         for model_first in tqdm(range(2), desc="Outer Loop"):
-            model_is_first = bool(model_first)
-            self.reset()
-            m_sign = 1 if bool(model_is_first) else -1
+            p1_first = bool(model_first)
 
             for game in tqdm(range(num_games), desc="Inner Loop", leave=False):
-                self.reset()
-                history = []
-
-                while not self.eng.is_terminal():
-                    history.append(utils.to_visual_board(self.eng.board_key(), self.sign))    # add current pos and player to move to history
-                    is_mod_move = (self.sign == m_sign)
-                    if is_mod_move:
-                        model_move()
-                    else:
-                        opp_move()
-
-                # game over
-                if(is_mod_move):
-                    mod_score += self.eng.winner_result()
-                else:
-                    opp_score += self.eng.winner_result()
-                    history.append(utils.to_visual_board(self.eng.board_key(), self.sign))
-                    self.opp_wins.append(history)    
-                    
-                if opponent_strat == "human":
+                p1_win = self.simulate_game(p1_move, p2_move, p1_first)
+                
+                p1_score += p1_win * self.eng.winner_result()
+                p2_score += (1 - p1_win) * self.eng.winner_result()
+                                    
+                if p2_strat == "human":
                     print(f"game {model_first*num_games + game} is over\n\n")   
 
-        wr = mod_score / (mod_score + opp_score)
+        if p1_strat == "human":
+            self.eng.DetachRW()
+        wr = p1_score / (p1_score + p2_score)
         print(f"win rate: {wr*100}%")
         self.win_rates.append(wr)       
-        return mod_score, opp_score
+        return p1_score, p2_score
+    
+if __name__ == "__main__":
+    model = NardiNet(64, 16)
+    state_dict = torch.load("mw64_16.pt", map_location=torch.device('cpu'), weights_only=True)
+    model.load_state_dict(state_dict)
+    model.eval()
+    sim = Simulator()
+    sim.benchmark(model, "lookahead", model, "greedy", 20)
+    
+    # use cmd line args later for more generality

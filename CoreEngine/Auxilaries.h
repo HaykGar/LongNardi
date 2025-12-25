@@ -34,7 +34,7 @@ Representation:
 
 ------ 1-pieces w ------| pieces off w 
 ........................|       .
------- 2-pieces w ------| pieces off w 
+------ 2-pieces w ------| pieces off b
 ........................|       .
 ------ 3-pieces w ------| total sq occupied w
 ........................|       .
