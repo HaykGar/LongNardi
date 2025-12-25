@@ -30,6 +30,7 @@ private:
     mutable sf::RenderWindow window;
     mutable sf::Font font;
     mutable bool fontLoaded = false;
+    mutable bool awaitingRoll = true;
 
     // Layout
     unsigned W, H;

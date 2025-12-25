@@ -126,6 +126,7 @@ enum class EventCode {
     DICE_ROLL,
     MOVE,
     REMOVE,
+    TURN_SWITCH,
     QUIT
 };
 

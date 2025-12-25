@@ -363,6 +363,8 @@ bool Game::IsMars() const
     return false;
 }
 
+bool Game::CanUseDice(bool idx) {return arbiter.CanUseDice(idx);}
+
 void Game::SwitchPlayer()
 {   
     board.SwitchPlayer();
@@ -371,6 +373,8 @@ void Game::SwitchPlayer()
 
     history.emplace(mvs_this_turn, dice);
     mvs_this_turn.clear();
+
+    EmitEvent(GameEvent{ EventCode::TURN_SWITCH, std::monostate{} });
 }
 
 void Game::IncrementTurnNumber()

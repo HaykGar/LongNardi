@@ -63,6 +63,8 @@ class Game
         bool GameIsOver() const;
         bool IsMars() const;
 
+        bool CanUseDice(bool idx);
+
         // Getters
         const Board& GetBoardRef() const;
         BoardKey GetBoardAsKey() const;
@@ -159,7 +161,7 @@ class Game
                 bool CanUseDice(bool idx, int n_times = 1) const;
 
                 // Updates and Actions
-                status_codes OnRoll();
+                // status_codes OnRoll();
 
             private:
                 Game& _g;

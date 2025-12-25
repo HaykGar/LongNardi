@@ -63,10 +63,19 @@ sf::FloatRect SFMLRW::cellRect(int row, int col) const
     auto br = boardRect();
     float cellW = br.size.x / (float)COLS;
     float cellH = br.size.y / (float)ROWS;
-    return sf::FloatRect({br.position.x + col * cellW,
-                          br.position.y + row * cellH},
-                         {cellW, cellH});
+
+    // Reverse top row visually
+    int visualCol = col;
+    if (row == 0)
+        visualCol = COLS - 1 - col;
+
+    return sf::FloatRect(
+        { br.position.x + visualCol * cellW,
+          br.position.y + row * cellH },
+        { cellW, cellH }
+    );
 }
+
 
 sf::FloatRect SFMLRW::dieRect(bool idx) const
 {
@@ -95,14 +104,20 @@ std::optional<Coord> SFMLRW::hitTestCell(sf::Vector2f p) const
     float cellW = br.size.x / (float)COLS;
     float cellH = br.size.y / (float)ROWS;
 
-    int col = (int)((p.x - br.position.x) / cellW);
-    int row = (int)((p.y - br.position.y) / cellH);
+    int visualCol = (int)((p.x - br.position.x) / cellW);
+    int row       = (int)((p.y - br.position.y) / cellH);
 
-    if (row < 0 || row >= ROWS || col < 0 || col >= COLS)
+    if (row < 0 || row >= ROWS || visualCol < 0 || visualCol >= COLS)
         return std::nullopt;
 
-    return Coord(row, col);
+    // Undo visual flip for top row
+    int logicalCol = visualCol;
+    if (row == 0)
+        logicalCol = COLS - 1 - visualCol;
+
+    return Coord(row, logicalCol);
 }
+
 
 std::optional<bool> SFMLRW::hitTestDie(sf::Vector2f p) const
 {
@@ -223,12 +238,6 @@ void SFMLRW::drawPieces() const
             }
         }
     }
-
-    if (fontLoaded)
-    {
-        drawText(std::string("Current player start row: ") + (topRowIsCurrentPlayersStart ? "TOP" : "BOTTOM"),
-                 boardRect().position.x, margin, 18);
-    }
 }
 
 void SFMLRW::drawDice() const
@@ -242,18 +251,29 @@ void SFMLRW::drawDice() const
 
     for (int i = 0; i < 2; ++i)
     {
-        bool idx = (i == 1);
-        auto r = dieRect(idx);
+        auto r = dieRect(i);
 
         sf::RectangleShape die(r.size);
         die.setPosition(r.position);
 
-        die.setFillColor(sf::Color(230, 230, 230));
+        bool gray = !g.CanUseDice(i) || awaitingRoll;
+
+        if (gray)
+        {
+            die.setFillColor(sf::Color(170, 170, 170));   // gray
+            die.setOutlineColor(sf::Color(80, 80, 80));
+        }
+        else
+        {
+            die.setFillColor(sf::Color(230, 230, 230));   // normal
+            die.setOutlineColor(sf::Color(110, 110, 110));
+        }
+
         die.setOutlineThickness(3.f);
-        die.setOutlineColor(sf::Color(110, 110, 110));
+
         window.draw(die);
 
-        int val = g.GetDice(idx);
+        int val = g.GetDice(i);
         if (fontLoaded)
         {
             // FIX 2: Pass font to constructor
@@ -271,7 +291,7 @@ void SFMLRW::drawDice() const
     if (fontLoaded)
     {
         drawText("Dice (click one):", panel.position.x + 16.f, panel.position.y + 120.f, 18);
-        drawText("Keys: R=roll, U=undo, Q=quit", panel.position.x + 16.f, panel.position.y + 150.f, 16);
+        drawText("Keys: R=roll, Q=quit", panel.position.x + 16.f, panel.position.y + 150.f, 16);
     }
 }
 
@@ -347,22 +367,44 @@ status_codes SFMLRW::PollInput()
 
 void SFMLRW::OnGameEvent(const GameEvent& e)
 {
-    if (e.code == EventCode::QUIT)
+    switch (e.code)
     {
-        statusLine = "Game ended by user.";
-        Render();
-        window.close();
-        return;
-    }
+        InstructionMessage(std::to_string(static_cast<int>(e.code)));
+        case EventCode::QUIT:
+            statusLine = "Game ended by user.";
+            Render();
+            window.close();
+            return;
 
-    if (e.code == EventCode::MOVE || e.code == EventCode::REMOVE)
-    {
-        hasSelection = false;
-        selected = Coord(-1, -1);
-    }
+        case EventCode::TURN_SWITCH:
+            // New turn: dice not rolled yet
+            awaitingRoll = true;
+            hasSelection = false;
+            selected = Coord(-1, -1);
 
-    Render();
+            InstructionMessage("New turn. Roll the dice.");
+            // Render();
+            return;
+
+        case EventCode::DICE_ROLL:
+            // Dice are now active
+            awaitingRoll = false;
+            Render();
+            return;
+
+        case EventCode::MOVE:
+        case EventCode::REMOVE:
+            hasSelection = false;
+            selected = Coord(-1, -1);
+            Render();
+            return;
+
+        default:
+            Render();
+            return;
+    }
 }
+
 
 void SFMLRW::InstructionMessage(std::string m) const
 {
