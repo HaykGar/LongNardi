@@ -17,20 +17,76 @@ namespace py = pybind11;
 #include "../CoreEngine/ReaderWriter.h"
 #include "../CoreEngine/TerminalRW.h"
 
+
+/*
+
+ScenarioConfig exposes a safer view of ScenarioBuilder which only crafts scenarios without messing 
+with internals like RW pointers and other potentially error-causing things
+
+*/
+
+class ScenarioConfig
+{
+    public:
+        ScenarioConfig(Nardi::ScenarioBuilder& sb) : _builder(sb) {}
+
+        Nardi::status_codes withScenario(bool p_idx, const BoardConfig& b, int d1, int d2, int d1u=0, int d2u=0)
+        {
+            return _builder.withScenario(p_idx, b, d1, d2, d1u, d2u);
+        }
+
+        Nardi::status_codes withScenario(
+            bool p_idx, 
+            py::array_t<int8_t, py::array::c_style | py::array::forcecast> board,
+            int d1, int d2, int d1u = 0, int d2u = 0)
+        {
+            if (board.ndim() != 2 || board.shape(0) != ROWS || board.shape(1) != COLS)
+                throw std::runtime_error("BoardConfig must be shape (2, 12)");
+
+            BoardConfig cfg;
+            auto buf = board.unchecked<2>();
+
+            for (size_t r = 0; r < ROWS; ++r)
+                for (size_t c = 0; c < COLS; ++c)
+                    cfg[r][c] = buf(r, c);
+
+            return withScenario(p_idx, cfg, d1, d2, d1u, d2u);
+        }
+
+        status_codes withDice(int d1, int d2, int d1_used, int d2_used)
+        {
+            return _builder.withDice(d1, d2, d1_used, d2_used);
+        }        
+
+        void withRandomEndgame(bool p_idx)
+        {
+            _builder.withRandomEndgame(p_idx);
+        }    
+
+        void withFirstTurn() { _builder.withFirstTurn(); }
+
+        void Reset() { _builder.Reset(); }
+
+    private:
+        Nardi::ScenarioBuilder& _builder;
+};
+
 // A thin wrapper that owns a live Game and provides Python-friendly methods.
 class NardiEngine {
 public:
     NardiEngine()
-    : _builder()
+    : _builder(), _config(_builder), _view(nullptr)
     {
         _builder.withFirstTurn();
-        _view = nullptr;
     }
+
+    ScenarioConfig& GetConfig() 
+    { return _config; }
 
     void AttachTRW()
     {
         _builder.AttachTRW();
-        _view = _builder.GetView().get();
+        _view = _builder.GetView();
     }
 
     void DetachRW()
@@ -146,6 +202,7 @@ public:
     }
 
     void ReAnimate() {
+
         _builder.ReAnimate();
     }
 
@@ -331,8 +388,9 @@ public:
         if(!_view)
             throw std::runtime_error("Tried human moves without initializing view");
 
-        std::cout << "Awaiting command\n";
+        _view->InstructionMessage("Awaiting command\n");
         Nardi::status_codes status = _view->AwaitUserCommand();
+        Nardi::DispErrorCode(status);
         return status != Nardi::status_codes::NO_LEGAL_MOVES_LEFT;
     }
     
@@ -398,16 +456,19 @@ public:
 private:
     static constexpr int N_DICE_COMB = 21;
     Nardi::ScenarioBuilder _builder;
-    Nardi::ReaderWriter* _view;
+    ScenarioConfig         _config;
+    Nardi::ReaderWriter*   _view;
 };
 
 // ---- pybind11 module ----
 PYBIND11_MODULE(nardi, m) 
 {
-    m.doc() = "Py bindings for Nardi C++ engine (Python owns the loop)";
+    m.doc() = "Py bindings for Nardi C++ engine (Python owns the loop) and scenario config object for easier manipulation";
 
     py::class_<NardiEngine>(m, "Engine")
         .def(py::init<>())
+        .def("config",              &NardiEngine::GetConfig, 
+             py::return_value_policy::reference)
         .def("AttachTRW",           &NardiEngine::AttachTRW,
              R"(Attaches TerminalRW for terminal view of game state.)")
         .def("DetachRW",            &NardiEngine::DetachRW,
@@ -448,4 +509,40 @@ PYBIND11_MODULE(nardi, m)
         .def("winner_result",       &NardiEngine::winner_result)
         .def("reset",               &NardiEngine::reset)
         .def("should_continue_game",&NardiEngine::should_continue_game);
+
+    py::class_<ScenarioConfig>(m, "ScenarioConfig")
+        .def("withScenario",
+            (Nardi::status_codes (ScenarioConfig::*)(
+                bool,
+                py::array_t<int8_t, py::array::c_style | py::array::forcecast>,
+                int, int, int, int
+            ))                      &ScenarioConfig::withScenario,
+            py::arg("p_idx"),
+            py::arg("board"),
+            py::arg("d1"),
+            py::arg("d2"),
+            py::arg("d1u") = 0,
+            py::arg("d2u") = 0)
+        .def("withDice",            &ScenarioConfig::withDice,
+            py::arg("d1"),
+            py::arg("d2"),
+            py::arg("d1_used") = 0,
+            py::arg("d2_used") = 0)
+        .def("withRandomEndgame",   &ScenarioConfig::withRandomEndgame,
+            py::arg("p_idx") = false);
+
+    py::enum_<Nardi::status_codes>(m, "status_codes")
+        .value("SUCCESS",               Nardi::status_codes::SUCCESS)
+        .value("NO_LEGAL_MOVES_LEFT",   Nardi::status_codes::NO_LEGAL_MOVES_LEFT)
+        .value("OUT_OF_BOUNDS",         Nardi::status_codes::OUT_OF_BOUNDS)
+        .value("START_EMPTY_OR_ENEMY",  Nardi::status_codes::START_EMPTY_OR_ENEMY)
+        .value("DEST_ENEMY",            Nardi::status_codes::DEST_ENEMY)
+        .value("BACKWARDS_MOVE",        Nardi::status_codes::BACKWARDS_MOVE)
+        .value("NO_PATH",               Nardi::status_codes::NO_PATH)
+        .value("PREVENTS_COMPLETION",   Nardi::status_codes::PREVENTS_COMPLETION)
+        .value("BAD_BLOCK",             Nardi::status_codes::BAD_BLOCK)
+        .value("DICE_USED_ALREADY",     Nardi::status_codes::DICE_USED_ALREADY)
+        .value("HEAD_PLAYED_ALREADY",   Nardi::status_codes::HEAD_PLAYED_ALREADY)
+        .value("MISC_FAILURE",          Nardi::status_codes::MISC_FAILURE)
+        .export_values();
 }

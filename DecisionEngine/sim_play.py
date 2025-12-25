@@ -13,6 +13,7 @@ class Simulator:
     def __init__(self):
         self.device = torch.device("cpu") # "mps" if torch.backends.mps.is_available() else "cpu")
         self.eng = nardi.Engine()
+        self.config = self.eng.config()
         
         self.sign = 1            # represents player's turn and change in perspective
         self.max_surprise = 0    # greatest swing in position evaluation after one move in a game
@@ -30,11 +31,14 @@ class Simulator:
         grad = torch.autograd.grad(eval, model.parameters(), retain_graph=False, create_graph=False)
         return eval, grad
     
-    def reset(self):
+    def reset(self, build_pos = None):
         self.sign = 1
         self.max_surprise = 0
         self.turn_num = 0
-        self.eng.reset()
+        if build_pos is None:
+            self.eng.reset()
+        else:
+            build_pos()
            
     def advance_turn(self):
         self.sign *= -1
@@ -170,12 +174,14 @@ class Simulator:
         print("invalid model and strat provided, no valid function call found")
         return None
 
-    def simulate_game(self, p1_move, p2_move, swap_order : bool):        
+    def simulate_game(self, p1_move, p2_move, swap_order : bool, position_setup):    
         if p1_move is None or p2_move is None:
             print("failure initializing model and opp moves, aborting simulation")
             return None
 
-        self.reset()
+        self.reset(position_setup)
+        self.eng.ReAnimate()
+
         while not self.eng.is_terminal():
             is_p1_move = (self.sign == 1 and not swap_order) or (self.sign == -1 and swap_order)
             if is_p1_move:
@@ -186,7 +192,7 @@ class Simulator:
         # game over, return true if first player won, false if second player won
         return is_p1_move
 
-    def benchmark(self, p1, p1_strat : str, p2, p2_strat : str, num_games = 100):
+    def benchmark(self, p1, p1_strat : str, p2=None, p2_strat="random", num_games = 100, position_setup=None):
         if num_games <= 0:
             num_games = 100
 
@@ -203,7 +209,7 @@ class Simulator:
             p1_first = bool(model_first)
 
             for game in tqdm(range(num_games), desc="Inner Loop", leave=False):
-                p1_win = self.simulate_game(p1_move, p2_move, p1_first)
+                p1_win = self.simulate_game(p1_move, p2_move, p1_first, position_setup)
                 
                 p1_score += p1_win * self.eng.winner_result()
                 p2_score += (1 - p1_win) * self.eng.winner_result()
@@ -224,6 +230,6 @@ if __name__ == "__main__":
     model.load_state_dict(state_dict)
     model.eval()
     sim = Simulator()
-    sim.benchmark(model, "lookahead", model, "greedy", 20)
+    sim.benchmark(model, "lookahead", None, "random", 1000, sim.config.withRandomEndgame)
     
     # use cmd line args later for more generality

@@ -68,26 +68,21 @@ void ScenarioBuilder::withBoard(const BoardConfig& b)
 void ScenarioBuilder::withRandomEndgame(bool p_idx)
 {
     BoardConfig rand_board{};
-    // _game.rng
-
-    std::cout <<"initial:\n";
-    DisplayBoard(rand_board);
 
     for (int row = 0; row < 2; ++row)
     {
+        int sign = row ? 1 : -1;
         for(int i = 0; i < 15; ++i)
         {
             int pos = _game.dist(_game.rng);
-            ++rand_board[row][COLS - pos];
+            rand_board[row][COLS - pos] += sign;
         }
     }
 
     _game.turn_number = {2, 2}; // avoid first turn exceptions
 
-    std::cout <<"created:\n";
-    DisplayBoard(rand_board);
     // feed in randomly generated endgame board scenario
-    StartPreRoll(p_idx, rand_board);
+    StartPreRoll(p_idx, rand_board);        
 }
 
 void ScenarioBuilder::ResetControllerState()
