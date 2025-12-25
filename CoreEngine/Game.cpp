@@ -75,7 +75,7 @@ status_codes Game::RollDice() // important to force this only once per turn in c
     return OnRoll();
 }
 
-status_codes Game::SimDice(std::array<int, 2> d_to)
+status_codes Game::SimDice(DieType d_to)
 {
     SetDice(d_to[0], d_to[1]);
     return OnRoll();
@@ -83,7 +83,7 @@ status_codes Game::SimDice(std::array<int, 2> d_to)
 
 status_codes Game::OnRoll()
 {
-    AnimateDice();
+    EmitEvent(GameEvent{EventCode::DICE_ROLL, dice});
     IncrementTurnNumber();  // starts at 0
 
     first_move_exception = false;
@@ -132,14 +132,17 @@ bool Game::AutoPlayTurn(const BoardKey& key)
             }
 
             UseDice(sd._diceIdx);
-            if(arbiter.DiceRemovesFrom(sd._from, sd._diceIdx))
+            if(arbiter.DiceRemovesFrom(sd._from, sd._diceIdx)) {
                 board.Remove(sd._from);
-            else
-                board.Move(sd._from, board.CoordAfterDistance(sd._from, dice[sd._diceIdx]) );
-            
+                EmitEvent(GameEvent{EventCode::REMOVE, RemoveData{sd._from, sd._diceIdx}});
+            }
+            else {
+                Coord dest = board.CoordAfterDistance(sd._from, dice[sd._diceIdx]);
+                board.Move(sd._from, dest);
+                EmitEvent(GameEvent{EventCode::MOVE, MoveData{sd._from, dest, sd._diceIdx}});
+            }
             mvs_this_turn.emplace_back(sd._from, sd._diceIdx);
         }
-        ReAnimate();
         return true;
     }
 }
@@ -206,16 +209,18 @@ status_codes Game::MakeMove(const Coord& start, bool dice_idx)
     if(MockMove(start, dice_idx))
     {
         mvs_this_turn.emplace_back(start, dice_idx);
-        return OnMoveOrRemove();
+
+        Coord end = board.CoordAfterDistance(start, dice[dice_idx]);
+
+        if(end.InBounds())
+            EmitEvent(GameEvent{EventCode::MOVE, MoveData{start, end, dice_idx}});
+        else
+            EmitEvent(GameEvent{EventCode::REMOVE, RemoveData{start, dice_idx}});
+
+        return arbiter.CheckForcedMoves();
     }
     else
         return status_codes::MISC_FAILURE;
-}
-
-status_codes Game::OnMoveOrRemove()
-{
-    ReAnimate();
-    return arbiter.CheckForcedMoves();
 }
 
 bool Game::MockMove(const Coord& start, const Coord& end)
@@ -371,16 +376,10 @@ void Game::SwitchPlayer()
 void Game::IncrementTurnNumber()
 {   ++turn_number[board.PlayerIdx()];   }
 
-void Game::ReAnimate()
+void Game::EmitEvent(const GameEvent& e)
 {
     if(rw)
-        rw->ReAnimate();
-}
-
-void Game::AnimateDice()
-{
-    if(rw)
-        rw->AnimateDice();
+        rw->OnGameEvent(e);
 }
 
 

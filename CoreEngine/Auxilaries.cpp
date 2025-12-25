@@ -40,7 +40,7 @@ Command::Command(bool dice_idx) : action(Actions::MOVE_BY_DICE), payload(dice_id
 
 Command::Command(BoardKey end_key) : action(Actions::AUTOPLAY), payload(end_key) {}
 
-Command::Command(std::array<int, 2> to_set) : action(Actions::SET_DICE), payload(to_set) {}
+Command::Command(DieType to_set) : action(Actions::SET_DICE), payload(to_set) {}
 
 ///////////// Misc Utilities /////////////
 

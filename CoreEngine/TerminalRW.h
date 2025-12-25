@@ -16,12 +16,13 @@ using namespace Nardi;
 class TerminalRW : public ReaderWriter
 {
     public:
-        TerminalRW(const Game& g, Controller& c);
+        TerminalRW(Game& g, Controller& c);
         
-        virtual status_codes AwaitUserCommand() override;
+        virtual status_codes PollInput() override;
+
+        virtual void OnGameEvent(const GameEvent& e) override;
         
-        virtual void ReAnimate() const override;         // show the current state of the game
-        virtual void AnimateDice() const override;
+        virtual void Render() const override;         // show the current state of the game
 
         virtual void InstructionMessage(std::string m) const override;
         virtual void ErrorMessage(std::string m) const override;
@@ -29,8 +30,8 @@ class TerminalRW : public ReaderWriter
 
     protected:
         std::string input;
+        void AnimateDice() const;
         virtual Command Input_to_Command() const override;
-
         std::vector<std::string> splitStringByWhitespace(const std::string& str) const;
         bool isNumeric(std::string s) const;
 };

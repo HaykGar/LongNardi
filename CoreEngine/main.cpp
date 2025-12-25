@@ -23,7 +23,7 @@ Game model;
     std::random_device rd;
     std::mt19937 gen(rd());
 
-    view.ReAnimate();
+    view.Render();
 
     while(!ctrl.QuitRequested() && !model.GameIsOver())
     {
@@ -56,12 +56,12 @@ Game model;
             else    // human player
             {
                 std::cout << "Awaiting command\n";
-                status = view.AwaitUserCommand();
+                status = view.PollInput();
                 std::cout << "received command with result ";
                 DispErrorCode(status);
             }
 
-            view.ReAnimate();
+            view.Render();
         }
 
         isComputerTurn = !isComputerTurn;
@@ -70,15 +70,15 @@ Game model;
 
 int main()
 {
-    // HumanVsRand();
+    HumanVsRand();
 
-    ScenarioBuilder builder;
+    // ScenarioBuilder builder;
 
-    builder.withRandomEndgame();
+    // builder.withRandomEndgame();
 
-    builder.AttachTRW();
+    // builder.AttachTRW();
 
-    builder.ReAnimate();
+    // builder.Render();
 
     // builder.withFirstTurn();
     // auto rc = builder.withScenario(white, TestGlobals::start_brd, 1, 4);

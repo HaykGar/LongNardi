@@ -44,7 +44,7 @@ class Game
 
         // Gameplay
         status_codes RollDice();
-        status_codes SimDice(std::array<int, 2> to_set);
+        status_codes SimDice(DieType to_set);
         status_codes OnRoll();
         status_codes TryStart(const Coord& s);
         status_codes TryFinishMove(const Coord& start, const Coord& end);   // No Removals
@@ -172,9 +172,9 @@ class Game
 
         struct TurnData
         {
-            TurnData(MoveSequence& mv, std::array<int, 2> d) : _moves(mv), _dice(d) {}
+            TurnData(MoveSequence& mv, DieType d) : _moves(mv), _dice(d) {}
             MoveSequence _moves;
-            std::array<int, 2> _dice;
+            DieType _dice;
         };
 
         Board board;
@@ -185,7 +185,7 @@ class Game
         std::mt19937 rng;                           // Mersenne Twister engine
         std::uniform_int_distribution<int> dist;    // uniform distribution for dice
 
-        std::array<int, 2> dice; 
+        DieType dice; 
         std::array<int, 2> times_dice_used;
         std::array<int, 2> turn_number;
 
@@ -207,12 +207,10 @@ class Game
 
         // Updates
         void IncrementTurnNumber();
-        void ReAnimate();
-        void AnimateDice();
+        void EmitEvent(const GameEvent& e);
         
         // Moving
         status_codes MakeMove(const Coord& start, bool dice_idx);
-        status_codes OnMoveOrRemove();
 
         // Mocking
         bool MockMove(const Coord& start, const Coord& end);
@@ -221,6 +219,7 @@ class Game
         bool UndoMove(const Coord& start, const Coord& end);
         bool UndoMove(const Coord& start, bool dice_idx);
         bool UndoMove(const StartAndDice& sd);
+        
 };
 
 

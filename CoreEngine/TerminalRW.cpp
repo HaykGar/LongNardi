@@ -1,9 +1,10 @@
 #include "TerminalRW.h"
 
-TerminalRW::TerminalRW(const Game& game, Controller& c) : ReaderWriter(game, c) {}
+TerminalRW::TerminalRW(Game& game, Controller& c) : ReaderWriter(game, c) {}
 
-void TerminalRW::ReAnimate() const
+void TerminalRW::Render() const
 {
+    AnimateDice();
     const auto& board = g.GetBoardRef();
     bool row = board.PlayerIdx();
     
@@ -69,10 +70,14 @@ void TerminalRW::ReAnimate() const
 
 void TerminalRW::AnimateDice() const  // assumes proper values of dice fed in
 {
-    std::cout << "Player " << static_cast<int>(g.GetBoardRef().PlayerSign()) << ", you rolled: " << g.GetDice(0) << " " << g.GetDice(1) << std::endl;
+    DieType dice = {g.GetDice(0), g.GetDice(1)};
+    if(dice[0] + dice[1] > 0) {
+        std::cout << "Player " << static_cast<int>(g.GetBoardRef().PlayerSign()) << ", you rolled: " 
+                << dice[0] << " " << dice[1] << "\n\n";
+    }
 }
 
-status_codes TerminalRW::AwaitUserCommand()
+status_codes TerminalRW::PollInput()
 {
     std::getline(std::cin, input);
     Command cmd = Input_to_Command();
@@ -82,6 +87,14 @@ status_codes TerminalRW::AwaitUserCommand()
         return ctrl.ReceiveCommand(cmd);
     else
         return code;
+}
+
+void TerminalRW::OnGameEvent(const GameEvent& e)
+{
+    if (e.code != EventCode::QUIT)
+        Render();
+    else
+        InstructionMessage("Game ended by user.");
 }
 
 Command TerminalRW::Input_to_Command() const
@@ -99,7 +112,7 @@ Command TerminalRW::Input_to_Command() const
 
         else if(ch == 'p')
         {
-            ReAnimate();
+            Render();
             return Command(Actions::NO_OP);
         }
 

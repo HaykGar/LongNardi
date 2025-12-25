@@ -16,7 +16,6 @@ class Simulator:
         self.config = self.eng.config()
         
         self.sign = 1            # represents player's turn and change in perspective
-        self.max_surprise = 0    # greatest swing in position evaluation after one move in a game
         self.turn_num = 0        # turn number in current game
         
         self.win_rates = []
@@ -33,7 +32,6 @@ class Simulator:
     
     def reset(self, build_pos = None):
         self.sign = 1
-        self.max_surprise = 0
         self.turn_num = 0
         if build_pos is None:
             self.eng.reset()
@@ -152,7 +150,6 @@ class Simulator:
         
     def human_move(self):
         self.eng.roll()
-        self.eng.ReAnimate()
         while self.eng.human_move():
             continue
         self.advance_turn()
@@ -180,7 +177,7 @@ class Simulator:
             return None
 
         self.reset(position_setup)
-        self.eng.ReAnimate()
+        self.eng.Render()
 
         while not self.eng.is_terminal():
             is_p1_move = (self.sign == 1 and not swap_order) or (self.sign == -1 and swap_order)
@@ -192,7 +189,7 @@ class Simulator:
         # game over, return true if first player won, false if second player won
         return is_p1_move
 
-    def benchmark(self, p1, p1_strat : str, p2=None, p2_strat="random", num_games = 100, position_setup=None):
+    def benchmark(self, p1, p1_strat="greedy", p2=None, p2_strat="random", num_games = 100, position_setup=None):
         if num_games <= 0:
             num_games = 100
 
@@ -230,6 +227,6 @@ if __name__ == "__main__":
     model.load_state_dict(state_dict)
     model.eval()
     sim = Simulator()
-    sim.benchmark(model, "lookahead", None, "random", 1000, sim.config.withRandomEndgame)
+    sim.benchmark(model, "lookahead", None, "human", 1, sim.config.withRandomEndgame)
     
     # use cmd line args later for more generality

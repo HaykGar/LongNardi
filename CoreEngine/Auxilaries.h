@@ -23,6 +23,7 @@ constexpr int PIECES_PER_PLAYER = 15;
 ////////////////////////////////////////////////////////////////////////////////
 
 using BoardConfig = std::array< std::array<int8_t, COLS>, ROWS>;
+using DieType = std::array<int, 2>;
 
 constexpr int BK_ROWS = 6;
 constexpr int BK_COLS = ROWS*COLS + 1;
@@ -111,6 +112,28 @@ struct StartAndDice
 
 using MoveSequence = std::vector<StartAndDice>;
 
+struct MoveData
+{
+    Coord from;
+    Coord to;
+    bool die_idx;
+};
+
+using RemoveData = StartAndDice;
+using EventData = std::variant<std::monostate, MoveData, RemoveData, DieType>;
+
+enum class EventCode {
+    DICE_ROLL,
+    MOVE,
+    REMOVE,
+    QUIT
+};
+
+struct GameEvent {
+    EventCode code;
+    EventData data;
+};
+
 // Helper function to combine hashes
 template <class T>
 inline void hash_combine(std::size_t& seed, const T& v)
@@ -141,10 +164,10 @@ struct Command // considering making this std::variant or something...
     Command(int r, int c);
     Command(bool dice_idx);
     Command(BoardKey final_config);
-    Command(std::array<int, 2> set_to);
+    Command(DieType set_to);
 
     Actions action;
-    std::variant<std::monostate, Coord, bool, BoardKey, std::array<int, 2> > payload;
+    std::variant<std::monostate, Coord, bool, BoardKey, DieType > payload;
 };
 
 void VisualToGameCoord(Coord& coord); // not needed currently, but for graphics later
@@ -241,7 +264,7 @@ BoardConfig preventions2 = {{ { 15 - 3,-1, 0, 1, 0, 0,-1, 1,-1, 0, 0, 1},
 BoardConfig preventions3 = {{ {  0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 3}, 
                               {-12, 1,-1,-1, 0,-1, 2, 0, 2, 2, 2, 2} }};  
 
-inline constexpr std::array<int, 2> prev3dice = {6, 5};
+inline constexpr DieType prev3dice = {6, 5};
 
 inline constexpr 
                          //     0  1  2  3  4. 5. 6. 7. 8. 9. 10 11   
@@ -258,16 +281,16 @@ inline constexpr
 BoardConfig block_check3 = {{ { 2, 2, 2, 2, 2, 0, 2, 2, 2, 2, 2, 2}, 
                               {-9, 0, 0, 0, 0,-1,-1,-1, 0,-1,-1,-1} }};
 
-inline constexpr std::array<int, 2> block3_dice = {6, 5};
+inline constexpr DieType block3_dice = {6, 5};
 
 inline constexpr
                    //      0  1  2  3  4. 5. 6. 7. 8. 9. 10 11   
 BoardConfig block_wrap1 = {{  { 10, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0}, 
                               {-12, 0, 0, 0, 0,-1,-1,-1, 1, 0, 1, 1} }};
 
-inline constexpr std::array<int, 2> wrap_dice1 = {1, 6};
-inline constexpr std::array<int, 2> wrap_dice2 = {1, 3};
-inline constexpr std::array<int, 2> wrap_dice3 = {1, 4}; 
+inline constexpr DieType wrap_dice1 = {1, 6};
+inline constexpr DieType wrap_dice2 = {1, 3};
+inline constexpr DieType wrap_dice3 = {1, 4}; 
 
 inline constexpr 
                          //      0  1  2  3  4. 5. 6. 7. 8. 9. 10 11   
@@ -282,6 +305,6 @@ BoardConfig block_doub1 = {{  {12, 1, 0, 1, 1, 0, 0, 0, 0, 0, 0, 0},
 inline constexpr
 BoardConfig doubles_stacked = {{   { 13, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}, 
                                    {-15, 0, 2, 0, 0, 0, 0, 0, 0, 0, 0, 0} }};
-inline constexpr std::array<int, 2> ds = {3, 3};
+inline constexpr DieType ds = {3, 3};
 
 }

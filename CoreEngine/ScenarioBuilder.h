@@ -52,7 +52,7 @@ class ScenarioBuilder
         ReaderWriter* GetView();
         const ReaderWriter* GetView() const;
 
-        void ReAnimate();
+        void Render();
 
     private:
         Game _game;

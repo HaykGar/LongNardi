@@ -201,9 +201,9 @@ public:
         }
     }
 
-    void ReAnimate() {
+    void Render() {
 
-        _builder.ReAnimate();
+        _builder.Render();
     }
 
     void roll() {
@@ -389,7 +389,7 @@ public:
             throw std::runtime_error("Tried human moves without initializing view");
 
         _view->InstructionMessage("Awaiting command\n");
-        Nardi::status_codes status = _view->AwaitUserCommand();
+        Nardi::status_codes status = _view->PollInput();
         Nardi::DispErrorCode(status);
         return status != Nardi::status_codes::NO_LEGAL_MOVES_LEFT;
     }
@@ -481,7 +481,7 @@ PYBIND11_MODULE(nardi, m)
              R"(Return 1x2 uint8 dimensions of board key.)")
         .def("flat_to_dice",        &NardiEngine::flat_to_dice, 
              R"(Input: int index for flattened dice combo representation. Output: int array length 2, representing dice1, dice2.)")
-        .def("ReAnimate",           &NardiEngine::ReAnimate,
+        .def("Render",           &NardiEngine::Render,
              R"(Roll dice.)")
         .def("roll",                &NardiEngine::roll,
              R"(Roll dice.)")

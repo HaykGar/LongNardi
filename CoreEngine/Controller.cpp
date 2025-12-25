@@ -54,7 +54,7 @@ status_codes Controller::ReceiveCommand(const Command& cmd)
     case Actions::UNDO:
         if(sim_mode)
         {
-            outcome = g.UndoCurrentTurn();          // fixme undoing into no legal moves case `
+            outcome = g.UndoCurrentTurn();          // fixme undoing into no legal moves case. Specifically for chaining undo `
             if(outcome == status_codes::SUCCESS)
             {
                 dice_rolled = true;
