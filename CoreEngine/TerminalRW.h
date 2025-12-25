@@ -31,7 +31,7 @@ class TerminalRW : public ReaderWriter
     protected:
         std::string input;
         void AnimateDice() const;
-        virtual Command Input_to_Command() const override;
+        virtual Command Input_to_Command() const; //override;
         std::vector<std::string> splitStringByWhitespace(const std::string& str) const;
         bool isNumeric(std::string s) const;
 };

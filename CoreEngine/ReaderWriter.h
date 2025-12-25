@@ -30,7 +30,7 @@ class ReaderWriter
         Game& g;
         Controller& ctrl;
 
-        virtual Command Input_to_Command() const = 0;
+        // virtual Command Input_to_Command() const = 0;
 };
 
 }   // namespace Nardi

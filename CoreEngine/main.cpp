@@ -1,5 +1,3 @@
-#include "NardiMVC.h"
-
 #include "Game.h"
 #include "Controller.h"
 #include "TerminalRW.h"
