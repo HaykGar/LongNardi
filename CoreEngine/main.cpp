@@ -10,9 +10,9 @@
 
 using namespace Nardi;
 
-int main()
+void HumanVsRand()
 {
-    Game model;
+Game model;
     Controller ctrl(model);
     TerminalRW view(model, ctrl);
     model.AttachReaderWriter(&view);
@@ -66,8 +66,19 @@ int main()
 
         isComputerTurn = !isComputerTurn;
     }
+}
 
-    // ScenarioBuilder builder;
+int main()
+{
+    // HumanVsRand();
+
+    ScenarioBuilder builder;
+
+    builder.withRandomEndgame();
+
+    builder.AttachTRW();
+
+    builder.ReAnimate();
 
     // builder.withFirstTurn();
     // auto rc = builder.withScenario(white, TestGlobals::start_brd, 1, 4);

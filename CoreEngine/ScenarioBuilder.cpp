@@ -10,12 +10,17 @@ ScenarioBuilder::ScenarioBuilder() : _game(), _ctrl(_game)
     _game.turn_number = {5, 5}; // avoiding first turn case unless explicitly requested
 }
 
-ScenarioBuilder::ScenarioBuilder(const ScenarioBuilder& other) : _game(other._game), _ctrl(_game)
+ScenarioBuilder::ScenarioBuilder(const ScenarioBuilder& other) : _game(other._game), _ctrl(_game), _view()
 {
     _ctrl.start_selected = other._ctrl.start_selected;
     _ctrl.dice_rolled = other._ctrl.dice_rolled;
     _ctrl.quit_requested = other._ctrl.quit_requested;
     _ctrl.sim_mode = other._ctrl.sim_mode;
+
+    /*
+    even if other has a view attached, I don't want the view pointers to look at the same view object, so this
+    also has default behavior of no view
+    */
 }
 
 void ScenarioBuilder::StartPreRoll(bool p_idx, const BoardConfig& b)
@@ -41,22 +46,6 @@ status_codes ScenarioBuilder::withDice(int d1, int d2, int d1_used, int d2_used)
         _game.times_dice_used = { d1_used, d2_used };
 
     return _ctrl.ReceiveCommand(std::array<int, 2>{d1, d2});
-
-    // _game.SetDice(d1, d2);
-
-    // status_codes outcome = _game.OnRoll();
-
-    // if(outcome == status_codes::NO_LEGAL_MOVES_LEFT)
-    //     _ctrl.SwitchTurns();
-    // else
-    //     _ctrl.dice_rolled = true;
-
-    // return outcome;
-}
-
-status_codes ScenarioBuilder::withDice(int d1, int d2)
-{
-    return withDice(d1, d2, 0, 0);
 }
 
 void ScenarioBuilder::withPlayer(bool p_idx)
@@ -69,12 +58,36 @@ void ScenarioBuilder::withBoard(const BoardConfig& b)
 {
     _game.board.head_used = false;
     _game.board.SetData(b);
-    _game.board = _game.board;
 
     _game.mvs_this_turn.clear();
 
     std::stack<Game::TurnData> empty;
     std::swap(_game.history, empty);
+}
+
+void ScenarioBuilder::withRandomEndgame(bool p_idx)
+{
+    BoardConfig rand_board{};
+    // _game.rng
+
+    std::cout <<"initial:\n";
+    DisplayBoard(rand_board);
+
+    for (int row = 0; row < 2; ++row)
+    {
+        for(int i = 0; i < 15; ++i)
+        {
+            int pos = _game.dist(_game.rng);
+            ++rand_board[row][COLS - pos];
+        }
+    }
+
+    _game.turn_number = {2, 2}; // avoid first turn exceptions
+
+    std::cout <<"created:\n";
+    DisplayBoard(rand_board);
+    // feed in randomly generated endgame board scenario
+    StartPreRoll(p_idx, rand_board);
 }
 
 void ScenarioBuilder::ResetControllerState()
@@ -185,5 +198,5 @@ Controller& ScenarioBuilder::GetCtrl()
 const Controller& ScenarioBuilder::GetCtrl() const
 { return _ctrl; }
 
-std::shared_ptr<ReaderWriter> ScenarioBuilder::GetView() { return _view; }
-const std::shared_ptr<ReaderWriter> ScenarioBuilder::GetView() const { return _view; }
+ReaderWriter* ScenarioBuilder::GetView() { return _game.rw; }
+const ReaderWriter* ScenarioBuilder::GetView() const { return _game.rw; }

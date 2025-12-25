@@ -21,8 +21,10 @@ class ScenarioBuilder
 
         // setting internals explicitly
         status_codes withScenario(bool p_idx, const BoardConfig& b, int d1, int d2, int d1u=0, int d2u=0);
-        status_codes withDice(int d1, int d2, int d1_used, int d2_used);
-        status_codes withDice(int d1, int d2);
+        status_codes withDice(int d1, int d2, int d1_used = 0, int d2_used = 0);
+
+        // more general scenarios
+        void withRandomEndgame(bool p_idx = false);
 
         // Actions
         status_codes ReceiveCommand(const Command& c);
@@ -47,8 +49,8 @@ class ScenarioBuilder
         Controller& GetCtrl();
         const Controller& GetCtrl() const;
 
-        std::shared_ptr<ReaderWriter> GetView();
-        const std::shared_ptr<ReaderWriter> GetView() const;
+        ReaderWriter* GetView();
+        const ReaderWriter* GetView() const;
 
         void ReAnimate();
 
