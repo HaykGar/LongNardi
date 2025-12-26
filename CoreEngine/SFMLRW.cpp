@@ -316,6 +316,8 @@ void SFMLRW::Render() const
     drawBoardGrid();
     drawPieces();
     drawDice();
+    if(game_over_screen)
+        drawGameOverOverlay();
     window.display();
 }
 
@@ -330,14 +332,31 @@ status_codes SFMLRW::PollInput()
 
         if (const auto* k = event->getIf<sf::Event::KeyPressed>())
         {
+            if (game_over_screen)
+            {
+                game_over_screen = false;
+                if (k->code != sf::Keyboard::Key::Enter) {
+                    return ctrl.ReceiveCommand(Command(Actions::QUIT));
+                }
+                else {
+                    return ctrl.ReceiveCommand(Command(Actions::RESTART));
+                }
+            }
+
             if (k->code == sf::Keyboard::Key::Q)
                 return ctrl.ReceiveCommand(Command(Actions::QUIT));
 
             if (k->code == sf::Keyboard::Key::R)
                 return ctrl.ReceiveCommand(Command(Actions::ROLL_DICE));
 
-            if (k->code == sf::Keyboard::Key::U)
-                return ctrl.ReceiveCommand(Command(Actions::UNDO));
+            if (k->code == sf::Keyboard::Key::P)
+                return ctrl.ReceiveCommand(Command(Actions::RANDOM_AUTOPLAY));
+            
+            if (k->code == sf::Keyboard::Key::Num0 || k->code == sf::Keyboard::Key::Numpad0)
+                return ctrl.ReceiveCommand(Command(false)); // die 0
+
+            if (k->code == sf::Keyboard::Key::Num1 || k->code == sf::Keyboard::Key::Numpad1)
+                return ctrl.ReceiveCommand(Command(true)); // die 1
         }
 
         if (const auto* m = event->getIf<sf::Event::MouseButtonPressed>())
@@ -376,6 +395,12 @@ void SFMLRW::OnGameEvent(const GameEvent& e)
             window.close();
             return;
 
+        case EventCode::GAME_OVER:
+            game_over_screen = true;
+            statusLine = "Game over!";
+            Render();
+            return;
+
         case EventCode::TURN_SWITCH:
             // New turn: dice not rolled yet
             awaitingRoll = true;
@@ -403,6 +428,37 @@ void SFMLRW::OnGameEvent(const GameEvent& e)
             Render();
             return;
     }
+}
+
+void SFMLRW::drawGameOverOverlay() const
+{
+    sf::RectangleShape overlay({(float)W, (float)H});
+    overlay.setPosition({0.f, 0.f});
+    overlay.setFillColor(sf::Color(0, 0, 0, 180)); // translucent black
+    window.draw(overlay);
+
+    if (!fontLoaded)
+        return;
+
+    float cx = W * 0.5f;
+
+    sf::Text title(font);
+    title.setString("GAME OVER");
+    title.setCharacterSize(48);
+    title.setFillColor(sf::Color::White);
+    auto tb = title.getLocalBounds();
+    title.setOrigin({tb.size.x / 2.f, tb.size.y / 2.f});
+    title.setPosition({cx, H * 0.35f});
+    window.draw(title);
+
+    sf::Text prompt(font);
+    prompt.setString("Press ENTER to play again\nPress any other key to quit");
+    prompt.setCharacterSize(20);
+    prompt.setFillColor(sf::Color(220, 220, 220));
+    auto pb = prompt.getLocalBounds();
+    prompt.setOrigin({pb.size.x / 2.f, pb.size.y / 2.f});
+    prompt.setPosition({cx, H * 0.55f});
+    window.draw(prompt);
 }
 
 

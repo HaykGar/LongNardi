@@ -16,6 +16,7 @@ class Controller
         virtual status_codes ReceiveCommand(const Command& cmd);
         virtual status_codes ReceiveCommand(Actions act);
         bool QuitRequested() const;
+        bool RestartRequested() const;
 
         void SwitchTurns();
         void OnTurnSwitch();
@@ -33,6 +34,7 @@ class Controller
         bool start_selected;
         bool dice_rolled;
         bool quit_requested;
+        bool restart_requested;
         bool sim_mode;
 };
 
@@ -41,6 +43,12 @@ inline
 bool Controller::QuitRequested() const
 {
     return quit_requested;
+}
+
+inline
+bool Controller::RestartRequested() const
+{
+    return restart_requested;
 }
 
 }   // namespace Nardi

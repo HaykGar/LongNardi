@@ -32,6 +32,8 @@ private:
     mutable bool fontLoaded = false;
     mutable bool awaitingRoll = true;
 
+    bool game_over_screen = false;
+
     // Layout
     unsigned W, H;
     float margin = 40.f;
@@ -58,6 +60,8 @@ private:
     void drawPieces() const;
     void drawDice() const;
     void drawHUD() const;
+
+    void drawGameOverOverlay() const;
 
     void drawText(const std::string& s, float x, float y, unsigned size = 18) const;
 

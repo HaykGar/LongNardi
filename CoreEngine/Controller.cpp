@@ -2,7 +2,7 @@
 
 using namespace Nardi;
 
-Controller::Controller(Game& game) : g(game), start(), start_selected(false), dice_rolled(false), quit_requested(false), sim_mode(false) {}
+Controller::Controller(Game& game) : g(game), start(), start_selected(false), dice_rolled(false), quit_requested(false), restart_requested(false), sim_mode(false) {}
 
 Controller::~Controller()
 {}
@@ -39,7 +39,8 @@ void Controller::OnTurnSwitch()
 
 status_codes Controller::ReceiveCommand(const Command& cmd)
 {
-    if(g.GameIsOver() && cmd.action != Actions::UNDO)   // can undo terminal positions
+    if(g.GameIsOver() && cmd.action != Actions::UNDO 
+        && cmd.action != Actions::RESTART && cmd.action != Actions::QUIT)   // can undo terminal positions
         return status_codes::NO_LEGAL_MOVES_LEFT; 
 
     status_codes outcome = status_codes::MISC_FAILURE;
@@ -51,6 +52,11 @@ status_codes Controller::ReceiveCommand(const Command& cmd)
         quit_requested = true;
         outcome = status_codes::NO_LEGAL_MOVES_LEFT;
         break;
+    case Actions::RESTART:
+        restart_requested = true;
+        outcome = status_codes::NO_LEGAL_MOVES_LEFT;
+        break;
+
     case Actions::UNDO:
         if(sim_mode)
         {
@@ -105,6 +111,22 @@ status_codes Controller::ReceiveCommand(const Command& cmd)
                 start_selected = true;
             }
         }
+        break;
+    case Actions::RANDOM_AUTOPLAY: {
+        auto b2s = g.GetBoards2Seqs();
+        if(b2s.size() > 0)
+        {
+            std::unordered_map<BoardKey, MoveSequence, BoardKeyHash>::iterator it = b2s.begin();
+            auto key = it->first;
+            bool auto_played = g.AutoPlayTurn(key);
+            outcome = auto_played ? status_codes::NO_LEGAL_MOVES_LEFT : status_codes::MISC_FAILURE;
+            if(!auto_played)
+            {
+                std::cerr << "failed to auto-play with key\n";
+                DisplayKey(std::get<BoardKey>(cmd.payload));
+            }
+        }
+    }
         break;
     case Actions::AUTOPLAY:
         if(std::holds_alternative<BoardKey>(cmd.payload))

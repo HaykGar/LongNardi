@@ -84,6 +84,8 @@ enum class Actions
     SELECT_SLOT, 
     MOVE_BY_DICE,
     AUTOPLAY,
+    RESTART,
+    RANDOM_AUTOPLAY,
     NO_OP
 };   // later: add resign offer, mars offer
 
@@ -127,6 +129,7 @@ enum class EventCode {
     MOVE,
     REMOVE,
     TURN_SWITCH,
+    GAME_OVER,
     QUIT
 };
 

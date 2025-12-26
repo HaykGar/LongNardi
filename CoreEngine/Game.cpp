@@ -117,16 +117,16 @@ bool Game::AutoPlayTurn(const BoardKey& key)
             auto status = arbiter.CanMoveByDice(sd._from, sd._diceIdx).first;
             if( status != status_codes::SUCCESS){
                 DispErrorCode(status);
-                std::cout << "fme is " << first_move_exception << ", current board:\n";
-                std::cout << "dice are " << dice[0] << ", " << dice[1] << "\n";
+                std::cerr << "fme is " << first_move_exception << ", current board:\n";
+                std::cerr << "dice are " << dice[0] << ", " << dice[1] << "\n";
                 DisplayBoard(board.View());
-                std::cout << "original board:\n";
+                std::cerr << "original board:\n";
                 DisplayBoard(original_brd);
-                std::cout << "attempted move: " << sd._from.AsStr() << " by " << dice[sd._diceIdx] << "\n";
+                std::cerr << "attempted move: " << sd._from.AsStr() << " by " << dice[sd._diceIdx] << "\n";
 
-                std::cout << "full sequence of moves attempting:\n";
+                std::cerr << "full sequence of moves attempting:\n";
                 for (const auto& mv : b2s[key])
-                    std::cout << mv._from.AsStr() << " by " << dice[mv._diceIdx] << "\n";
+                    std::cerr << mv._from.AsStr() << " by " << dice[mv._diceIdx] << "\n";
 
                 throw std::runtime_error("AutoPlay attempted illegal move");
             }
@@ -143,6 +143,7 @@ bool Game::AutoPlayTurn(const BoardKey& key)
             }
             mvs_this_turn.emplace_back(sd._from, sd._diceIdx);
         }
+        arbiter.CheckForcedMoves();
         return true;
     }
 }
@@ -227,7 +228,7 @@ bool Game::MockMove(const Coord& start, const Coord& end)
 {
     if(end.OutOfBounds() || start.OutOfBounds())
     {
-        std::cout << "attempted to mock out of bounds, if attempting removal use the coord, dice overload \n";
+        std::cerr << "attempted to mock out of bounds, if attempting removal use the coord, dice overload \n";
         return false;
     }
     int d = board.GetDistance(start, end);
@@ -244,7 +245,7 @@ bool Game::MockMove(const Coord& start, const Coord& end)
         UseDice(0, d / dice[0]);
     else
     {
-        std::cout << "!!!!\nunexpected input to MockMove\n";
+        std::cerr << "!!!!\nunexpected input to MockMove\n";
         return false;
     }
 
@@ -258,7 +259,7 @@ bool Game::UndoMove(const Coord& start, const Coord& end)
 {
     if(end.OutOfBounds() || start.OutOfBounds())
     {
-        std::cout << "attempted to mock out of bounds, if attempting removal use the coord, dice overload \n";
+        std::cerr << "attempted to mock out of bounds, if attempting removal use the coord, dice overload \n";
         return false;
     }
     int d = board.GetDistance(start, end);
@@ -275,7 +276,7 @@ bool Game::UndoMove(const Coord& start, const Coord& end)
         times_dice_used[0] -= d / dice[0];
     else
     {
-        std::cout << "!!!!\nunexpected input to UndoMove\n";
+        std::cerr << "!!!!\nunexpected input to UndoMove\n";
         return false;
     }
     board.UndoMove(start, end);
@@ -322,7 +323,7 @@ status_codes Game::UndoCurrentTurn()
 {
     if(TurnInProgress() || history.empty())
     {
-        std::cout << "unexpected tip or empty hist in UndoCurrentTurn\n";
+        std::cerr << "unexpected tip or empty hist in UndoCurrentTurn\n";
         return status_codes::MISC_FAILURE;
     }
 
@@ -353,7 +354,9 @@ bool Game::TurnInProgress() const
 }
 
 bool Game::GameIsOver() const 
-{   return (board.PiecesLeft().at(0) == 0 || board.PiecesLeft().at(1) == 0);   }
+{   
+    return (board.PiecesLeft().at(0) == 0 || board.PiecesLeft().at(1) == 0);  
+}
 
 bool Game::IsMars() const
 {
@@ -745,7 +748,6 @@ bool Game::LegalSeqComputer::FirstMoveException()   // fixme re-compute mid turn
                 throw std::runtime_error("First Move error on 4 4");
             }
                 
-
             while(n_2moves > 0)
             {
                 _g.UndoMove(mid, 0);
