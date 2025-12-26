@@ -16,6 +16,7 @@ namespace py = pybind11;
 #include "../CoreEngine/Auxilaries.h"
 #include "../CoreEngine/ReaderWriter.h"
 #include "../CoreEngine/TerminalRW.h"
+#include "../CoreEngine/SFMLRW.h"
 
 
 /*
@@ -30,7 +31,7 @@ class ScenarioConfig
     public:
         ScenarioConfig(Nardi::ScenarioBuilder& sb) : _builder(sb) {}
 
-        Nardi::status_codes withScenario(bool p_idx, const BoardConfig& b, int d1, int d2, int d1u=0, int d2u=0)
+        Nardi::status_codes withScenario(bool p_idx, const Nardi::BoardConfig& b, int d1, int d2, int d1u=0, int d2u=0)
         {
             return _builder.withScenario(p_idx, b, d1, d2, d1u, d2u);
         }
@@ -40,20 +41,20 @@ class ScenarioConfig
             py::array_t<int8_t, py::array::c_style | py::array::forcecast> board,
             int d1, int d2, int d1u = 0, int d2u = 0)
         {
-            if (board.ndim() != 2 || board.shape(0) != ROWS || board.shape(1) != COLS)
+            if (board.ndim() != 2 || board.shape(0) != Nardi::ROWS || board.shape(1) != Nardi::COLS)
                 throw std::runtime_error("BoardConfig must be shape (2, 12)");
 
-            BoardConfig cfg;
+            Nardi::BoardConfig cfg;
             auto buf = board.unchecked<2>();
 
-            for (size_t r = 0; r < ROWS; ++r)
-                for (size_t c = 0; c < COLS; ++c)
+            for (size_t r = 0; r < Nardi::ROWS; ++r)
+                for (size_t c = 0; c < Nardi::COLS; ++c)
                     cfg[r][c] = buf(r, c);
 
             return withScenario(p_idx, cfg, d1, d2, d1u, d2u);
         }
 
-        status_codes withDice(int d1, int d2, int d1_used, int d2_used)
+        Nardi::status_codes withDice(int d1, int d2, int d1_used, int d2_used)
         {
             return _builder.withDice(d1, d2, d1_used, d2_used);
         }        
@@ -75,7 +76,7 @@ class ScenarioConfig
 class NardiEngine {
 public:
     NardiEngine()
-    : _builder(), _config(_builder), _view(nullptr)
+    : _builder(), _config(_builder)
     {
         _builder.withFirstTurn();
     }
@@ -83,16 +84,19 @@ public:
     ScenarioConfig& GetConfig() 
     { return _config; }
 
-    void AttachTRW()
+    void AttachNewTRW()
     {
-        _builder.AttachTRW();
-        _view = _builder.GetView();
+        _builder.AttachNewRW(Nardi::TerminalRWFactory());
+    }
+
+    void AttachNewSFMLRW()
+    {
+        _builder.AttachNewRW(Nardi::SFMLRWFactory());
     }
 
     void DetachRW()
     {
         _builder.DetachRW();
-        _view = nullptr;
     }
 
     int dice_flattened(int i, int j)
@@ -206,8 +210,9 @@ public:
         _builder.Render();
     }
 
-    void roll() {
-        _builder.ReceiveCommand(Nardi::Command(Nardi::Actions::ROLL_DICE));
+    bool roll() {
+        auto status = _builder.ReceiveCommand(Nardi::Command(Nardi::Actions::ROLL_DICE));
+        return status != Nardi::status_codes::NO_LEGAL_MOVES_LEFT;
     }
 
     // Roll dice & return only board keys as [N,6,25] uint8 (end-of-turn leaves).
@@ -384,14 +389,22 @@ public:
         _builder.ReceiveCommand(Nardi::Command(key));
     }
 
-    bool human_move() {
-        if(!_view)
+    void human_turn() 
+    {
+        if(!_builder.GetView())
             throw std::runtime_error("Tried human moves without initializing view");
+        
+        _builder.GetView()->InstructionMessage("Awaiting command\n");
+        
+        while(true)
+        {
+            Nardi::status_codes status = _builder.GetView()->PollInput();
+            if (status != Nardi::status_codes::WAITING)
+                _builder.GetView()->DispErrorCode(status);
 
-        _view->InstructionMessage("Awaiting command\n");
-        Nardi::status_codes status = _view->PollInput();
-        Nardi::DispErrorCode(status);
-        return status != Nardi::status_codes::NO_LEGAL_MOVES_LEFT;
+            if (status == Nardi::status_codes::NO_LEGAL_MOVES_LEFT)
+                break;
+        }
     }
     
     void with_sim_mode()
@@ -457,7 +470,6 @@ private:
     static constexpr int N_DICE_COMB = 21;
     Nardi::ScenarioBuilder _builder;
     ScenarioConfig         _config;
-    Nardi::ReaderWriter*   _view;
 };
 
 // ---- pybind11 module ----
@@ -469,8 +481,10 @@ PYBIND11_MODULE(nardi, m)
         .def(py::init<>())
         .def("config",              &NardiEngine::GetConfig, 
              py::return_value_policy::reference)
-        .def("AttachTRW",           &NardiEngine::AttachTRW,
+        .def("AttachNewTRW",        &NardiEngine::AttachNewTRW,
              R"(Attaches TerminalRW for terminal view of game state.)")
+        .def("AttachNewSFMLRW",     &NardiEngine::AttachNewSFMLRW,
+             R"(Attaches SFMLRW for graphical view of game state.)")
         .def("DetachRW",            &NardiEngine::DetachRW,
              R"(Detaches ReaderWriter removing any view of game.)")
         .def("board_key",           &NardiEngine::board_key,
@@ -481,7 +495,7 @@ PYBIND11_MODULE(nardi, m)
              R"(Return 1x2 uint8 dimensions of board key.)")
         .def("flat_to_dice",        &NardiEngine::flat_to_dice, 
              R"(Input: int index for flattened dice combo representation. Output: int array length 2, representing dice1, dice2.)")
-        .def("Render",           &NardiEngine::Render,
+        .def("Render",              &NardiEngine::Render,
              R"(Roll dice.)")
         .def("roll",                &NardiEngine::roll,
              R"(Roll dice.)")
@@ -489,7 +503,7 @@ PYBIND11_MODULE(nardi, m)
              R"(Roll dice and return uint8 array of shape [N,6,25] with end-of-turn boards.)")
         .def("apply_board",         &NardiEngine::apply_board, py::arg("key"),
              R"(Apply the sequence that reaches the provided board key [6,25] uint8.)")
-        .def("human_move",          &NardiEngine::human_move,
+        .def("human_turn",          &NardiEngine::human_turn,
              R"(Prompt human user for move and return false if their turn is over, true otherwise)")
         .def("children_to_grandchildren", &NardiEngine::children_to_grandchildren, py::arg("children"),
              R"(Given children, return grandchildren for 1-ply lookahead evaluation.)")

@@ -1,6 +1,7 @@
 #include "Game.h"
 #include "Controller.h"
 #include "TerminalRW.h"
+#include "SFMLRW.h"
 #include "ScenarioBuilder.h"
 
 #include <iostream>
@@ -10,7 +11,7 @@ using namespace Nardi;
 
 void HumanVsRand()
 {
-Game model;
+    Game model;
     Controller ctrl(model);
     TerminalRW view(model, ctrl);
     model.AttachReaderWriter(&view);
@@ -66,15 +67,45 @@ Game model;
     }
 }
 
+void GraphicHumanVsHuman()
+{
+    ScenarioBuilder _builder;
+    _builder.AttachNewRW(SFMLRWFactory());
+
+    auto human_turn = [&]()
+    {
+        if(!_builder.GetView())
+            throw std::runtime_error("Tried human moves without initializing view");
+    
+        _builder.GetView()->InstructionMessage("Awaiting command\n");
+        
+        while(true)
+        {
+            Nardi::status_codes status = _builder.GetView()->PollInput();
+            if (status != Nardi::status_codes::WAITING)
+                _builder.GetView()->DispErrorCode(status);
+
+            if (status == Nardi::status_codes::NO_LEGAL_MOVES_LEFT)
+                break;
+        }
+    };
+
+    while(!_builder.GetCtrl().QuitRequested() && !_builder.GetGame().GameIsOver())
+    {
+        human_turn();
+    }
+}
+
 int main()
 {
-    HumanVsRand();
+    GraphicHumanVsHuman();
+    // HumanVsRand();
 
     // ScenarioBuilder builder;
 
     // builder.withRandomEndgame();
 
-    // builder.AttachTRW();
+    // builder.AttachNewRW(TerminalRWFactory());
 
     // builder.Render();
 
