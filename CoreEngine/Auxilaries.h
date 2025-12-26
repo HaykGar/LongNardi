@@ -72,6 +72,7 @@ enum class status_codes
     BAD_BLOCK,
     DICE_USED_ALREADY,
     HEAD_PLAYED_ALREADY,
+    WAITING,
     MISC_FAILURE
 };        
 

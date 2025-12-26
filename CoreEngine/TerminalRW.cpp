@@ -1,5 +1,8 @@
 #include "TerminalRW.h"
 
+namespace Nardi
+{
+
 TerminalRW::TerminalRW(Game& game, Controller& c) : ReaderWriter(game, c) {}
 
 void TerminalRW::Render() const
@@ -163,11 +166,4 @@ void TerminalRW::ErrorMessage(std::string m) const
     std::cerr << m << std::endl;
 }
 
-///////////////////////////
-/////   Factory   ////////
-/////////////////////////
-
-std::unique_ptr<ReaderWriter> TerminalRWFactory(Game& g, Controller& c)
-{
-    return std::make_unique<TerminalRW>(g, c);
 }

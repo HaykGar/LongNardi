@@ -11,7 +11,8 @@
 
 #include <memory>   // for std::unique_ptr factory
 
-using namespace Nardi;
+namespace Nardi
+{
 
 class TerminalRW : public ReaderWriter
 {
@@ -36,4 +37,14 @@ class TerminalRW : public ReaderWriter
         bool isNumeric(std::string s) const;
 };
 
-std::unique_ptr<ReaderWriter> TerminalRWFactory(Game& g, Controller& c);    // factory declaration
+struct TerminalRWFactory : public IRWFactory{
+    virtual std::unique_ptr<ReaderWriter> make(Game& g, Controller& c) const override;
+};
+
+inline
+std::unique_ptr<ReaderWriter> TerminalRWFactory::make(Game& g, Controller& c) const
+{
+    return std::make_unique<TerminalRW>(g, c);
+}
+
+} // namespace Nardi

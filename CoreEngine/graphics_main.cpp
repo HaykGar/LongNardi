@@ -21,7 +21,7 @@ int main()
 
             if(g.GameIsOver())
             {
-                rw->OnGameEvent(GameEvent{ EventCode::GAME_OVER, std::monostate{} });
+                rw->OnGameEvent(Nardi::GameEvent{ Nardi::EventCode::GAME_OVER, std::monostate{} });
                 break;
             }
         }

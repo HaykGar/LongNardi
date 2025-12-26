@@ -115,9 +115,9 @@ void ScenarioBuilder::Reset()
     ResetControllerState();
 }
 
-void ScenarioBuilder::AttachTRW()
+void ScenarioBuilder::AttachNewRW(const IRWFactory& f)
 {
-    _view = std::make_shared<TerminalRW>(_game, _ctrl);
+    _view = std::shared_ptr<ReaderWriter>(f.make(_game, _ctrl));
     _game.AttachReaderWriter(_view.get());
 }
 

@@ -381,7 +381,8 @@ status_codes SFMLRW::PollInput()
     }
 
     Render();
-    return status_codes::SUCCESS;
+    // return status_codes::SUCCESS;
+    return status_codes::WAITING;
 }
 
 void SFMLRW::OnGameEvent(const GameEvent& e)

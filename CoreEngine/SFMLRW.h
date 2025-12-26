@@ -72,4 +72,14 @@ private:
     void tryLoadFont();
 };
 
+struct SFMLRWFactory : public IRWFactory{
+    virtual std::unique_ptr<ReaderWriter> make(Game& g, Controller& c) const override;
+};
+
+inline
+std::unique_ptr<ReaderWriter> SFMLRWFactory::make(Game& g, Controller& c) const
+{
+    return std::make_unique<SFMLRW>(g, c);
+}
+
 } // namespace Nardi

@@ -33,4 +33,14 @@ class ReaderWriter
         // virtual Command Input_to_Command() const = 0;
 };
 
+struct IRWFactory {
+    virtual ~IRWFactory() = default;
+    virtual std::unique_ptr<ReaderWriter> make(Game& g, Controller& c) const = 0;
+};
+
+inline std::unique_ptr<ReaderWriter>
+MakeRW(const IRWFactory& f, Game& g, Controller& c) {
+    return f.make(g, c);
+}
+
 }   // namespace Nardi

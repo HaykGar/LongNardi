@@ -4,7 +4,6 @@
 #include "Controller.h"
 #include "Auxilaries.h"
 #include "ReaderWriter.h"
-#include "TerminalRW.h"
 #include <sstream>
 
 namespace Nardi
@@ -29,7 +28,8 @@ class ScenarioBuilder
         // Actions
         status_codes ReceiveCommand(const Command& c);
         void Reset();
-        void AttachTRW();
+
+        void AttachNewRW(const IRWFactory& f);
 
         void DetachRW();
 
