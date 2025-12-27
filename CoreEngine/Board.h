@@ -61,7 +61,7 @@ public:
 
     // Nested struct for feature extraction
     //features are from perspective of player whose move it is. Hence, no negative values.
-    struct BoardFeatures
+    struct Features
     {
         struct PlayerBoardInfo
         {
@@ -82,10 +82,11 @@ public:
         PlayerBoardInfo player;
         PlayerBoardInfo opp;
 
-        std::array<std::array<uint8_t, ROWS*COLS>, 2> raw_plyr_channels{};
+        BoardConfig raw_data;
     };
 
-    const BoardFeatures ExtractFeatures() const;
+    const Features ExtractFeatures() const;
+    const Features ExtractFeatures(const BoardConfig& other_data) const;
 
     friend class ScenarioBuilder;
 private:

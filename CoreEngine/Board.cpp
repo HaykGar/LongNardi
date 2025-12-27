@@ -273,12 +273,14 @@ bool Board::CurrPlayerInEndgame() const
 
 ///////////// Feature extraction /////////////
 
-const Board::BoardFeatures Board::ExtractFeatures() const
+const Board::Features Board::ExtractFeatures() const
 {
-    BoardFeatures features;
-    // important: both occ arrays 0-init
-    BoardFeatures::PlayerBoardInfo& player  = features.player;
-    BoardFeatures::PlayerBoardInfo& opp     = features.opp;
+    Features features;
+    features.raw_data = data;
+
+    // important note: both occ arrays 0-init
+    Features::PlayerBoardInfo& player  = features.player;
+    Features::PlayerBoardInfo& opp     = features.opp;
 
     player.pip_count = 0;
     opp.pip_count = 0;
@@ -316,7 +318,6 @@ const Board::BoardFeatures Board::ExtractFeatures() const
                 opp.pip_count += n_pieces * (GetDistance(coord, {player_idx, COLS-1}, !player_idx) + 1);
         }
 
-        features.raw_plyr_channels[!friendly][i] = n_pieces;
     }
 
     // pieces off
@@ -332,4 +333,13 @@ const Board::BoardFeatures Board::ExtractFeatures() const
     opp.sq_occ    = sq_oc_each[1];
 
     return features;
+}
+
+const Board::Features Board::ExtractFeatures(const BoardConfig& other_data) const
+{
+    Board helper(other_data);
+    if(helper.PlayerIdx() != player_idx)
+        helper.SwitchPlayer();
+    
+    return helper.ExtractFeatures();
 }
