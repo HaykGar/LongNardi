@@ -103,6 +103,9 @@ bool Game::BadBlockMonitor::IsFixable() // reminder the block is already mocked 
     else
         moves_left = total_moves_per_die - _g.times_dice_used[available_dice];
 
+    if(moves_left < 1)
+        return false;
+
     auto CanFixFrom = [&](const Coord& start) -> bool 
     {
         Coord dest = _g.board.CoordAfterDistance(start, _g.dice[available_dice], _g.board.PlayerIdx());   // in player's direction
@@ -121,8 +124,7 @@ bool Game::BadBlockMonitor::IsFixable() // reminder the block is already mocked 
                     break;
             }
 
-            bool fixed = (moves_made == moves_left) && !BlockingAll(); 
-                // can actually move all of these pieces in the stack and it unblocks
+            bool fixed = !BlockingAll(); 
 
             for(int i = 0; i < moves_made; ++i)
                 _g.UndoMove(start, available_dice);

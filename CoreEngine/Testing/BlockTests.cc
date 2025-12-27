@@ -192,6 +192,48 @@ TEST_F(TestBuilder, UnliftableWithDoubles)
     ASSERT_NE(ReceiveCommand(Command(first)),status_codes::SUCCESS);
 }
 
+TEST_F(TestBuilder, LiftableWithDoubles)
+{
+    BoardConfig block_dubar = {{    { 7, 0,-2, 1, 2, 1, 1, 1, 0, 0, 1, 0},
+                                    {-6,-1, 0,-1,-2,-1, 1, 0, 0,-2, 0, 0} }};
+
+    auto status = StartOfTurn(white, block_dubar, 2, 2);
+    ASSERT_EQ(status, status_codes::SUCCESS);
+    ASSERT_EQ(ReceiveCommand(Command(0, 4)), status_codes::SUCCESS);
+    ASSERT_EQ(ReceiveCommand(Command(0, 8)), status_codes::SUCCESS);
+    // this creates a liftable block, should be ok, but would not 
+
+
+    // try again but pre-use 1 dice this time
+    status = StartOfTurn(white, block_dubar, 2, 2);
+    ASSERT_EQ(status, status_codes::SUCCESS);
+    // use dice twice before same test
+    ASSERT_EQ(ReceiveCommand(Command(1, 6)), status_codes::SUCCESS);
+    ASSERT_EQ(ReceiveCommand(Command(1, 8)), status_codes::SUCCESS);
+
+    // 1 dice uses left so should be ok
+    ASSERT_EQ(ReceiveCommand(Command(0, 4)), status_codes::SUCCESS);
+    status = ReceiveCommand(Command(0, 8));
+    ASSERT_EQ(status, status_codes::SUCCESS);
+    ASSERT_NE(status, status_codes::NO_LEGAL_MOVES_LEFT);
+
+
+    // Once more 2 dice pre-uses, 2 left so should NOT be ok
+
+    status = StartOfTurn(white, block_dubar, 2, 2);
+    ASSERT_EQ(status, status_codes::SUCCESS);
+    // use dice twice before same test
+    ASSERT_EQ(ReceiveCommand(Command(1, 6)), status_codes::SUCCESS);
+    ASSERT_EQ(ReceiveCommand(Command(1, 10)), status_codes::SUCCESS);
+
+    ASSERT_EQ(ReceiveCommand(Command(0, 4)), status_codes::SUCCESS);
+    status = ReceiveCommand(Command(0, 8));
+    ASSERT_NE(status, status_codes::SUCCESS);
+    ASSERT_NE(status, status_codes::NO_LEGAL_MOVES_LEFT);
+
+    // the last test should fail, we should have a bad block so no success and no turn finish
+}
+
 TEST_F(TestBuilder, BlockEndOfTurn)
 {
     BoardConfig blockUnblock = {{   {3, 2, 2, 2, 2, 0, 0, 0, 0, 0, 0, 0}, 
