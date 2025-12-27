@@ -165,51 +165,6 @@ struct Command // considering making this std::variant or something...
     std::variant<std::monostate, Coord, bool, BoardConfig, DieType > payload;
 };
 
-struct PlayerBoardInfo
-{
-    /*
-    first row of each sub-occ array is 1 for every coord that player occupies, 0 everywhere else
-    second "                     " 1 "                                  " with 2 or more pieces
-    third "                      " n_pieces - 2 "                       " with 3 or more pieces
-    */
-    std::array<std::array<uint8_t, ROWS*COLS>, 3> occ;
-
-    uint8_t pieces_off; // pieces removed by player
-    uint8_t pieces_not_reached;
-};
-
-/*
-features are from perspective of player whose move it is. Hence, no negative values.
-*/
-struct BoardFeatures
-{
-    BoardFeatures(BoardConfig board, bool p_idx);    
-    PlayerBoardInfo player;
-    PlayerBoardInfo opp;
-};
-
-/*
-BoardConfig Representation:
-
-        24 ct                   1ct
------- 1-pieces w ------| pieces off w 
-........................|       .
------- 2-pieces w ------| pieces off b
-........................|       .
------- 3-pieces w ------| total sq occupied w
-........................|       .
------- 1-pieces b ------| total sq occupied b
-........................|       .
------- 2-pieces b ------| pieces not reached w
-........................|       .
------- 3-pieces b ------| pieces not reached b
-........................|       .
-
-hoping that intuitively, pieces not reached conveys "endgame-ness" with higher value indicating 
-    less endgame-ness
-
-Idea: do something smarter, craft total possible moves blocked instead of sq occ?
-*/
 
 ////////////////////////////////////////////////////////////////////////////////
 // utility functions 
@@ -221,51 +176,6 @@ void DispErrorCode(status_codes code);
 
 void DisplayBoard(const BoardConfig& b);
 void DisplayKey(const BoardConfig& bk);
-
-// const BoardConfig AsKey()
-// {
-//     BoardConfig key = {};      // does this guarantee initializing to 0 ?
-//     std::array<int, 2> sq_occ = {0, 0};
-
-//     // player channels
-//     Coord start(player_idx, 0);
-//     for(int i = 0; i < ROWS*COLS; ++i)
-//     {
-//         Coord coord = CoordAfterDistance(start, i);
-//         int occupancy = at(coord) * player_sign;
-//         int n_pieces = abs(occupancy);
-//         int key_row = (occupancy >= 0) ? 0 : 3;
-        
-//         if(n_pieces <= 1)   // 1 or 0
-//             key[key_row][i] = n_pieces;
-//         else // n_pieces > 1
-//         {
-//             key[key_row][i] = 1;
-//             key[key_row+1][i] = 1;
-//             key[key_row+2][i] = n_pieces - 2;
-//         }
-
-//         if(n_pieces > 0)
-//             ++sq_occ[(occupancy < 0)];    // idx 1 for opponent, 0 for friendly
-//     }
-
-
-//     // pieces off
-//     key[0][ROWS*COLS] = pieces_per_player[player_idx] - pieces_left[player_idx];
-//     key[1][ROWS*COLS] = pieces_per_player[!player_idx] - pieces_left[!player_idx];
-
-//     // total squares occupied
-//     key[2][ROWS*COLS] = sq_occ[0];
-//     key[3][ROWS*COLS] = sq_occ[1];
-
-//     // pieces not reached home
-//     key[4][ROWS*COLS] = pieces_per_player[player_idx] - reached_enemy_home[player_idx];
-//     key[5][ROWS*COLS] = pieces_per_player[!player_idx] - reached_enemy_home[!player_idx];
-
-//     return key;
-// }
-
-
 
 }   // namespace Nardi
 

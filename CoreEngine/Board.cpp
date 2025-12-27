@@ -270,3 +270,66 @@ bool Board::HeadReuseIssue(const Coord& coord) const
 
 bool Board::CurrPlayerInEndgame() const
 {   return reached_enemy_home[player_idx] >= pieces_per_player[player_idx];   }
+
+///////////// Feature extraction /////////////
+
+const Board::BoardFeatures Board::ExtractFeatures() const
+{
+    BoardFeatures features;
+    // important: both occ arrays 0-init
+    BoardFeatures::PlayerBoardInfo& player  = features.player;
+    BoardFeatures::PlayerBoardInfo& opp     = features.opp;
+
+    player.pip_count = 0;
+    opp.pip_count = 0;
+
+    std::array<int, 2> sq_oc_each{};
+
+    // fill occ arrays, sq_occ, pip counts, and unblocked dice options for both players 
+    Coord head(player_idx, 0); // player head
+    for(int i = 0; i < ROWS*COLS; ++i)
+    {
+        Coord coord = CoordAfterDistance(head, i);
+        int occupancy = at(coord) * player_sign;
+        int n_pieces = abs(occupancy);
+
+        bool friendly = (occupancy >= 0);
+        std::array<std::array<uint8_t, ROWS*COLS>, 3>& occ = friendly ? player.occ : opp.occ;
+        
+        if(n_pieces <= 1)   // 1 or 0
+            occ[0][i] = n_pieces;
+        else // n_pieces >= 2
+        {
+            occ[0][i] = 1;
+            occ[1][i] = 1;
+            occ[2][i] = n_pieces - 2;
+        }
+
+        if(n_pieces > 0)
+        {
+            ++sq_oc_each[!friendly];
+
+            // add one to distance to simulate removal
+            if(friendly)
+                player.pip_count += n_pieces * (GetDistance(coord, {!player_idx, COLS-1}) + 1);
+            else
+                opp.pip_count += n_pieces * (GetDistance(coord, {player_idx, COLS-1}, !player_idx) + 1);
+        }
+
+        features.raw_plyr_channels[!friendly][i] = n_pieces;
+    }
+
+    // pieces off
+    player.pieces_off = pieces_per_player[player_idx] - pieces_left[player_idx];
+    opp.pieces_off = pieces_per_player[!player_idx] - pieces_left[!player_idx];
+
+    // pieces not reached home
+    player.pieces_not_reached = pieces_per_player[player_idx] - reached_enemy_home[player_idx];
+    opp.pieces_not_reached = pieces_per_player[!player_idx] - reached_enemy_home[!player_idx];
+
+    // legacy: total pieces occupied each
+    player.sq_occ = sq_oc_each[0];
+    opp.sq_occ    = sq_oc_each[1];
+
+    return features;
+}

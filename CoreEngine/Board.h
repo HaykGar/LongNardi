@@ -18,7 +18,6 @@ public:
     const int8_t& at(size_t r, size_t c) const;
     const BoardConfig& View() const;
     
-
     bool PlayerIdx() const;
     int8_t PlayerSign() const;
     bool HeadUsed() const;
@@ -59,6 +58,34 @@ public:
 
     // operators
     bool operator==(const Board& other) const;
+
+    // Nested struct for feature extraction
+    //features are from perspective of player whose move it is. Hence, no negative values.
+    struct BoardFeatures
+    {
+        struct PlayerBoardInfo
+        {
+            /*
+            first row of each sub-occ array is 1 for every coord that player occupies, 0 everywhere else
+            second "                     " 1 "                                  " with 2 or more pieces
+            third "                      " n_pieces - 2 "                       " with 3 or more pieces
+            */
+            std::array<std::array<uint8_t, ROWS*COLS>, 3> occ{};    // 0-init
+
+            int pip_count = 0;      // number of 1-moves to remove all pieces
+
+            uint8_t pieces_off; // pieces removed by player
+            uint8_t pieces_not_reached;
+            uint8_t sq_occ;
+        };
+        
+        PlayerBoardInfo player;
+        PlayerBoardInfo opp;
+
+        std::array<std::array<uint8_t, ROWS*COLS>, 2> raw_plyr_channels{};
+    };
+
+    const BoardFeatures ExtractFeatures() const;
 
     friend class ScenarioBuilder;
 private:
