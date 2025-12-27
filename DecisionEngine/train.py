@@ -1,214 +1,248 @@
-import nardi
-from sim_play import SimPlay
+from sim_play import Simulator
 from nardi_net import NardiNet
 
 import torch
 import numpy as np
 from tqdm import tqdm
 import os
-import argparse
 import matplotlib.pyplot as plt
 
-#####################################    
-######### command line args #########     
-#####################################
+#TODO make the hyperparams init args with default values
 
-def positive_int(value):
-    """Custom type for positive integers (>0)."""
-    ivalue = int(value)
-    if ivalue <= 0:
-        raise argparse.ArgumentTypeError(f"{value} must be > 0")
-    return ivalue
+class TDTrainer:
+    def __init__(self, model, output_dir="", weights_file=None):
+    ###################################
+    ######### hyperparameters #########     
+    ###################################
+        self.LAMBDA = 0.7           # Temporal Difference parameter
+        self.alpha = 0.01           # Learning Rate
+        self.alpha_0 = self.alpha   # initial learning rate
+        self.alpha_min = 0.001      # minimum learning rate
 
-def valid_dir(dirpath):
-    """Ensure provided path is a valid directory."""
-    if dirpath is not None:
-        if not os.path.exists(dirpath):
-            os.makedirs(dirpath)
-    return dirpath
+        self.K = 24                 # Turns per game with Noise
+        self.eps = 0.25             # mixing parameter for noise
+        self.eps0 = self.eps        # initial epsilon
+        self.eps_min = 0.1          # minimum allowed epsilon
+        self.h_e = 15               # epsilon half-life          
 
-def valid_file(filepath):
-    if not os.path.exists(filepath):
-        print(f"File not found: '{filepath}'. Creating a new empty file.")
-        try:
-            with open(filepath, 'w') as f:
-                pass
-            print(f"Successfully created '{filepath}'.")
-        except IOError as e:
-            print(f"Error creating file '{filepath}': {e}")
-            return None
-    
-    return filepath
-
-parser = argparse.ArgumentParser(
-    description="Process two positive integers, a directory path, and an optional filename."
-)
-
-parser.add_argument("layer1_size", type=positive_int, help="number of nodes in the first hidden layer")
-parser.add_argument("layer2_size", type=positive_int, help="number of nodes in the second hidden layer")
-parser.add_argument("--directory", type=valid_dir, help="Optional path to an existing directory", default=None)
-parser.add_argument("-f", "--file", type=valid_file, help="Optional filename for loading network weights", default=None)
-
-args = parser.parse_args()
-
-#################################
-######### training vars #########     
-#################################
-
-LAMBDA = 0.7        # Temporal Difference parameter
-alpha = 0.01        # Learning Rate
-alpha_0 = alpha     # initial learning rate
-alpha_min = 0.001   # minimum learning rate
-
-K = 24              # Turns per game with Noise
-eps = 0.25          # mixing parameter for noise
-eps0 = eps          # initial epsilon
-eps_min = 0.1       # minimum allowed epsilon
-h_e = 15            # epsilon half-life          
-
-temperature = 1     # for selecting moves weighted by eval
-t0 = temperature    # initial temperature
-t_min = 0.1         # minimum temperature
-h_t = 20            # stages per temperature half-life
-
-points = [0, 0]
-eval_traces = []
-surprises = []
-
-weights_file = args.file
-output_dir = args.directory
-
-################################
-########   train loop   ########            
-################################
-
-simulator = SimPlay()
-last_wr = 0
-no_improve = 0
-
-model = NardiNet(args.layer1_size, args.layer2_size)
-if weights_file is not None and os.path.getsize(weights_file) != 0:
-    model.load_state_dict(torch.load(weights_file))
-
-model.to(simulator.device)
-
-print("pre-training random simulation")
-mod_score, rand_score = simulator.benchmark(model1=model, model_strat="greedy", num_games=20)
-print(f"model score: {mod_score}, random score: {rand_score}")
-
-for stage in tqdm(range(100), desc="Outer Loop"):
-    evals = []
-    # anneal noise and temperature
-    eps = eps_min + (eps0 - eps_min) * 2.0**(-stage / h_e)  
-    temperature = t_min + (t0 - t_min) * 2.0**(-stage / h_t)
-    
-    for game in tqdm(range(5000), desc=f"Inner Loop {stage+1}", leave=False):
-        simulator.reset()
+        self.temperature = 1        # for selecting moves weighted by eval
+        self.t0 = self.temperature  # initial temperature
+        self.t_min = 0.1            # minimum temperature
+        self.h_t = 20               # stages per temperature half-life    
         
-        Y_new, g = simulator.eval_and_grad(model)
-        if game == 0:
+    #################################
+    ######### training vars #########     
+    #################################
+        self.points = [0, 0]
+        self.eval_traces = []
+        self.surprises = []
+        self.last_wr = 0
+        self.no_improve = 0
+        
+        self.output_dir = output_dir
+        self.weights_file = weights_file
+        
+    #######################################
+    ######### model and simulator #########     
+    #######################################
+        self.simulator = Simulator()
+        
+        self.model = model
+        if weights_file is not None and os.path.getsize(weights_file) != 0:
+            self.model.load_state_dict(torch.load(weights_file))
+
+        self.model.to(self.simulator.device)
+        
+    ####################################
+    ######### helper functions #########     
+    ####################################
+    
+    def record_results(self):   
+        if self.output_dir is not None:
+            win_rates = self.simulator.win_rates
+            # Plot max_surprise over training stages
+            plt.figure(figsize=(10, 4))
+            plt.plot(self.surprises)
+            plt.title('Max Surprise Per Stage')
+            plt.xlabel('Stage')
+            plt.ylabel('Max Surprise')
+            plt.grid(True)
+            plt.savefig(os.path.join(self.output_dir, 'max_surprise_per_stage.png'))
+            plt.close()  # Close the figure to free up memory
+
+            # Plot eval trajectories for select games
+            for i, trace in enumerate(self.eval_traces):
+                plt.figure(figsize=(8, 3))
+                plt.plot(trace, marker='o')
+                plt.title(f'Eval Trajectory - Game {i+1}')
+                plt.xlabel('Move #')
+                plt.ylabel('Eval')
+                plt.grid(True)
+                plt.savefig(os.path.join(self.output_dir, f'eval_trajectory_game_{i+1}.png'))
+                plt.close()
+
+            # Plot win_rate over training stages
+            plt.figure(figsize=(10, 4))
+            plt.plot(win_rates)
+            plt.title('Win Rate Per Stage')
+            plt.xlabel('Stage')
+            plt.ylabel('Win Rate')
+            plt.grid(True)
+            plt.savefig(os.path.join(self.output_dir, 'win_rate_per_stage.png'))
+            plt.close()
+            
+    def playout(self, track_eval : bool):
+        
+        self.simulator.reset()
+        max_surprise = 0    # greatest swing in position evaluation after one move in a game
+        evals = []
+
+        Y_new, g = self.simulator.eval_and_grad(self.model)
+        if track_eval:
             evals.append(float(Y_new.item()))
         
-        accum_grad = [torch.zeros_like(p, device=simulator.device) for p in model.parameters()] # in shape of weights gradient
+        accum_grad = [torch.zeros_like(p, device=self.simulator.device) for p in self.model.parameters()] # in shape of weights gradient
 
-        while not simulator.eng.is_terminal():
+        while not self.simulator.eng.is_terminal():
             Y_old = Y_new
             
-            torch._foreach_mul_(accum_grad, LAMBDA)        # e ← λ e  
+            torch._foreach_mul_(accum_grad, self.LAMBDA)        # e ← λ e  
             torch._foreach_add_(accum_grad, g)          # e ← e + ∇V_t-1  
             
-            simulator.apply_noisy_move(K, eps, temperature, model)
+            self.simulator.apply_noisy_move(self.K, self.eps, self.temperature, self.model)
 
-            if not simulator.eng.is_terminal():
-                Y_new, g = simulator.eval_and_grad(model)
+            if not self.simulator.eng.is_terminal():
+                Y_new, g = self.simulator.eval_and_grad(self.model)
             else:
-                Y_new = torch.tensor(-simulator.sign * simulator.eng.winner_result(), device=simulator.device, dtype=torch.float32)   
+                Y_new = torch.tensor(-self.simulator.sign * self.simulator.eng.winner_result(), device=self.simulator.device, dtype=torch.float32)   
                     # need to unflip sign here
-                points[(simulator.sign == -1)] += simulator.eng.winner_result()
+                self.points[(self.simulator.sign == -1)] += self.simulator.eng.winner_result()
 
-            if game == 0:
+            if track_eval:
                 evals.append(float(Y_new.item()))
 
             delta = Y_new - Y_old
             
-            if abs(delta) > simulator.max_surprise:
+            if abs(delta) > max_surprise:
                 max_surprise = abs(delta)
 
             delta = torch.clamp(delta, min=-1, max=1)
             
             with torch.no_grad():
-                torch._foreach_add_(list(model.parameters()), accum_grad, alpha=alpha * float(delta)) # w = w + alpha*delta*accum_grad
-    
-    ################################ per stage report + actions ################################     
-    print()
-    surprises.append(float(max_surprise.item()))      # greatest swing in eval during the last game            
-    print("max surprise of ", max_surprise)
-    
-    print(f"results of simulation {stage+1}")
-    mod_score, rand_score = simulator.benchmark(model1=model, num_games=1000)    
-    print(f"model score: {mod_score}, random score: {rand_score}")
-    print()
-    
-    wr = 100 * mod_score / (mod_score + rand_score)
-    if wr - last_wr < 0.1:
-        no_improve += 1
-        if no_improve > 5:
-            alpha = alpha_min + 0.7 * (alpha - alpha_min)
-            no_improve = 0
-    last_wr = wr
-    
-    eval_traces.append(evals)
-    if weights_file is not None:
-        torch.save(model.state_dict(), weights_file)    # save weights to file after each stage
-    ################################ end stage report + actions ################################     
-
-
+                torch._foreach_add_(list(self.model.parameters()), accum_grad, alpha=self.alpha * float(delta)) 
+                # w = w + alpha*delta*accum_grad
+                
+        if track_eval:
+            return max_surprise, evals
 ################################
-######## end train loop ########            
+########   train loop   ########            
 ################################
 
-print(f"post-training simulation with lookahead")
-mod_score, rand_score = simulator.benchmark(model1=model, model_strat="lookahead", num_games=10)
-print(f"model score: {mod_score}, random score: {rand_score}")
+    def train(self, n_stages=100, games_per_stage=5000):
+        print("pre-training simulation")
+        mod_score, rand_score = self.simulator.benchmark(self.model, "greedy", num_games=20)
+        print(f"model score: {mod_score}, baseline score: {rand_score}")
+        
+        evals = []
+        max_surprise = 0
 
-print("total points each: ", points)
+        for stage in tqdm(range(n_stages), desc="Outer Loop"):
+            # anneal noise and temperature
+            self.eps = self.eps_min + (self.eps0 - self.eps_min) * 2.0**(-stage / self.h_e)  
+            self.temperature = self.t_min + (self.t0 - self.t_min) * 2.0**(-stage / self.h_t)
+            
+            for game in tqdm(range(games_per_stage), desc=f"Inner Loop {stage+1}", leave=False):
+                if game == 0:
+                    max_surprise, evals = self.playout(track_eval=True)
+                else:
+                    self.playout(track_eval=False)
+            ################################ per stage report + actions ################################     
+            print()
+            self.surprises.append(float(max_surprise.item()))      # greatest swing in eval during the first game            
+            print("max surprise of ", max_surprise)
+            
+            print(f"results of simulation {stage+1}")
+            mod_score, rand_score = self.simulator.benchmark(self.model, "greedy",num_games=1000)    
+            print(f"model score: {mod_score}, baseline score: {rand_score}")
+            print()
+            
+            self.wr = 100 * mod_score / (mod_score + rand_score)
+            if self.wr - self.last_wr < 0.03:
+                self.no_improve += 1
+                if self.no_improve > 5:
+                    self.alpha = self.alpha_min + 0.7 * (self.alpha - self.alpha_min)
+                    self.no_improve = 0
+            self.last_wr = self.wr
+            
+            self.eval_traces.append(evals)
+            if self.weights_file is not None:
+                torch.save(self.model.state_dict(), self.weights_file)    # save weights to file after each stage
+            ################################ end stage report + actions ################################     
 
-# np.save('rand_wins.npy', np.array(simulator.opp_wins, dtype=object), allow_pickle=True)
+        print(f"post-training simulation")
+        mod_score, rand_score = self.simulator.benchmark(self.model, "greedy", num_games=10)
+        print(f"model score: {mod_score}, baseline score: {rand_score}")
 
-if output_dir is not None:
+        print("total points each: ", self.points)
+        self.record_results()
+
+####################################
+########   end train loop   ########            
+####################################
+
+if __name__ == "__main__":
+    # import argparse
+
+    # #####################################    
+    # ######### command line args #########     
+    # #####################################
+
+    # def positive_int(value):
+    #     """Custom type for positive integers (>0)."""
+    #     ivalue = int(value)
+    #     if ivalue <= 0:
+    #         raise argparse.ArgumentTypeError(f"{value} must be > 0")
+    #     return ivalue
+
+    # def valid_dir(dirpath):
+    #     """Ensure provided path is a valid directory."""
+    #     if dirpath is not None:
+    #         if not os.path.exists(dirpath):
+    #             os.makedirs(dirpath)
+    #     return dirpath
+
+    # def valid_file(filepath):
+    #     if not os.path.exists(filepath):
+    #         print(f"File not found: '{filepath}'. Creating a new empty file.")
+    #         try:
+    #             with open(filepath, 'w') as f:
+    #                 pass
+    #             print(f"Successfully created '{filepath}'.")
+    #         except IOError as e:
+    #             print(f"Error creating file '{filepath}': {e}")
+    #             return None
+        
+    #     return filepath
+
+    # parser = argparse.ArgumentParser(
+    #     description="Process two positive integers, a directory path, and an optional filename."
+    # )
+
+    # parser.add_argument("layer1_size", type=positive_int, help="number of nodes in the first hidden layer")
+    # parser.add_argument("layer2_size", type=positive_int, help="number of nodes in the second hidden layer")
+    # parser.add_argument("--directory", type=valid_dir, help="Optional path to an existing directory", default=None)
+    # parser.add_argument("-f", "--file", type=valid_file, help="Optional filename for loading network weights", default=None)
+
+    # args = parser.parse_args()
     
-    win_rates = simulator.win_rates
-
-    # Plot max_surprise over training stages
-    plt.figure(figsize=(10, 4))
-    plt.plot(surprises)
-    plt.title('Max Surprise Per Stage')
-    plt.xlabel('Stage')
-    plt.ylabel('Max Surprise')
-    plt.grid(True)
-    plt.savefig(os.path.join(output_dir, 'max_surprise_per_stage.png'))
-    plt.close()  # Close the figure to free up memory
-
-    # Plot eval trajectories for select games
-    for i, trace in enumerate(eval_traces):
-        plt.figure(figsize=(8, 3))
-        plt.plot(trace, marker='o')
-        plt.title(f'Eval Trajectory - Game {i+1}')
-        plt.xlabel('Move #')
-        plt.ylabel('Eval')
-        plt.grid(True)
-        plt.savefig(os.path.join(output_dir, f'eval_trajectory_game_{i+1}.png'))
-        plt.close()
-
-    # Plot win_rate over training stages
-    plt.figure(figsize=(10, 4))
-    plt.plot(win_rates)
-    plt.title('Win Rate Per Stage')
-    plt.xlabel('Stage')
-    plt.ylabel('Win Rate')
-    plt.grid(True)
-    plt.savefig(os.path.join(output_dir, 'win_rate_per_stage.png'))
-    plt.close()
+    # model = NardiNet(args.layer1_size, args.layer2_size)
+    
+    # trainer = TDTrainer(model, args.directory, args.file)
+    # trainer.train()
+    
+    model = NardiNet(64, 16)
+    trainer = TDTrainer(model, weights_file="v2_64-16.pt")
+    trainer.train(n_stages=100, games_per_stage=5000)
 
 # ToDo:
     # add features for longest block and pieces behind it... maybe also pieces moving per dice?
@@ -226,3 +260,6 @@ if output_dir is not None:
 # train 2 models - 64 and 16 hidden units for one, 128 and 32 for the other
 
 # pruning in lookahead search?
+
+# coming to think that MCTS is a necessity
+# also considering ViT approach

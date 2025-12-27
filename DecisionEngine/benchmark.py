@@ -24,14 +24,14 @@ from dataclasses import dataclass
 @dataclass(frozen=True)
 class Job:
     n_games: int
-    # who is "first arg" in SimPlay.simulate_game: 1 -> model1, 2 -> model2, 0 -> heuristic/random
+    # who is "first arg" in Simulator.simulate_game: 1 -> model1, 2 -> model2, 0 -> heuristic/random
     first_id: int   # 1 or 2
     second_id: int  # 0, 1, or 2
     strat_first: str
     strat_second: str
     primary_is_model1: bool
 
-from sim_play import SimPlay
+from sim_play import Simulator
 
 def _resolve_model(mid):
     if mid == 1: return _MODEL1
@@ -41,7 +41,7 @@ def _resolve_model(mid):
 def _play_many(job: Job):
     wins_primary = 0
     wins_secondary = 0
-    sim = SimPlay()
+    sim = Simulator()
 
     with torch.inference_mode():
         for _ in range(job.n_games):

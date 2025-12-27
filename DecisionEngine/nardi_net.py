@@ -3,25 +3,85 @@ import numpy as np
 import torch
 from torch import nn
 
+import nardi  
+
+def handle_list_case(features : list[nardi.Features], pipeline):
+    xs = [pipeline(f) for f in features]
+    return torch.stack(xs, dim=0)
+
 class NardiNet(nn.Module):
     def __init__(self, n_h1, n_h2):
         super().__init__()
-        self.flatten = nn.Flatten()
+            
         self.trunk = nn.Sequential(
-            nn.Linear(6 * 25, n_h1),
+            nn.Linear(6*25, n_h1),
             nn.SiLU(),
             nn.Linear(n_h1, n_h2),
             nn.SiLU(),
             nn.Linear(n_h2, 4)  # 4 logits for outcome probabilities
         )
         # Scoring vector: +1, +2, -1, -2
-        self.register_buffer("scores", torch.tensor([1.0, 2.0, -1.0, -2.0]))
+        self.register_buffer("scores", torch.tensor([1.0, 2.0, -1.0, -2.0]))   
         
-    def forward(self, x: torch.Tensor) -> torch.Tensor: 
-        # x: (B, 6, 25)
-        x = x.float()
-        x = self.flatten(x)
-        logits = self.trunk(x)               # (B, 4)
+    # does not achieve same performance as legacy model, something is wrong...
+    def feature_to_tensor(self, features : nardi.Features):
+        if isinstance(features, (list, tuple)):
+            return handle_list_case(features, self.feature_to_tensor)
+        
+        board = torch.cat([
+            torch.from_numpy(features.player.occ).float(),
+            torch.from_numpy(features.opp.occ).float()
+        ], dim=0)
+        
+        other = torch.tensor([
+            features.player.pieces_off, 
+            features.opp.pieces_off,
+            features.player.sq_occ, 
+            features.opp.sq_occ,
+            features.player.pieces_not_reached, 
+            features.opp.pieces_not_reached
+        ], dtype=torch.float32)
+        
+        return torch.cat([board.flatten(), other], dim=0).div_(15.0)     
+        
+    def forward(self, feat: nardi.Features) -> torch.Tensor:
+        x = self.feature_to_tensor(feat)
+        logits = self.trunk(x)              
         probs = torch.softmax(logits, dim=-1)
-        expected = (probs * self.scores).sum(dim=-1)  # weighted sum
-        return expected                      # shape: (B,)
+        return (probs * self.scores).sum(dim=-1)  # weighted sum
+    
+    
+
+
+# def SpatialNardiNet(nn.Module):
+#     def __init__(self):
+#        super().__init__()
+#        pass
+#        # ... 
+#        # ...
+
+#     def feat_to_tensor(self, features : nardi.Features | list[nardi.Features]):
+#         if isinstance(features, (list, tuple)):
+#             return handle_list_case(features, self.feat_to_tensor)
+        
+#         board = torch.cat([
+#             torch.from_numpy(features.player.occ).float(),
+#             torch.from_numpy(features.opp.occ).float()
+#         ], dim=0).div_(15.0)
+        
+#         global_info = torch.tensor([
+#             features.player.pieces_off, 
+#             features.opp.pieces_off,
+#             features.player.pip_count, 
+#             features.opp.pip_count,
+#             features.player.pieces_not_reached, 
+#             features.opp.pieces_not_reached
+#         ], dtype=torch.float32)
+        
+#         return board, global_info
+    
+#     def forward(self, features : nardi.Features | list[nardi.Features]):
+#         board, global_info = self.feat_to_tensor(features)
+        
+        
+    
