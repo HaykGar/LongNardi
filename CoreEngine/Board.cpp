@@ -249,49 +249,6 @@ void Board::Print() const
     DisplayBoard(data);
 }
 
-const BoardKey Board::AsKey() const
-{
-    BoardKey key = {};      // does this guarantee initializing to 0 ?
-    std::array<int, 2> sq_occ = {0, 0};
-
-    // player channels
-    Coord start(player_idx, 0);
-    for(int i = 0; i < ROWS*COLS; ++i)
-    {
-        Coord coord = CoordAfterDistance(start, i);
-        int occupancy = at(coord) * player_sign;
-        int n_pieces = abs(occupancy);
-        int key_row = (occupancy >= 0) ? 0 : 3;
-        
-        if(n_pieces <= 1)   // 1 or 0
-            key[key_row][i] = n_pieces;
-        else // n_pieces > 1
-        {
-            key[key_row][i] = 1;
-            key[key_row+1][i] = 1;
-            key[key_row+2][i] = n_pieces - 2;
-        }
-
-        if(n_pieces > 0)
-            ++sq_occ[(occupancy < 0)];    // idx 1 for opponent, 0 for friendly
-    }
-
-
-    // pieces off
-    key[0][ROWS*COLS] = pieces_per_player[player_idx] - pieces_left[player_idx];
-    key[1][ROWS*COLS] = pieces_per_player[!player_idx] - pieces_left[!player_idx];
-
-    // total squares occupied
-    key[2][ROWS*COLS] = sq_occ[0];
-    key[3][ROWS*COLS] = sq_occ[1];
-
-    // pieces not reached home
-    key[4][ROWS*COLS] = pieces_per_player[player_idx] - reached_enemy_home[player_idx];
-    key[5][ROWS*COLS] = pieces_per_player[!player_idx] - reached_enemy_home[!player_idx];
-
-    return key;
-}
-
 ///////////// Updates and Actions /////////////
 
 

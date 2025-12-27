@@ -50,7 +50,7 @@ class Game
         status_codes TryFinishMove(const Coord& start, const Coord& end);   // No Removals
         status_codes TryFinishMove(const Coord& start, bool dice);          // Removals and regular moves
 
-        bool AutoPlayTurn(const BoardKey& key); // currently unused, useful later though
+        bool AutoPlayTurn(const BoardConfig& key); // currently unused, useful later though
 
         void SwitchPlayer();
         
@@ -67,8 +67,8 @@ class Game
 
         // Getters
         const Board& GetBoardRef() const;
-        BoardKey GetBoardAsKey() const;
-        const std::unordered_map<BoardKey, MoveSequence, BoardKeyHash>& GetBoards2Seqs() const;
+        BoardConfig GetBoardData() const;
+        const std::unordered_map<BoardConfig, MoveSequence, BoardConfigHash>& GetBoards2Seqs() const;
 
         int GetDice(bool idx) const;
         const ReaderWriter* GetConstRW();
@@ -123,17 +123,17 @@ class Game
                 void ComputeAllLegalMoves();
 
                 int MaxLen() const;
-                const std::unordered_map<BoardKey, MoveSequence, BoardKeyHash>& BrdsToSeqs() const;
-                std::unordered_map<BoardKey, MoveSequence, BoardKeyHash>& BrdsToSeqs();
+                const std::unordered_map<BoardConfig, MoveSequence, BoardConfigHash>& BrdsToSeqs() const;
+                std::unordered_map<BoardConfig, MoveSequence, BoardConfigHash>& BrdsToSeqs();
             
             private:
                 Game& _g;
                 bool _maxDice;
                 std::array<bool, 2> _dieIdxs;
-                std::unordered_set<BoardKey, BoardKeyHash> _encountered;
+                std::unordered_set<BoardConfig, BoardConfigHash> _encountered;
 
                 int _maxLen;
-                std::unordered_map<BoardKey, MoveSequence, BoardKeyHash> _brdsToSeqs; // possible board configs map to move sequence that form them
+                std::unordered_map<BoardConfig, MoveSequence, BoardConfigHash> _brdsToSeqs; // possible board configs map to move sequence that form them
 
                 void dfs(std::vector<StartAndDice>& seq);
                 bool FirstMoveException();

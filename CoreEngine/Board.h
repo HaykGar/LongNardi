@@ -17,7 +17,7 @@ public:
     const int8_t& at(const Coord& s) const;
     const int8_t& at(size_t r, size_t c) const;
     const BoardConfig& View() const;
-    const BoardKey AsKey() const;
+    
 
     bool PlayerIdx() const;
     int8_t PlayerSign() const;

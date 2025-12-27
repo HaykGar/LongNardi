@@ -39,7 +39,7 @@ void HumanVsRand()
                 {
                     std::uniform_int_distribution<size_t> dist(0, b2s.size() - 1);
                     size_t random_offset = dist(gen);
-                    std::unordered_map<BoardKey, MoveSequence, BoardKeyHash>::iterator it = b2s.begin();
+                    std::unordered_map<BoardConfig, MoveSequence, BoardConfigHash>::iterator it = b2s.begin();
                     std::advance(it, random_offset);
 
                     status = ctrl.ReceiveCommand(Command(it->first));
@@ -98,10 +98,20 @@ void GraphicHumanVsHuman()
 
 int main()
 {
-    GraphicHumanVsHuman();
-    // HumanVsRand();
+    // GraphicHumanVsHuman();
+    HumanVsRand();
 
     // ScenarioBuilder builder;
+    // builder.AttachNewRW(SFMLRWFactory());
+
+    // BoardConfig block_dubar = {{    { 7, 0,-2, 1, 2, 1, 1, 1, 0, 0, 1, 0},
+    //                                 {-6,-1, 0,-1,-2,-1, 1, 0, 0,-2, 0, 0} }};
+
+    // builder.withScenario(white, block_dubar, 2, 2);
+    // auto status = builder.GetCtrl().ReceiveCommand(Command(0, 4));
+    // status = builder.GetCtrl().ReceiveCommand(Command(0, 8));
+
+    // DispErrorCode(status);
 
     // builder.withRandomEndgame();
 

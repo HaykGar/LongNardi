@@ -116,27 +116,27 @@ status_codes Controller::ReceiveCommand(const Command& cmd)
         auto b2s = g.GetBoards2Seqs();
         if(b2s.size() > 0)
         {
-            std::unordered_map<BoardKey, MoveSequence, BoardKeyHash>::iterator it = b2s.begin();
+            std::unordered_map<BoardConfig, MoveSequence, BoardConfigHash>::iterator it = b2s.begin();
             auto key = it->first;
             bool auto_played = g.AutoPlayTurn(key);
             outcome = auto_played ? status_codes::NO_LEGAL_MOVES_LEFT : status_codes::MISC_FAILURE;
             if(!auto_played)
             {
                 std::cerr << "failed to auto-play with key\n";
-                DisplayKey(std::get<BoardKey>(cmd.payload));
+                DisplayKey(std::get<BoardConfig>(cmd.payload));
             }
         }
     }
         break;
     case Actions::AUTOPLAY:
-        if(std::holds_alternative<BoardKey>(cmd.payload))
+        if(std::holds_alternative<BoardConfig>(cmd.payload))
         {
-            bool auto_played = g.AutoPlayTurn(std::get<BoardKey>(cmd.payload));
+            bool auto_played = g.AutoPlayTurn(std::get<BoardConfig>(cmd.payload));
             outcome = auto_played ? status_codes::NO_LEGAL_MOVES_LEFT : status_codes::MISC_FAILURE;
             if(!auto_played)
             {
                 std::cerr << "failed to auto-play with key\n";
-                DisplayKey(std::get<BoardKey>(cmd.payload));
+                DisplayKey(std::get<BoardConfig>(cmd.payload));
             }
         }
         break;

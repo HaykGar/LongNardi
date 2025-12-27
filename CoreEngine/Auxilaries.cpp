@@ -38,7 +38,7 @@ Command::Command(int r, int c) : action(Actions::SELECT_SLOT)
 
 Command::Command(bool dice_idx) : action(Actions::MOVE_BY_DICE), payload(dice_idx) {}
 
-Command::Command(BoardKey end_key) : action(Actions::AUTOPLAY), payload(end_key) {}
+Command::Command(BoardConfig end_key) : action(Actions::AUTOPLAY), payload(end_key) {}
 
 Command::Command(DieType to_set) : action(Actions::SET_DICE), payload(to_set) {}
 
@@ -116,7 +116,7 @@ void DisplayBoard(const BoardConfig& brd)
     std::cout<< "\n\n\n\n";
 }
 
-void DisplayKey(const BoardKey& bk)
+void DisplayKey(const BoardConfig& bk)
 {
     for(const auto& ctr : bk)
     {
@@ -125,4 +125,5 @@ void DisplayKey(const BoardKey& bk)
         std::cout << "\n";
     }
 }
+
 }   // namespace Nardi

@@ -46,9 +46,9 @@ const Board& Game::GetBoardRef() const
     return board;
 }
 
-BoardKey Game::GetBoardAsKey() const
+BoardConfig Game::GetBoardData() const
 {
-    return board.AsKey();
+    return board.View();
 }
 
 int Game::GetDice(bool idx) const
@@ -62,7 +62,7 @@ Coord Game::PlayerHead() const
 {   return {board.PlayerIdx(), 0};   }
 
 
-const std::unordered_map<BoardKey, MoveSequence, BoardKeyHash>& Game::GetBoards2Seqs() const
+const std::unordered_map<BoardConfig, MoveSequence, BoardConfigHash>& Game::GetBoards2Seqs() const
 {
     return legal_turns.BrdsToSeqs();
 }
@@ -104,7 +104,7 @@ void Game::UseDice(bool idx, int n)
     times_dice_used[idx] += n;  
 }
 
-bool Game::AutoPlayTurn(const BoardKey& key)
+bool Game::AutoPlayTurn(const BoardConfig& key)
 {
     auto& b2s = legal_turns.BrdsToSeqs();
     auto original_brd = board.View();
@@ -610,11 +610,11 @@ int Game::LegalSeqComputer::MaxLen() const {
     return _maxLen;
 }
 
-const std::unordered_map<BoardKey, MoveSequence, BoardKeyHash>& Game::LegalSeqComputer::BrdsToSeqs() const {
+const std::unordered_map<BoardConfig, MoveSequence, BoardConfigHash>& Game::LegalSeqComputer::BrdsToSeqs() const {
     return _brdsToSeqs;
 }
 
-std::unordered_map<BoardKey, MoveSequence, BoardKeyHash>& Game::LegalSeqComputer::BrdsToSeqs() {
+std::unordered_map<BoardConfig, MoveSequence, BoardConfigHash>& Game::LegalSeqComputer::BrdsToSeqs() {
     return _brdsToSeqs;
 }
 
@@ -665,7 +665,7 @@ void Game::LegalSeqComputer::dfs(std::vector<StartAndDice>& seq)
                 seq.emplace_back(coord, _dieIdxs[i]);
                 _g.MockMove(coord, _dieIdxs[i]);
 
-                BoardKey brdkey = _g.board.AsKey();
+                BoardConfig brdkey = _g.board.View();
                 if(! _encountered.contains(brdkey) ) 
                 {
                     dfs(seq);
@@ -685,7 +685,7 @@ void Game::LegalSeqComputer::dfs(std::vector<StartAndDice>& seq)
             _maxLen = seq.size();
             _brdsToSeqs.clear();    // all previous insertions were not complete turns
         }
-        BoardKey key = _g.board.AsKey();
+        BoardConfig key = _g.board.View();
         if(!_brdsToSeqs.contains(key)){
             _brdsToSeqs.emplace(key, seq);
         }
@@ -736,7 +736,7 @@ bool Game::LegalSeqComputer::FirstMoveException()   // fixme re-compute mid turn
 
         if(!seq.empty())
         {
-            BoardKey key = _g.board.AsKey();
+            BoardConfig key = _g.board.View();
             _brdsToSeqs.emplace(key, seq);
 
             if(_g.dice[0] == 6 && abs(_g.board.at(_g.board.PlayerIdx(), 6)) != 2 )
