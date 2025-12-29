@@ -51,8 +51,9 @@ class NardiNet(nn.Module):
     def __init__(self, n_h1, n_h2, feature_pipeline=None, input_dim=None, p_dropout=0):
         super().__init__()
         
-        self.feature_to_tensor = feature_pipeline if feature_pipeline is not None else LegacyPipeline()
-        
+        self.pipeline = feature_pipeline if feature_pipeline is not None \
+            else LegacyPipeline()
+                
         if input_dim == None:
             eng = nardi.Engine()
             dummy = self.feature_to_tensor(eng.board_features())
@@ -75,6 +76,10 @@ class NardiNet(nn.Module):
         
         self.register_buffer("scores", torch.tensor([1.0, 2.0, -1.0, -2.0]))
         
+        
+    def feature_to_tensor(self, feat : nardi.Features):
+        return self.pipeline(feat).to(next(self.parameters()).device)
+    
     def forward_tensor(self, x : torch.Tensor):
         logits = self.trunk(x)              
         probs = torch.softmax(logits, dim=-1)
@@ -83,7 +88,6 @@ class NardiNet(nn.Module):
     def forward(self, feat: nardi.Features) -> torch.Tensor:
         x = self.feature_to_tensor(feat)
         return self.forward_tensor(x)
-    
     
 
 class ConvPipeline(LegacyPipeline):
@@ -101,14 +105,20 @@ class ConvPipeline(LegacyPipeline):
         ], dtype=torch.float32).unsqueeze(1)
 
 class ConvNardiNet(NardiNet):
-    def __init__(self, num_channels=8, dropout=0):
+    def __init__(self, num_channels=8, dropout=0, extra_conv=False):
         pipeline = ConvPipeline()
         eng = nardi.Engine()
         dummy = pipeline(eng.board_features())
-        super().__init__(64, 16, pipeline, input_dim=20*num_channels+dummy.shape[-2], p_dropout=dropout)
+        super().__init__(64, 16, ConvPipeline, input_dim=20*num_channels+dummy.shape[-2], p_dropout=dropout)
         
         # (B, 6, 24) board input processed as 1D sequence of 6 channels
-        self.conv = nn.Conv1d(6, num_channels, kernel_size=5)
+        self.conv = nn.Conv1d(dummy.shape[-2], num_channels, kernel_size=5)
+        if extra_conv:
+            self.conv = nn.Sequential(
+                self.conv, 
+                nn.ReLU(),
+                nn.Conv1d(num_channels, num_channels, kernel_size=5, padding=2)
+            )
         self.norm = nn.LayerNorm(num_channels*20)
         self.relu = nn.ReLU()
         
@@ -123,3 +133,59 @@ class ConvNardiNet(NardiNet):
         
         x = torch.cat([x, scalars], dim=1)
         return self.forward_tensor(x)
+    
+
+class ResidualBlock(nn.Module):
+    def __init__(self, 
+                 in_channels : int, 
+                 out_channels : int,
+                 downsample=True):
+        super().__init__()
+        if downsample:
+            stride=2
+        else:
+            stride=1
+            
+        self.conv1 = nn.Conv1d(in_channels, out_channels, kernel_size=5, padding=2, stride=stride)             
+        self.conv2 = nn.Conv1d(out_channels, out_channels, kernel_size=5, padding=2)
+                
+        self.downsample = nn.Conv1d(in_channels, out_channels, kernel_size=1, stride=2) \
+            if downsample else nn.Identity()
+            
+        self.relu = nn.ReLU()
+            
+    def forward(self, x : torch.Tensor):
+        # conv block
+        out = self.conv1(x)
+        out = self.relu(out)
+        out = self.conv2(out)
+        # downsample input if needed
+        x = self.downsample(x)
+        # skip connection and relu
+        out = self.relu(out + x)
+        return out
+        
+        
+class ResNardiNet(NardiNet):
+    def __init__(self, dropout=0, conv_out=8):
+        pipeline = ConvPipeline()
+        eng = nardi.Engine()
+        dummy = pipeline(eng.board_features())
+        super().__init__(64, 16, pipeline, input_dim=12*conv_out+dummy.shape[-2], p_dropout=dropout)
+        
+        self.res_block = ResidualBlock(in_channels=dummy.shape[-2], out_channels=conv_out, downsample=True)
+        self.norm = nn.LayerNorm(12*conv_out)
+        self.relu = nn.ReLU()
+        
+    def forward(self, feat : nardi.Features):
+        feat = self.feature_to_tensor(feat) # shape (B, 6, 25)    
+        board = feat[:, :, :-1]
+        scalars = feat[:, :, -1].squeeze(1)
+        
+        x = self.res_block(board).flatten(1)
+        x = self.norm(x)
+        x = self.relu(x)
+        
+        x = torch.cat([x, scalars], dim=1)
+        return self.forward_tensor(x)
+        

@@ -29,12 +29,10 @@ class Simulator:
         noisy_priors = (1 - eps) * priors + eps * noise
         noisy_priors = noisy_priors / np.sum(noisy_priors)
         return noisy_priors
-            
-    # FIXME why am I doing this? torch.optim... ?
-    def eval_and_grad(self, model):
+
+    def eval_current(self, model):
         eval = self.sign * model(self.eng.board_features())
-        grad = torch.autograd.grad(eval, model.parameters(), retain_graph=False, create_graph=False)
-        return eval, grad
+        return eval
     
     def reset(self, build_pos = None):
         self.sign = 1
@@ -62,10 +60,7 @@ class Simulator:
 
         self.advance_turn()
         
-    def apply_noisy_move(self, K, eps, temperature, model, train=True):
-        if not train:
-            model.eval()
-            
+    def apply_noisy_move(self, K, eps, temperature, model):            
         if self.turn_num > K:
             self.apply_greedy_move(model) # advances turn internally
         else:
@@ -83,9 +78,6 @@ class Simulator:
                 self.eng.apply_board(chosen.raw_data)
             
             self.advance_turn()        
-        
-        if not train:
-            model.train()
 
 # FIXME (Lookahead move) COMPLETELY BROKEN DUE TO REPRESENTATION CHANGE
    
@@ -120,7 +112,7 @@ class Simulator:
                 return self.human_turn
         else:   # model is not None:
             if strat == "greedy":
-                return partial(self.apply_greedy_move, model=model)
+                return partial(self.apply_greedy_move, model=model, eval_only=True)
             elif strat == "lookahead":
                 raise ValueError("lookahead move selection currently unsupported")
             
@@ -162,7 +154,7 @@ class Simulator:
             elif graphics=="sfml":
                 self.eng.AttachNewSFMLRW()
 
-        for model_first in tqdm(range(2), desc="Outer Loop"):
+        for model_first in tqdm(range(2), desc="Outer Loop", leave=False):
             p1_first = bool(model_first)
 
             for game in tqdm(range(num_games), desc="Inner Loop", leave=False):
@@ -195,16 +187,3 @@ class Simulator:
         else:
             print("exited due to quit")
         
-    
-if __name__ == "__main__":
-    model = NardiNet(64, 16)
-    state_dict = torch.load("mw64_16.pt", map_location=torch.device('cpu'), weights_only=True)
-    model.load_state_dict(state_dict)
-    model.eval()
-    sim = Simulator()
-    
-    sim.benchmark(model, num_games=1000)
-    sim.benchmark(model, "greedy", None, "heuristic", 1000) #,sim.config.withRandomEndgame)
-    # sim.play_with_graphics(opp_model=model, opp_strat="greedy")
-    
-    # use cmd line args later for more generality

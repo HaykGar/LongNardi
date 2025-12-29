@@ -10,41 +10,57 @@ import matplotlib.pyplot as plt
 #TODO make the hyperparams init args with default values
 
 class TDTrainer:
-    def __init__(self, model, output_dir=None, weights_file=None):
+    def __init__(
+        self,
+        model,
+        output_dir=None,
+        weights_file=None,
+
+        # ---- learning params ----
+        LAMBDA=0.7,
+        alpha=0.01,
+        alpha_min=0.001,
+
+        # ---- noise / exploration ----
+        K=24,
+        eps=0.25,
+        eps_min=0.1,
+        h_e=15,
+
+        # ---- temperature ----
+        temperature=1.0,
+        t_min=0.1,
+        h_t=20,
+    ):
         if not weights_file:
             print("WARNING - training results will not save anywhere. Press enter to proceed")
             input()
-    ###################################
-    ######### hyperparameters #########     
-    ###################################
-        self.LAMBDA = 0.7           # Temporal Difference parameter
-        self.alpha = 0.01           # Learning Rate
-        self.alpha_0 = self.alpha   # initial learning rate
-        self.alpha_min = 0.001      # minimum learning rate
 
-        self.K = 24                 # Turns per game with Noise
-        self.eps = 0.25             # mixing parameter for noise
-        self.eps0 = self.eps        # initial epsilon
-        self.eps_min = 0.1          # minimum allowed epsilon
-        self.h_e = 15               # epsilon half-life          
-
-        self.temperature = 1        # for selecting moves weighted by eval
-        self.t0 = self.temperature  # initial temperature
-        self.t_min = 0.1            # minimum temperature
-        self.h_t = 20               # stages per temperature half-life    
-        
-    #################################
-    ######### training vars #########     
-    #################################
-        self.points = [0, 0]
-        self.eval_traces = []
-        self.surprises = []
-        self.last_wr = 0
-        self.no_improve = 0
-        
+        self.model = model
         self.output_dir = output_dir
         self.weights_file = weights_file
-        
+
+        ###################################
+        ######### hyperparameters #########
+        ###################################
+        self.LAMBDA = LAMBDA
+
+        self.alpha = alpha
+        self.alpha_0 = alpha
+        self.alpha_min = alpha_min
+
+        self.K = K
+
+        self.eps = eps
+        self.eps0 = eps
+        self.eps_min = eps_min
+        self.h_e = h_e
+
+        self.temperature = temperature
+        self.t0 = temperature
+        self.t_min = t_min
+        self.h_t = h_t
+
     #######################################
     ######### model and simulator #########     
     #######################################
@@ -58,6 +74,21 @@ class TDTrainer:
                 self.model.load_state_dict(torch.load(weights_file))
 
         self.model.to(self.simulator.device)
+        
+    #################################
+    ######### training vars #########     
+    #################################
+        self.points = [0, 0]
+        self.eval_traces = []
+        self.surprises = []
+        self.last_wr = 0
+        self.no_improve = 0
+        
+        self.output_dir = output_dir
+        self.weights_file = weights_file
+        
+        self.grad_buf = [torch.zeros_like(p) for p in self.model.parameters()]
+        self.params = list(self.model.parameters())
         
     ####################################
     ######### helper functions #########     
@@ -98,14 +129,33 @@ class TDTrainer:
             plt.grid(True)
             plt.savefig(os.path.join(self.output_dir, 'win_rate_per_stage.png'))
             plt.close()
+
+    def eval_and_grad(self):
+        eval = self.simulator.eval_current(self.model)
+        
+        grads = torch.autograd.grad(
+            eval,
+            self.model.parameters(),
+            retain_graph=False,
+            create_graph=False,
+            allow_unused=False
+        )
+
+        # copy into persistent buffer (NO allocation)
+        for buf, g in zip(self.grad_buf, grads):
+            buf.copy_(g)
             
+        return eval.squeeze(), self.grad_buf
+        
     def playout(self, track_eval : bool):
         
         self.simulator.reset()
-        max_surprise = 0    # greatest swing in position evaluation after one move in a game
+        max_surprise = torch.zeros((), device=self.simulator.device)
+            # greatest swing in position evaluation after one move in a game
         evals = []
 
-        Y_new, g = self.simulator.eval_and_grad(self.model)
+        Y_new, g = self.eval_and_grad()
+        
         if track_eval:
             evals.append(float(Y_new.item()))
         
@@ -114,13 +164,14 @@ class TDTrainer:
         while not self.simulator.eng.is_terminal():
             Y_old = Y_new
             
-            torch._foreach_mul_(accum_grad, self.LAMBDA)        # e ← λ e  
-            torch._foreach_add_(accum_grad, g)          # e ← e + ∇V_t-1  
+            for e, gi in zip(accum_grad, g):
+                e.mul_(self.LAMBDA).add_(gi)
             
-            self.simulator.apply_noisy_move(self.K, self.eps, self.temperature, self.model)
+            with torch.no_grad():
+                self.simulator.apply_noisy_move(self.K, self.eps, self.temperature, self.model)
 
             if not self.simulator.eng.is_terminal():
-                Y_new, g = self.simulator.eval_and_grad(self.model)
+                Y_new, g = self.eval_and_grad()
             else:
                 Y_new = torch.tensor(-self.simulator.sign * self.simulator.eng.winner_result(), device=self.simulator.device, dtype=torch.float32)   
                     # need to unflip sign here
@@ -131,14 +182,15 @@ class TDTrainer:
 
             delta = Y_new - Y_old
             
-            if abs(delta) > max_surprise:
-                max_surprise = abs(delta)
+            delta_abs = delta.abs()
+            max_surprise = torch.maximum(max_surprise, delta_abs)
 
             delta = torch.clamp(delta, min=-1, max=1)
             
             with torch.no_grad():
-                torch._foreach_add_(list(self.model.parameters()), accum_grad, alpha=self.alpha * float(delta)) 
-                # w = w + alpha*delta*accum_grad
+                scale = self.alpha * delta         
+                for p, e in zip(self.params, accum_grad):
+                    p.add_(e * scale)
                 
         if track_eval:
             return max_surprise, evals
@@ -152,9 +204,8 @@ class TDTrainer:
         print(f"model score: {mod_score}, baseline score: {rand_score}")
         
         evals = []
-        max_surprise = 0
 
-        for stage in tqdm(range(n_stages), desc="Outer Loop"):
+        for stage in tqdm(range(n_stages), desc="Outer Loop", leave=False):
             # anneal noise and temperature
             self.eps = self.eps_min + (self.eps0 - self.eps_min) * 2.0**(-stage / self.h_e)  
             self.temperature = self.t_min + (self.t0 - self.t_min) * 2.0**(-stage / self.h_t)
@@ -259,7 +310,7 @@ if __name__ == "__main__":
         "--architecture",
         "--arch",
         type=str,
-        choices=["MLP", "Conv"],
+        choices=["MLP", "Conv", "ResNet"],
         required=True,
         help="Architecture to train"
     )
@@ -271,15 +322,31 @@ if __name__ == "__main__":
         help="Dropout probability (default: 0.0)"
     )
     
+    parser.add_argument(
+        "--games",
+        type=positive_int,
+        default=5000,
+        help="number of games per stage"
+    )
+    
+    parser.add_argument(
+        "--stages",
+        type=positive_int,
+        default=100,
+        help="number of stages in training"
+    )
+    
     args = parser.parse_args()
     
     if args.architecture == "Conv":
         model = nardi_net.ConvNardiNet(dropout=args.dropout)
     elif args.architecture == "MLP":
         model = nardi_net.NardiNet(p_dropout=args.dropout)
+    elif args.architecture == "ResNet":
+        model = nardi_net.ResNardiNet()
 
     trainer = TDTrainer(model, weights_file=args.file, output_dir=args.directory)
-    trainer.train(n_stages=60, games_per_stage=5000)
+    trainer.train(n_stages=args.stages, games_per_stage=args.games)
 
 # ToDo:
     # add features for longest block and pieces behind it... maybe also pieces moving per dice?
