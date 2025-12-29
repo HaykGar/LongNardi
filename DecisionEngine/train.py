@@ -1,5 +1,5 @@
 from sim_play import Simulator
-from nardi_net import NardiNet
+import nardi_net
 
 import torch
 import numpy as np
@@ -10,7 +10,10 @@ import matplotlib.pyplot as plt
 #TODO make the hyperparams init args with default values
 
 class TDTrainer:
-    def __init__(self, model, output_dir="", weights_file=None):
+    def __init__(self, model, output_dir=None, weights_file=None):
+        if not weights_file:
+            print("WARNING - training results will not save anywhere. Press enter to proceed")
+            input()
     ###################################
     ######### hyperparameters #########     
     ###################################
@@ -48,8 +51,11 @@ class TDTrainer:
         self.simulator = Simulator()
         
         self.model = model
-        if weights_file is not None and os.path.getsize(weights_file) != 0:
-            self.model.load_state_dict(torch.load(weights_file))
+        if weights_file:
+            if not os.path.exists(weights_file):
+                open(weights_file, "wb").close()
+            elif os.path.getsize(weights_file) > 0:
+                self.model.load_state_dict(torch.load(weights_file))
 
         self.model.to(self.simulator.device)
         
@@ -57,8 +63,10 @@ class TDTrainer:
     ######### helper functions #########     
     ####################################
     
-    def record_results(self):   
-        if self.output_dir is not None:
+    def record_results(self):
+        if self.output_dir:
+            os.makedirs(self.output_dir, exist_ok=True)
+
             win_rates = self.simulator.win_rates
             # Plot max_surprise over training stages
             plt.figure(figsize=(10, 4))
@@ -191,58 +199,87 @@ class TDTrainer:
 ####################################
 
 if __name__ == "__main__":
-    # import argparse
+    import argparse
 
-    # #####################################    
-    # ######### command line args #########     
-    # #####################################
+    #####################################    
+    ######### command line args #########     
+    #####################################
 
-    # def positive_int(value):
-    #     """Custom type for positive integers (>0)."""
-    #     ivalue = int(value)
-    #     if ivalue <= 0:
-    #         raise argparse.ArgumentTypeError(f"{value} must be > 0")
-    #     return ivalue
+    def positive_int(value):
+        """Custom type for positive integers (>0)."""
+        ivalue = int(value)
+        if ivalue <= 0:
+            raise argparse.ArgumentTypeError(f"{value} must be > 0")
+        return ivalue
 
-    # def valid_dir(dirpath):
-    #     """Ensure provided path is a valid directory."""
-    #     if dirpath is not None:
-    #         if not os.path.exists(dirpath):
-    #             os.makedirs(dirpath)
-    #     return dirpath
+    def valid_dir(dirpath):
+        """Ensure provided path is a valid directory."""
+        if dirpath is not None:
+            if not os.path.exists(dirpath):
+                os.makedirs(dirpath)
+        return dirpath
 
-    # def valid_file(filepath):
-    #     if not os.path.exists(filepath):
-    #         print(f"File not found: '{filepath}'. Creating a new empty file.")
-    #         try:
-    #             with open(filepath, 'w') as f:
-    #                 pass
-    #             print(f"Successfully created '{filepath}'.")
-    #         except IOError as e:
-    #             print(f"Error creating file '{filepath}': {e}")
-    #             return None
+    def valid_file(filepath):
+        if not os.path.exists(filepath):
+            print(f"File not found: '{filepath}'. Creating a new empty file.")
+            try:
+                with open(filepath, 'w') as f:
+                    pass
+                print(f"Successfully created '{filepath}'.")
+            except IOError as e:
+                print(f"Error creating file '{filepath}': {e}")
+                return None
         
-    #     return filepath
-
-    # parser = argparse.ArgumentParser(
-    #     description="Process two positive integers, a directory path, and an optional filename."
-    # )
-
-    # parser.add_argument("layer1_size", type=positive_int, help="number of nodes in the first hidden layer")
-    # parser.add_argument("layer2_size", type=positive_int, help="number of nodes in the second hidden layer")
-    # parser.add_argument("--directory", type=valid_dir, help="Optional path to an existing directory", default=None)
-    # parser.add_argument("-f", "--file", type=valid_file, help="Optional filename for loading network weights", default=None)
-
-    # args = parser.parse_args()
+        return filepath
     
-    # model = NardiNet(args.layer1_size, args.layer2_size)
+    def valid_dropout(x):
+        x = float(x)
+        if not 0.0 <= x < 1.0:
+            raise argparse.ArgumentTypeError("dropout must be in [0.0, 1.0)")
+        return x
+
+    parser = argparse.ArgumentParser(
+        description="Process a str architecture name, float dropout rate, directory path and an optional filename."
+    )
+
+    parser.add_argument(
+        "--directory", 
+        type=valid_dir, 
+        help="Optional path to an existing directory", 
+        default=None)
     
-    # trainer = TDTrainer(model, args.directory, args.file)
-    # trainer.train()
+    parser.add_argument(
+        "-f", 
+        "--file", 
+        type=valid_file, 
+        help="Optional filename for loading network weights", 
+        default=None)
     
-    model = NardiNet(64, 16)
-    trainer = TDTrainer(model, weights_file="v2_64-16.pt")
-    trainer.train(n_stages=100, games_per_stage=5000)
+    parser.add_argument(
+        "--architecture",
+        "--arch",
+        type=str,
+        choices=["MLP", "Conv"],
+        required=True,
+        help="Architecture to train"
+    )
+
+    parser.add_argument(
+        "--dropout",
+        type=float,
+        default=0.0,
+        help="Dropout probability (default: 0.0)"
+    )
+    
+    args = parser.parse_args()
+    
+    if args.architecture == "Conv":
+        model = nardi_net.ConvNardiNet(dropout=args.dropout)
+    elif args.architecture == "MLP":
+        model = nardi_net.NardiNet(p_dropout=args.dropout)
+
+    trainer = TDTrainer(model, weights_file=args.file, output_dir=args.directory)
+    trainer.train(n_stages=60, games_per_stage=5000)
 
 # ToDo:
     # add features for longest block and pieces behind it... maybe also pieces moving per dice?
@@ -250,10 +287,8 @@ if __name__ == "__main__":
     # Pieces in home or pieces not yet in home... several training games far into simulations failed to detect that it was about to do Mars,
     # but this would be obvious from such features
 
-# substantially larger 256-128 model seems to perform similarly to 64 - 16 but barely half as fast... smaller is better
-
 # instead of solver - resignation threshold, so look at raw probability nodes in the model and based on that decide game outcomes...
-    # set this threshold pretty high, at least 90%, and see how AGZ training handled this I think they had a holdout set without this...
+# set this threshold pretty high, at least 90%, and see how AGZ training handled this I think they had a holdout set without this...
 
 # experiment with lower lambda
 # schedule learning rate ?
