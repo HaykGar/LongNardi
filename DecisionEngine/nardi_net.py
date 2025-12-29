@@ -148,9 +148,8 @@ class ResidualBlock(nn.Module):
             
         self.conv1 = nn.Conv1d(in_channels, out_channels, kernel_size=5, padding=2, stride=stride)             
         self.conv2 = nn.Conv1d(out_channels, out_channels, kernel_size=5, padding=2)
-                
-        self.downsample = nn.Conv1d(in_channels, out_channels, kernel_size=1, stride=2) \
-            if downsample else nn.Identity()
+             
+        self.proj = nn.Conv1d(in_channels, out_channels, kernel_size=1, stride=stride)
             
         self.relu = nn.ReLU()
             
@@ -160,7 +159,7 @@ class ResidualBlock(nn.Module):
         out = self.relu(out)
         out = self.conv2(out)
         # downsample input if needed
-        x = self.downsample(x)
+        x = self.proj(x)
         # skip connection and relu
         out = self.relu(out + x)
         return out
@@ -171,10 +170,10 @@ class ResNardiNet(NardiNet):
         pipeline = ConvPipeline()
         eng = nardi.Engine()
         dummy = pipeline(eng.board_features())
-        super().__init__(64, 16, pipeline, input_dim=12*conv_out+dummy.shape[-2], p_dropout=dropout)
+        super().__init__(64, 16, pipeline, input_dim=24*conv_out+dummy.shape[-2], p_dropout=dropout)
         
-        self.res_block = ResidualBlock(in_channels=dummy.shape[-2], out_channels=conv_out, downsample=True)
-        self.norm = nn.LayerNorm(12*conv_out)
+        self.res_block = ResidualBlock(in_channels=dummy.shape[-2], out_channels=conv_out, downsample=False)
+        self.norm = nn.LayerNorm(24*conv_out)
         self.relu = nn.ReLU()
         
     def forward(self, feat : nardi.Features):
