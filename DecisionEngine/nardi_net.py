@@ -78,7 +78,7 @@ class NardiNet(nn.Module):
         
         
     def feature_to_tensor(self, feat : nardi.Features):
-        return self.pipeline(feat).to(next(self.parameters()).device)
+        return self.pipeline(feat)
     
     def forward_tensor(self, x : torch.Tensor):
         logits = self.trunk(x)              
@@ -109,7 +109,7 @@ class ConvNardiNet(NardiNet):
         pipeline = ConvPipeline()
         eng = nardi.Engine()
         dummy = pipeline(eng.board_features())
-        super().__init__(64, 16, ConvPipeline, input_dim=20*num_channels+dummy.shape[-2], p_dropout=dropout)
+        super().__init__(64, 16, pipeline, input_dim=20*num_channels+dummy.shape[-2], p_dropout=dropout)
         
         # (B, 6, 24) board input processed as 1D sequence of 6 channels
         self.conv = nn.Conv1d(dummy.shape[-2], num_channels, kernel_size=5)

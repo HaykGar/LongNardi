@@ -19,7 +19,7 @@ class TDTrainer:
         # ---- learning params ----
         LAMBDA=0.7,
         alpha=0.01,
-        alpha_min=0.001,
+        alpha_min_factor=0.1,
 
         # ---- noise / exploration ----
         K=24,
@@ -31,6 +31,10 @@ class TDTrainer:
         temperature=1.0,
         t_min=0.1,
         h_t=20,
+        
+        # ---- benchmarks ----
+        baseline_args=(None, "heuristic")
+
     ):
         if not weights_file:
             print("WARNING - training results will not save anywhere. Press enter to proceed")
@@ -47,7 +51,7 @@ class TDTrainer:
 
         self.alpha = alpha
         self.alpha_0 = alpha
-        self.alpha_min = alpha_min
+        self.alpha_min = alpha * alpha_min_factor
 
         self.K = K
 
@@ -74,6 +78,8 @@ class TDTrainer:
                 self.model.load_state_dict(torch.load(weights_file))
 
         self.model.to(self.simulator.device)
+        
+        self.baseline = baseline_args
         
     #################################
     ######### training vars #########     
@@ -194,14 +200,21 @@ class TDTrainer:
                 
         if track_eval:
             return max_surprise, evals
+        
+    def report_progress(self, ng=1000):
+        mod_score, base_score = self.simulator.benchmark(self.model, 
+                                                         "greedy", 
+                                                         self.baseline[0], 
+                                                         self.baseline[1], 
+                                                         num_games=ng)
+        print(f"model score: {mod_score}, baseline score: {base_score}")
 ################################
 ########   train loop   ########            
 ################################
 
     def train(self, n_stages=100, games_per_stage=5000):
         print("pre-training simulation")
-        mod_score, rand_score = self.simulator.benchmark(self.model, "greedy", num_games=20)
-        print(f"model score: {mod_score}, baseline score: {rand_score}")
+        self.report_progress(ng=20)
         
         evals = []
 
@@ -221,8 +234,7 @@ class TDTrainer:
             print("max surprise of ", max_surprise)
             
             print(f"results of simulation {stage+1}")
-            mod_score, rand_score = self.simulator.benchmark(self.model, "greedy",num_games=1000)    
-            print(f"model score: {mod_score}, baseline score: {rand_score}")
+            self.report_progress()
             print()
             
             self.wr = 100 * mod_score / (mod_score + rand_score)
