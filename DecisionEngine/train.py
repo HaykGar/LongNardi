@@ -7,12 +7,11 @@ from tqdm import tqdm
 import os
 import matplotlib.pyplot as plt
 
-#TODO make the hyperparams init args with default values
-
 class TDTrainer:
     def __init__(
         self,
         model,
+        *,
         output_dir=None,
         weights_file=None,
 
@@ -208,6 +207,8 @@ class TDTrainer:
                                                          self.baseline[1], 
                                                          num_games=ng)
         print(f"model score: {mod_score}, baseline score: {base_score}")
+        
+        return 100 * mod_score / (mod_score + base_score)
 ################################
 ########   train loop   ########            
 ################################
@@ -234,10 +235,9 @@ class TDTrainer:
             print("max surprise of ", max_surprise)
             
             print(f"results of simulation {stage+1}")
-            self.report_progress()
+            self.wr = self.report_progress(ng=100)
             print()
             
-            self.wr = 100 * mod_score / (mod_score + rand_score)
             if self.wr - self.last_wr < 0.03:
                 self.no_improve += 1
                 if self.no_improve > 5:
@@ -251,8 +251,7 @@ class TDTrainer:
             ################################ end stage report + actions ################################     
 
         print(f"post-training simulation")
-        mod_score, rand_score = self.simulator.benchmark(self.model, "greedy", num_games=10)
-        print(f"model score: {mod_score}, baseline score: {rand_score}")
+        self.report_progress(1000)
 
         print("total points each: ", self.points)
         self.record_results()
