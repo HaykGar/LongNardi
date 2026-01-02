@@ -27,6 +27,7 @@ class ScenarioBuilder
 
         // Actions
         status_codes ReceiveCommand(const Command& c);
+        status_codes SimulateMove(const BoardConfig& b);
         void Reset();
 
         void AttachNewRW(const IRWFactory& f);

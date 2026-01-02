@@ -105,6 +105,15 @@ status_codes ScenarioBuilder::ReceiveCommand(const Command& cmd)
     return _ctrl.ReceiveCommand(cmd);
 }
 
+status_codes ScenarioBuilder::SimulateMove(const BoardConfig& b)
+{
+    if(!_ctrl.sim_mode)
+        return status_codes::MISC_FAILURE;
+
+    status_codes ret = ReceiveCommand(Command(b));
+    _ctrl.AdvanceSimTurn();
+}
+
 void ScenarioBuilder::Reset()
 {
     withBoard(TestGlobals::start_brd);
@@ -117,7 +126,8 @@ void ScenarioBuilder::Reset()
 
 void ScenarioBuilder::AttachNewRW(const IRWFactory& f)
 {
-    _view = std::shared_ptr<ReaderWriter>(f.make(_game, _ctrl));
+    auto up = f.make(_game, _ctrl);
+    _view = std::shared_ptr<ReaderWriter>(std::move(up));
     _game.AttachReaderWriter(_view.get());
 }
 

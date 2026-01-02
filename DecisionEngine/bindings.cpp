@@ -1,4 +1,6 @@
 // bindings.cpp
+#include <vector>
+
 #include <pybind11/pybind11.h>
 #include <pybind11/numpy.h>
 #include <pybind11/stl.h>
@@ -9,7 +11,6 @@
 
 namespace py = pybind11;
 
-// Your engine headers (inside namespace Nardi)
 #include "../CoreEngine/ScenarioBuilder.h"
 #include "../CoreEngine/Game.h"
 #include "../CoreEngine/Controller.h"
@@ -18,6 +19,24 @@ namespace py = pybind11;
 #include "../CoreEngine/TerminalRW.h"
 #include "../CoreEngine/SFMLRW.h"
 
+
+
+static constexpr int N_DICE_COMB = 21;
+
+static constexpr int DICE_COMBOS[21][2] = { {1, 1}, {1, 2}, {1, 3}, {1, 4}, {1, 5}, {1, 6},
+                                                    {2, 2}, {2, 3}, {2, 4}, {2, 5}, {2, 6},
+                                                            {3, 3}, {3, 4}, {3, 5}, {3, 6},
+                                                                    {4, 4}, {4, 5}, {4, 6},
+                                                                            {5, 5}, {5, 6},
+                                                                                    {6, 6} };
+
+static constexpr float COMBO_PROBS[21] = {
+                        1.0/36.0,   1.0/18.0,   1.0/18.0,   1.0/18.0,   1.0/18.0,   1.0/18.0, 
+                                    1.0/36.0,   1.0/18.0,   1.0/18.0,   1.0/18.0,   1.0/18.0, 
+                                                1.0/36.0,   1.0/18.0,   1.0/18.0,   1.0/18.0, 
+                                                            1.0/36.0,   1.0/18.0,   1.0/18.0,  
+                                                                        1.0/36.0,   1.0/18.0,  
+                                                                                    1.0/36.0 };
 
 /*
 
@@ -111,6 +130,11 @@ public:
         return arr;
     }
 
+    int dice_as_idx() const
+    {
+        return flat_dice_idx( _builder.GetGame().GetDice(0), _builder.GetGame().GetDice(1));
+    }
+
     // Return 6x25 uint8 (player-perspective)
 
     Nardi::Board::Features board_features() const {
@@ -170,6 +194,98 @@ public:
         }
     }
 
+    struct Node;
+
+    struct ChanceAndChildren
+    {
+        float prob;
+        std::vector<std::shared_ptr<Node>> data;
+    };
+
+    struct Node
+    {
+        Node() {
+            for(int i = 0; i < N_DICE_COMB; ++i)
+                children_by_dice[i].prob = COMBO_PROBS[i];
+        }
+        std::optional<int> result;  // present only if terminal
+        Nardi::Board::Features features;
+        std::array<ChanceAndChildren, N_DICE_COMB> children_by_dice;
+
+        bool isLeaf() {
+            for(const auto& ch_ch : children_by_dice)
+                if(!ch_ch.data.empty())
+                    return false;
+            return true;
+        }
+
+        std::shared_ptr<Node> MakeChild(const Nardi::Board::Features& f, int d_idx)
+        {
+            auto child = std::make_shared<Node>();
+            child->features = f;
+            children_by_dice[d_idx].data.push_back(child);
+            return child;
+        }
+    };
+
+    std::shared_ptr<Node> TreeSearch(int depth=2)
+    {
+        std::shared_ptr<Node> root = std::make_shared<Node>();
+        root->features = board_features();
+        
+        auto children_features = enumerate(Nardi::status_codes::SUCCESS);   
+            // only considers current dice and game state
+
+        int d_idx = dice_as_idx();
+
+        for(auto& f : children_features)
+            root->MakeChild(f, d_idx);
+
+        _builder.GetCtrl().ToSimMode();
+
+        #pragma omp parallel for
+        for(int i = 0; i < root->children_by_dice[d_idx].data.size(); ++i)
+        {
+            auto child = root->children_by_dice[d_idx].data.at(i);
+            Nardi::ScenarioBuilder bldr(_builder);
+            bldr.SimulateMove(child->features.raw_data);    // auto-play this position
+            RTreeSearch(child, 1, depth, bldr);
+            // no undo needed because we use a fresh builder after
+        }
+
+        _builder.GetCtrl().EndSimMode();
+
+        return root;
+    }
+
+    void RTreeSearch(std::shared_ptr<Node> root, 
+                    int curr_depth, int max_depth, 
+                    Nardi::ScenarioBuilder& builder)
+    {
+
+        if(builder.GetGame().GameIsOver()) 
+        {
+            root->result = builder.GetGame().IsMars() ? 2 : 1;
+            return;
+        }
+        else if(curr_depth >= max_depth)
+            return;
+
+        for(int i = 0; i < N_DICE_COMB; ++i)
+        {
+            auto& dice = DICE_COMBOS[i];
+            auto feat = set_and_enumerate(dice[0], dice[1], builder);
+            for (auto& f : feat)
+            {
+                auto child = root->MakeChild(f, i);
+
+                builder.SimulateMove(f.raw_data);
+                RTreeSearch(child, curr_depth+1, max_depth, builder);
+                builder.ReceiveCommand(Nardi::Command(Nardi::Actions::UNDO));
+            }
+        }
+    }
+
     void human_turn() 
     {
         if(!_builder.GetView())
@@ -218,9 +334,22 @@ public:
     }
 
 private:
-    static constexpr int N_DICE_COMB = 21;
     Nardi::ScenarioBuilder _builder;
     ScenarioConfig         _config;
+
+    int flat_dice_idx(int d1, int d2) const
+    {
+        if(d1 > d2)
+            std::swap(d1, d2);
+        
+        std::array<int, 2> dice = {d1, d2};
+        
+        int row_from_top = (7-dice[0]);
+        int row_offset = (row_from_top*(row_from_top+1)/2);
+        int d_idx = N_DICE_COMB - row_offset + (dice[1] - dice[0]);
+
+        return d_idx;
+    }
 
     std::vector<Nardi::Board::Features> enumerate(Nardi::status_codes status)
     {
@@ -238,6 +367,21 @@ private:
         features_vec.reserve(b2s.size());
         for (const auto& kv : b2s)
             features_vec.push_back(_builder.GetGame().GetBoardRef().ExtractFeatures(kv.first));
+
+        return features_vec;
+    }
+
+    std::vector<Nardi::Board::Features> set_and_enumerate(int d1, int d2, Nardi::ScenarioBuilder& b) 
+    {
+        std::array<int, 2> new_dice = {d1, d2};
+        auto status = b.ReceiveCommand(Nardi::Command(new_dice));
+
+        const auto& b2s = b.GetGame().GetBoards2Seqs();
+
+        std::vector<Nardi::Board::Features> features_vec;
+        features_vec.reserve(b2s.size());
+        for (const auto& kv : b2s)
+            features_vec.push_back(b.GetGame().GetBoardRef().ExtractFeatures(kv.first));
 
         return features_vec;
     }
@@ -287,20 +431,24 @@ PYBIND11_MODULE(nardi, m)
                 R"(If view attached, then display)")
         .def("human_turn",          &NardiEngine::human_turn,
              R"(Prompt human user for move and return false if their turn is over, true otherwise)")
-
         .def("board_features",      &NardiEngine::board_features,
              R"(Return 6x25 uint8 board (player-perspective).)")
         .def("apply_board",         &NardiEngine::apply_board, py::arg("board"),
              R"(Apply the sequence that reaches the provided board state [2,12] uint8.)")
         .def("dice",                &NardiEngine::dice,
              R"(Return 1x2 uint8 dice values.)")    
+        .def("dice_as_idx",         &NardiEngine::dice_as_idx,
+             R"(Get dice pair as a flattened idx corresponding to DICE_COMBOS)")
         .def("roll",                &NardiEngine::roll,
              R"(Roll dice. Return false if no legal moves left)")
         .def("roll_and_enumerate",  &NardiEngine::roll_and_enumerate,
              R"(Roll dice and return uint8 array of shape [N,6,25] with end-of-turn boards.)")
-        .def("set_and_enumerate",   &NardiEngine::set_and_enumerate,
-             R"(Set dice and return uint8 array of shape [N,6,25] with end-of-turn boards.)")
-        
+        .def("set_and_enumerate",  
+             py::overload_cast<int, int>(&NardiEngine::set_and_enumerate),
+             py::arg("d1"), py::arg("d2"),
+             R"(Set dice and enumerate all legal end-of-turn positions.)")
+        .def("tree_search",         &NardiEngine::TreeSearch, py::arg("depth") = 2,
+             R"(Look `depth` plies ahead and return the root of the search tree.)")
         .def("status_report",       &NardiEngine::status_report)
         .def("status_str",          &NardiEngine::status_str)
         .def("is_terminal",         &NardiEngine::is_terminal)
@@ -355,4 +503,14 @@ PYBIND11_MODULE(nardi, m)
         .def_readonly("pieces_not_reached", &Nardi::Board::Features::PlayerBoardInfo::pieces_not_reached)
         .def_readonly("sq_occ",             &Nardi::Board::Features::PlayerBoardInfo::sq_occ)
         .def_property_readonly("occ",       &occ_view);
+
+    py::class_<NardiEngine::ChanceAndChildren>(m, "ChanceAndChildren")
+        .def_readonly("prob",               &NardiEngine::ChanceAndChildren::prob)
+        .def_readonly("data",               &NardiEngine::ChanceAndChildren::data);
+
+    py::class_<NardiEngine::Node, std::shared_ptr<NardiEngine::Node>>(m, "Node")
+        .def("is_leaf",                     &NardiEngine::Node::isLeaf)
+        .def_readonly("result",             &NardiEngine::Node::result)
+        .def_readonly("features",           &NardiEngine::Node::features)
+        .def_readonly("children_by_dice",   &NardiEngine::Node::children_by_dice);
 }

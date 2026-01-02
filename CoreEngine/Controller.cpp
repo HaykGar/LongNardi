@@ -7,7 +7,7 @@ Controller::Controller(Game& game) : g(game), start(), start_selected(false), di
 Controller::~Controller()
 {}
 
-bool Controller::InSimMode() const
+bool Controller::IsInSimMode() const
 { return sim_mode; }
 
 void Controller::ToSimMode()

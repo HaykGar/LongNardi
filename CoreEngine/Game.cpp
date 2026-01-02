@@ -350,7 +350,7 @@ status_codes Game::UndoCurrentTurn()
 
 bool Game::TurnInProgress() const
 {
-    return (times_dice_used[0] != 0 || times_dice_used[1] != 0 || !mvs_this_turn.empty());
+    return (times_dice_used[0] != 0 || times_dice_used[1] != 0);
 }
 
 bool Game::GameIsOver() const 
@@ -535,7 +535,8 @@ std::pair<status_codes, std::array<int, 2>> Game::Arbiter::LegalMove(const Coord
 
 std::pair<status_codes, Coord> Game::Arbiter::LegalMove_2step(const Coord& start)  
 {
-    if(!CanUseDice(0) || !CanUseDice(1))
+    int total_dice = (1+_g.doubles_rolled) * 2;
+    if(_g.times_dice_used[0] + _g.times_dice_used[1] > total_dice - 2)
         return {status_codes::DICE_USED_ALREADY, {} };
 
     if(_g.maxdice_exception)

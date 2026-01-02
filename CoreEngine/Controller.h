@@ -21,7 +21,7 @@ class Controller
         void SwitchTurns();
         void OnTurnSwitch();
 
-        bool InSimMode() const;
+        bool IsInSimMode() const;
         void ToSimMode();
         void EndSimMode();
 
