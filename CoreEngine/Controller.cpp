@@ -84,6 +84,11 @@ status_codes Controller::ReceiveCommand(const Command& cmd)
                 dice_rolled = true;
         }
         break;
+    case Actions::RELEASE_SELECTED:
+        start_selected = false;
+        outcome = status_codes::SUCCESS;
+        break;
+    
     case Actions::SELECT_SLOT:
     case Actions::MOVE_BY_DICE:
         if (!dice_rolled)   // no attempts to move before rolling
@@ -91,14 +96,18 @@ status_codes Controller::ReceiveCommand(const Command& cmd)
         
         else if(start_selected)
         {
-            if(std::holds_alternative<Coord>(cmd.payload))
-                outcome = g.TryFinishMove(start, std::get<Coord>(cmd.payload) ); // this makes the move if possible, triggering redraws
-            else if (std::holds_alternative<bool>(cmd.payload)){
+            if(std::holds_alternative<Coord>(cmd.payload)) {
+                outcome = g.TryFinishMove(start, std::get<Coord>(cmd.payload) ); 
+                // this makes the move if possible, triggering redraws
+            }
+            else if (std::holds_alternative<bool>(cmd.payload)) {
                 outcome = g.TryFinishMove(start, std::get<bool>(cmd.payload));
+
             }
 
-            if(outcome == status_codes::SUCCESS)  // turn not over
-                start_selected = false;
+            if(outcome == status_codes::SUCCESS)  // turn not over, auto-select start coord to be the destination
+                start = std::holds_alternative<Coord>(cmd.payload) ? std::get<Coord>(cmd.payload) : 
+                            g.GetBoardRef().CoordAfterDistance(start, g.GetDice(std::get<bool>(cmd.payload)));
             else
                 start_selected = false; // unselect start if illegal move attempted or no legal moves left
         }
@@ -151,7 +160,7 @@ status_codes Controller::ReceiveCommand(const Command& cmd)
     return outcome;
 }
 
-status_codes Controller::ReceiveCommand(Actions act)
+status_codes Controller::ReceiveCommand(const Actions& act)
 {
     return ReceiveCommand(Command(act));
 }

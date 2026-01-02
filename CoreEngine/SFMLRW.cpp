@@ -161,7 +161,7 @@ void SFMLRW::drawBoardGrid() const
             bool alt = ((r + c) % 2) == 0;
             cell.setFillColor(alt ? sf::Color(60, 95, 70) : sf::Color(50, 85, 62));
 
-            if (hasSelection && selected.row == r && selected.col == c)
+            if (ctrl.StartIsSelected() && ctrl.GetStart() == Coord(r, c))
             {
                 cell.setFillColor(sf::Color(90, 120, 90));
             }
@@ -256,7 +256,7 @@ void SFMLRW::drawDice() const
         sf::RectangleShape die(r.size);
         die.setPosition(r.position);
 
-        bool gray = !g.CanUseDice(i) || awaitingRoll;
+        bool gray = !g.CanUseDice(i) || ctrl.AwaitingRoll();
 
         if (gray)
         {
@@ -373,8 +373,7 @@ status_codes SFMLRW::PollInput()
 
             if (auto c = hitTestCell(p))
             {
-                hasSelection = true;
-                selected = *c;
+                ctrl.ReceiveCommand(Actions::RELEASE_SELECTED);
                 return ctrl.ReceiveCommand(Command(c->row, c->col));
             }
         }
@@ -404,24 +403,17 @@ void SFMLRW::OnGameEvent(const GameEvent& e)
 
         case EventCode::TURN_SWITCH:
             // New turn: dice not rolled yet
-            awaitingRoll = true;
-            hasSelection = false;
-            selected = Coord(-1, -1);
-
             InstructionMessage("New turn. Roll the dice.");
             // Render();
             return;
 
         case EventCode::DICE_ROLL:
             // Dice are now active
-            awaitingRoll = false;
             Render();
             return;
 
         case EventCode::MOVE:
         case EventCode::REMOVE:
-            hasSelection = false;
-            selected = Coord(-1, -1);
             Render();
             return;
 

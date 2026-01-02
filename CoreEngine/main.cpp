@@ -79,8 +79,6 @@ void GraphicHumanVsHuman()
             throw std::runtime_error("Tried human moves without initializing view");
     
         _builder.GetView()->InstructionMessage("Awaiting command\n");
-
-        _builder.ReceiveCommand(Command(DieType{4, 4}));
         
         while(true)
         {

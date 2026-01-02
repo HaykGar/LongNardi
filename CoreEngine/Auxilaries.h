@@ -91,6 +91,7 @@ enum class Actions
     AUTOPLAY,
     RESTART,
     RANDOM_AUTOPLAY,
+    RELEASE_SELECTED,
     NO_OP
 };   // later: add resign offer, mars offer
 

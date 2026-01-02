@@ -30,7 +30,6 @@ private:
     mutable sf::RenderWindow window;
     mutable sf::Font font;
     mutable bool fontLoaded = false;
-    mutable bool awaitingRoll = true;
 
     bool game_over_screen = false;
 
@@ -41,8 +40,6 @@ private:
     float diceW  = 220.f;
 
     // UI state (for click source / click die UX)
-    mutable bool hasSelection = false;
-    mutable Coord selected{ -1, -1 };
     mutable std::string statusLine = "Click a source point, then click a die.";
 
     // ---- Geometry helpers ----

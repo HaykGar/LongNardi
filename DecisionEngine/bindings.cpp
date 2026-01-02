@@ -330,7 +330,7 @@ public:
 
     bool should_continue_game()
     {
-        return !(_builder.GetCtrl().QuitRequested() || _builder.GetGame().GameIsOver());
+        return !_builder.GetCtrl().QuitRequested();
     }
 
 private:

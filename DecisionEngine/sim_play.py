@@ -110,7 +110,6 @@ class Simulator:
             return avg_opp_eval * -1
         
     def apply_lookahead_move(self, evaluator):
-        print("doing lookahead move")
         turn_over = not self.eng.roll()
         if turn_over:
             self.advance_turn()

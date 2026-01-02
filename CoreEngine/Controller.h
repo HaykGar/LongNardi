@@ -14,9 +14,13 @@ class Controller
         virtual ~Controller();
         
         virtual status_codes ReceiveCommand(const Command& cmd);
-        virtual status_codes ReceiveCommand(Actions act);
+        virtual status_codes ReceiveCommand(const Actions& act);
+
         bool QuitRequested() const;
         bool RestartRequested() const;
+        bool AwaitingRoll() const;
+        bool StartIsSelected() const;
+        const Coord& GetStart() const;
 
         void SwitchTurns();
         void OnTurnSwitch();
@@ -50,5 +54,16 @@ bool Controller::RestartRequested() const
 {
     return restart_requested;
 }
+
+inline
+bool Controller::AwaitingRoll() const
+{ return !dice_rolled; }
+
+inline bool Controller::StartIsSelected() const
+{ return start_selected; }
+
+inline 
+const Coord& Controller::GetStart() const
+{ return start; }
 
 }   // namespace Nardi
