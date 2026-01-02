@@ -89,11 +89,6 @@ TEST_F(TestBuilder, DoublesLegalMove)
     ASSERT_EQ(rc, status_codes::SUCCESS);
 }
 
-
-
-
-
-
 TEST_F(TestBuilder, EndgameWeirdness)
 {
     BoardConfig seg = {{ {0, 0,	0, 0, 0,-1, 0,-1, 0, 0, 0, 0},
@@ -114,4 +109,28 @@ TEST_F(TestBuilder, EndgameWeirdness)
     rc = ReceiveCommand(Command(second));
     DispErrorCode(rc);
     EXPECT_EQ(rc, status_codes::SUCCESS);
+}
+
+TEST_F(TestBuilder, Doubles_2step)
+{
+
+    BoardConfig double_dice = {{{14, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0},
+                                {-14,0, 0, 0, 0, 0, 0, 0, 0, 0, 0, -1}}};
+
+    auto s = StartOfTurn(white, double_dice, 2, 2);
+    ASSERT_EQ(s, status_codes::SUCCESS);
+
+    s = ReceiveCommand(Command(0, 0));
+    ASSERT_EQ(s, status_codes::SUCCESS);
+
+    s = ReceiveCommand(Command(0, 6));  // use dice 3 times
+    ASSERT_EQ(s, status_codes::SUCCESS);
+
+    s = ReceiveCommand(Command(0, 3));
+    ASSERT_EQ(s, status_codes::SUCCESS);
+
+    auto rc = ReceiveCommand(Command(0, 7));
+
+    EXPECT_NE(rc, status_codes::SUCCESS);
+    EXPECT_NE(rc, status_codes::NO_LEGAL_MOVES_LEFT);
 }
