@@ -112,6 +112,7 @@ status_codes ScenarioBuilder::SimulateMove(const BoardConfig& b)
 
     status_codes ret = ReceiveCommand(Command(b));
     _ctrl.AdvanceSimTurn();
+    return ret;
 }
 
 void ScenarioBuilder::Reset()

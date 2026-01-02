@@ -71,6 +71,7 @@ void GraphicHumanVsHuman()
 {
     ScenarioBuilder _builder;
     _builder.AttachNewRW(SFMLRWFactory());
+    _builder.withFirstTurn();
 
     auto human_turn = [&]()
     {
@@ -78,6 +79,8 @@ void GraphicHumanVsHuman()
             throw std::runtime_error("Tried human moves without initializing view");
     
         _builder.GetView()->InstructionMessage("Awaiting command\n");
+
+        _builder.ReceiveCommand(Command(DieType{4, 4}));
         
         while(true)
         {
@@ -98,10 +101,9 @@ void GraphicHumanVsHuman()
 
 int main()
 {
-    // GraphicHumanVsHuman();
-    HumanVsRand();
+    GraphicHumanVsHuman();
+    // HumanVsRand();
 
-    // ScenarioBuilder builder;
     // builder.AttachNewRW(SFMLRWFactory());
 
     // BoardConfig block_dubar = {{    { 7, 0,-2, 1, 2, 1, 1, 1, 0, 0, 1, 0},
