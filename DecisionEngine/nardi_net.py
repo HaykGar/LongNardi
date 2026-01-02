@@ -48,7 +48,7 @@ class LegacyPipeline():
 
 
 class NardiNet(nn.Module):
-    def __init__(self, n_h1, n_h2, feature_pipeline=None, input_dim=None, p_dropout=0):
+    def __init__(self, n_h1, n_h2, feature_pipeline=None, input_dim=None, p_dropout=0, out_dim=4):
         super().__init__()
         
         self.pipeline = feature_pipeline if feature_pipeline is not None \
@@ -61,6 +61,8 @@ class NardiNet(nn.Module):
             
         else:
             self.input_dim = input_dim   
+            
+        self.out_dim = out_dim
         
         self.trunk = nn.Sequential(
             nn.Linear(self.input_dim, n_h1),
@@ -69,10 +71,8 @@ class NardiNet(nn.Module):
             nn.Linear(n_h1, n_h2),
             nn.SiLU(),
             nn.Dropout(p=p_dropout),
-            nn.Linear(n_h2, 4)  # 4 logits for outcome probabilities
+            nn.Linear(n_h2, out_dim)
         )
-        
-        self.p_drop = p_dropout 
         
         self.register_buffer("scores", torch.tensor([1.0, 2.0, -1.0, -2.0]))
         
@@ -82,8 +82,12 @@ class NardiNet(nn.Module):
     
     def forward_tensor(self, x : torch.Tensor):
         logits = self.trunk(x)              
-        probs = torch.softmax(logits, dim=-1)
-        return (probs * self.scores).sum(dim=-1)  # weighted sum
+
+        if self.out_dim == 4:
+            probs = torch.softmax(logits, dim=-1)
+            return (probs * self.scores).sum(dim=-1)  # weighted sum
+        else:
+            return logits
                 
     def forward(self, feat: nardi.Features) -> torch.Tensor:
         x = self.feature_to_tensor(feat)
@@ -164,7 +168,6 @@ class ResidualBlock(nn.Module):
         out = self.relu(out + x)
         return out
         
-        
 class ResNardiNet(NardiNet):
     def __init__(self, dropout=0, conv_out=8):
         pipeline = ConvPipeline()
@@ -187,4 +190,21 @@ class ResNardiNet(NardiNet):
         
         x = torch.cat([x, scalars], dim=1)
         return self.forward_tensor(x)
+    
+class NardiSemble(NardiNet):
+    def __init__(self, models : list[NardiNet], freeze_models = True):
+        super().__init__(n_h1=12, n_h2=12, out_dim=len(models))
+        self.models = nn.ModuleList(models)
         
+        if freeze_models:
+            for m in self.models:
+                for p in m.parameters():
+                    p.requires_grad = False
+                m.eval()
+
+    def forward(self, feat : nardi.Features | list[nardi.Features]):
+        weights = torch.softmax(self.forward_tensor(self.feature_to_tensor(feat)), dim=-1) # (B, n_models)
+        
+        model_outputs = torch.stack([m(feat) for m in self.models], dim=-1) # (B, n_models)
+            
+        return (model_outputs * weights).sum(dim=-1) # (B, )

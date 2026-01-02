@@ -77,7 +77,7 @@ class TDTrainer:
                 self.model.load_state_dict(torch.load(weights_file))
 
         self.model.to(self.simulator.device)
-        
+                
         self.baseline = baseline_args
         
     #################################
@@ -93,7 +93,8 @@ class TDTrainer:
         self.weights_file = weights_file
         
         self.grad_buf = [torch.zeros_like(p) for p in self.model.parameters()]
-        self.params = list(self.model.parameters())
+        
+        self.params = [p for p in self.model.parameters() if p.requires_grad] 
         
     ####################################
     ######### helper functions #########     
@@ -140,7 +141,7 @@ class TDTrainer:
         
         grads = torch.autograd.grad(
             eval,
-            self.model.parameters(),
+            self.params,
             retain_graph=False,
             create_graph=False,
             allow_unused=False
@@ -200,7 +201,7 @@ class TDTrainer:
         if track_eval:
             return max_surprise, evals
         
-    def report_progress(self, ng=1000):
+    def report_progress(self, ng):
         mod_score, base_score = self.simulator.benchmark(self.model, 
                                                          "greedy", 
                                                          self.baseline[0], 
