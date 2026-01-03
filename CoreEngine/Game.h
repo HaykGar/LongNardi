@@ -191,6 +191,7 @@ class Game
         std::array<int, 2> times_dice_used;
         std::array<int, 2> turn_number;
 
+        mutable bool emitted_game_over;
         bool doubles_rolled;
         bool first_move_exception;
         bool maxdice_exception;   // can only play one or the other not both
@@ -209,7 +210,7 @@ class Game
 
         // Updates
         void IncrementTurnNumber();
-        void EmitEvent(const GameEvent& e);
+        void EmitEvent(const GameEvent& e) const;
         
         // Moving
         status_codes MakeMove(const Coord& start, bool dice_idx);

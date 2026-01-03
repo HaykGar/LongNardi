@@ -9,12 +9,14 @@ using namespace Nardi;
 
 ///////////// Constructor and intialization /////////////
 
-Game::Game(int rseed) : board(), rng(rseed), dist(1, 6), dice({0, 0}), times_dice_used({0, 0}), turn_number({0, 0}), 
-                        doubles_rolled(false), rw(nullptr), arbiter(*this), legal_turns(*this)
+Game::Game(int rseed) : board(), rng(rseed), dist(1, 6), dice({0, 0}), times_dice_used({0, 0}), 
+                        turn_number({0, 0}), emitted_game_over(false), doubles_rolled(false), 
+                        rw(nullptr), arbiter(*this), legal_turns(*this)
 {} 
 
-Game::Game() :  board(), rng(std::random_device{}()), dist(1, 6), dice({0, 0}), doubles_rolled(false), 
-                times_dice_used({0, 0}), turn_number({0, 0}), rw(nullptr), arbiter(*this), legal_turns(*this)
+Game::Game() :  board(), rng(std::random_device{}()), dist(1, 6), dice({0, 0}), 
+                emitted_game_over(false), doubles_rolled(false), times_dice_used({0, 0}),
+                turn_number({0, 0}), rw(nullptr), arbiter(*this), legal_turns(*this)
 {}
 
 Game::Game(const Game& other) : rng(std::random_device{}()), dist(1, 6), rw(nullptr), 
@@ -25,6 +27,7 @@ Game::Game(const Game& other) : rng(std::random_device{}()), dist(1, 6), rw(null
     turn_number = other.turn_number;
     board = other.board;
     dice = other.dice;
+    emitted_game_over = other.emitted_game_over;
     doubles_rolled = (dice[0] == dice[1]); 
     first_move_exception = other.first_move_exception;
     maxdice_exception = other.maxdice_exception;
@@ -355,7 +358,12 @@ bool Game::TurnInProgress() const
 
 bool Game::GameIsOver() const 
 {   
-    return (board.PiecesLeft().at(0) == 0 || board.PiecesLeft().at(1) == 0);  
+    bool over = (board.PiecesLeft().at(0) == 0 || board.PiecesLeft().at(1) == 0);  
+    if(over && !emitted_game_over){
+        EmitEvent(GameEvent{ EventCode::GAME_OVER, std::monostate{} });
+        emitted_game_over = true;
+    }
+    return over;
 }
 
 bool Game::IsMars() const
@@ -383,7 +391,7 @@ void Game::SwitchPlayer()
 void Game::IncrementTurnNumber()
 {   ++turn_number[board.PlayerIdx()];   }
 
-void Game::EmitEvent(const GameEvent& e)
+void Game::EmitEvent(const GameEvent& e) const
 {
     if(rw)
         rw->OnGameEvent(e);
@@ -433,17 +441,8 @@ status_codes Game::Arbiter::BoardAndBlockLegalEnd(const Coord& start, bool dice_
 {
     if(!CanUseDice(dice_idx))
         return status_codes::DICE_USED_ALREADY;
-    else if(_g.maxdice_exception)    // only flagged after pre-compute carried out
-    {
-        auto& b2s = _g.legal_turns.BrdsToSeqs();
-        for(const auto& [k, v] : b2s)
-        {
-            if(v.at(0)._from == start && v.at(0)._diceIdx == dice_idx)
-                return status_codes::SUCCESS;
-        }
-
+    else if(_g.maxdice_exception && _g.dice[dice_idx] < _g.dice[!dice_idx])
         return status_codes::MISC_FAILURE;
-    }
     else if(_g.first_move_exception)
     {
         if(start == _g.PlayerHead() && abs(_g.board.at(start)) > PIECES_PER_PLAYER - 2)
@@ -642,10 +641,12 @@ void Game::LegalSeqComputer::ComputeAllLegalMoves()
             });
         if(max_dice_possible)
         {
+            auto orig_size = _brdsToSeqs.size();
+
             std::erase_if(_brdsToSeqs, [&](const auto& item){
                 return item.second.at(0)._diceIdx != _maxDice;
             });
-            _g.maxdice_exception = true;
+            _g.maxdice_exception = _brdsToSeqs.size() != orig_size;
         }
     }
 }

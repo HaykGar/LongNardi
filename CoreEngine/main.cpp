@@ -73,6 +73,8 @@ void GraphicHumanVsHuman()
     _builder.AttachNewRW(SFMLRWFactory());
     _builder.withFirstTurn();
 
+    bool running = true;
+
     auto human_turn = [&]()
     {
         if(!_builder.GetView())
@@ -91,10 +93,21 @@ void GraphicHumanVsHuman()
         }
     };
 
-    while(!_builder.GetCtrl().QuitRequested() && !_builder.GetGame().GameIsOver())
+    while(running)
     {
-        human_turn();
+        while(!_builder.GetCtrl().QuitRequested() && !_builder.GetGame().GameIsOver())
+            human_turn();
+
+        while (!_builder.GetCtrl().QuitRequested() && !_builder.GetCtrl().RestartRequested())
+            human_turn();
+
+        if (!_builder.GetCtrl().RestartRequested())
+            running = false;
+        else
+            _builder.Reset(); 
     }
+
+
 }
 
 int main()

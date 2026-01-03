@@ -63,6 +63,8 @@ void ScenarioBuilder::withBoard(const BoardConfig& b)
 
     std::stack<Game::TurnData> empty;
     std::swap(_game.history, empty);
+
+    _game.emitted_game_over = false;
 }
 
 void ScenarioBuilder::withRandomEndgame(bool p_idx)
@@ -90,6 +92,7 @@ void ScenarioBuilder::ResetControllerState()
     _ctrl.start_selected = false;
     _ctrl.dice_rolled = false; 
     _ctrl.quit_requested = false;
+    _ctrl.restart_requested = false;
     _ctrl.sim_mode = false;
 }
 
