@@ -292,16 +292,21 @@ public:
             throw std::runtime_error("Tried human moves without initializing view");
         
         _builder.GetView()->InstructionMessage("Awaiting command\n");
-        
-        while(true)
-        {
-            Nardi::status_codes status = _builder.GetView()->PollInput();
-            if (status != Nardi::status_codes::WAITING)
-                _builder.GetView()->DispErrorCode(status);
 
-            if (status == Nardi::status_codes::NO_LEGAL_MOVES_LEFT)
-                break;
-        }
+        auto status = _builder.ReceiveCommand(Nardi::Command(Nardi::Actions::ROLL_DICE));
+        if(status != Nardi::status_codes::NO_LEGAL_MOVES_LEFT)
+            GetHumanInput();
+    }
+
+    bool restart_requested()
+    {
+        if(!_builder.GetView())
+            return false;
+
+        if(!_builder.GetCtrl().QuitRequested() && !_builder.GetCtrl().RestartRequested())
+            GetHumanInput();
+
+        return _builder.GetCtrl().RestartRequested();
     }
 
     bool is_terminal() const {
@@ -328,9 +333,14 @@ public:
         return _builder.StatusString();
     }
 
-    bool should_continue_game()
+    bool should_continue_game() const
     {
-        return !_builder.GetCtrl().QuitRequested();
+        return !(_builder.GetCtrl().QuitRequested() || _builder.GetGame().GameIsOver());
+    }
+
+    bool quit_requested() const
+    {
+        return _builder.GetCtrl().QuitRequested();
     }
 
 private:
@@ -386,6 +396,21 @@ private:
         return features_vec;
     }
 
+    void GetHumanInput()
+    {
+        if(!_builder.GetView())
+            return;
+
+        while(true)
+        {
+            Nardi::status_codes status = _builder.GetView()->PollInput();
+            if (status != Nardi::status_codes::WAITING)
+                _builder.GetView()->DispErrorCode(status);
+
+            if (status == Nardi::status_codes::NO_LEGAL_MOVES_LEFT)
+                break;
+        }
+    }
 };
 
 py::array_t<uint8_t> occ_view(const Nardi::Board::Features::PlayerBoardInfo& pi)
@@ -454,7 +479,9 @@ PYBIND11_MODULE(nardi, m)
         .def("is_terminal",         &NardiEngine::is_terminal)
         .def("winner_result",       &NardiEngine::winner_result)
         .def("reset",               &NardiEngine::reset)
-        .def("should_continue_game",&NardiEngine::should_continue_game);
+        .def("should_continue_game",&NardiEngine::should_continue_game)
+        .def("restart_requested",   &NardiEngine::restart_requested)
+        .def("quit_requested",      &NardiEngine::quit_requested);
 
     py::class_<ScenarioConfig>(m, "ScenarioConfig")
         .def("withScenario",

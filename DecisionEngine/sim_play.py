@@ -155,8 +155,7 @@ class Simulator:
     # TODO add more sophisticated heuristics and tie breakers for the above
     
     def human_turn(self):
-        if self.eng.roll():
-            self.eng.human_turn()
+        self.eng.human_turn()
         self.advance_turn()
         
     def strat_to_func(self, model, strat):
@@ -180,27 +179,30 @@ class Simulator:
         if p1_move is None or p2_move is None:
             print("failure initializing model and opp moves, aborting simulation")
             return None
-
-        self.reset(position_setup)
-        self.eng.Render()
         
-        while self.eng.should_continue_game():
-            is_p1_move = (self.sign == 1 and not swap_order) or (self.sign == -1 and swap_order)
-            if is_p1_move:
-                p1_move()
-            else:
-                p2_move()
+        moves = [p2_move, p1_move]
+        score = [0, 0]
+        
+        run = True
+        while run:
+            self.reset(position_setup)
+            self.eng.Render()
+            while self.eng.should_continue_game():
+                is_p1_move = (self.sign == 1 and not swap_order) or (self.sign == -1 and swap_order)
+                moves[is_p1_move]()
+                
+            run = self.eng.restart_requested()
+            score[not is_p1_move] += self.eng.winner_result()
             
         # game over, return true if first player won, false if second player won
-        return is_p1_move
+        return score
 
     def benchmark(self, p1, p1_strat="greedy", p2=None, p2_strat="heuristic", num_games = 100, position_setup=None, 
                   graphics=None):
         if num_games <= 0:
             num_games = 100
-
-        p1_score = 0
-        p2_score = 0
+        
+        scores = [0, 0]
         
         p1_move = self.strat_to_func(p1, p1_strat)
         p2_move = self.strat_to_func(p2, p2_strat)
@@ -215,22 +217,22 @@ class Simulator:
             p1_first = bool(model_first)
 
             for game in tqdm(range(num_games), desc="Inner Loop", leave=False):
-                p1_win = self.simulate_game(p1_move, p2_move, p1_first, position_setup)
+                result = self.simulate_game(p1_move, p2_move, p1_first, position_setup)
                 
-                p1_score += p1_win * self.eng.winner_result()
-                p2_score += (1 - p1_win) * self.eng.winner_result()
+                scores[0] += result[0]
+                scores[1] += result[1]
                                     
                 if p2_strat == "human":
                     print(f"game {model_first*num_games + game} is over\n\n")   
         
-        wr = p1_score / (p1_score + p2_score)
+        wr = scores[0] / (scores[0] + scores[1])
         print(f"win rate: {wr*100}%")
         self.win_rates.append(wr)  
         
         if p1_strat == "human" or p2_strat == "human":
             self.eng.DetachRW() 
                 
-        return p1_score, p2_score
+        return scores
    
     def play_with_graphics(self, opp_strat="human", opp_model=None, from_endgame=False):
         p1_move = self.human_turn
@@ -239,10 +241,22 @@ class Simulator:
         setup = self.config.withRandomEndgame if from_endgame else None
         
         self.eng.AttachNewSFMLRW()
-        p1_last = self.simulate_game(p1_move, p2_move, position_setup=setup)
+        scores = self.simulate_game(p1_move, p2_move, position_setup=setup)
         if self.eng.is_terminal():
-            print(f"congratulations player {2-p1_last}!")
-            print("You Win!")
+            if scores[0] > scores[1]:
+                winner = 1
+            elif scores[0] < scores[1]:
+                winner = 2
+            else:
+                winner = None
+                
+            if winner is not None:
+                print(f"congratulations player {winner}!")
+                print("You Win!")
+            else:
+                print("Match ended in a draw")
+                
+            print(f"score: {scores[0]} - {scores[1]} ")
         else:
             print("exited due to quit")
       
@@ -254,4 +268,4 @@ if __name__ =="__main__":
     model.eval()
     
     sim = Simulator()
-    sim.play_with_graphics("lookahead", model)
+    sim.play_with_graphics("human", None, from_endgame=False)
