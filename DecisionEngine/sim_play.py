@@ -234,7 +234,7 @@ class Simulator:
                 
         return scores
    
-    def play_with_graphics(self, opp_strat="human", opp_model=None, from_endgame=False):
+    def play_with_graphics(self, opp_model=None, opp_strat="human", from_endgame=False):
         p1_move = self.human_turn
         p2_move = self.strat_to_func(opp_model, opp_strat)
         
@@ -268,4 +268,4 @@ if __name__ =="__main__":
     model.eval()
     
     sim = Simulator()
-    sim.play_with_graphics("human", None, from_endgame=False)
+    sim.play_with_graphics(model, "lookahead", from_endgame=False)

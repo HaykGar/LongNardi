@@ -106,8 +106,11 @@ status_codes Controller::ReceiveCommand(const Command& cmd)
             }
 
             if(outcome == status_codes::SUCCESS)  // turn not over, auto-select start coord to be the destination
+            {
                 start = std::holds_alternative<Coord>(cmd.payload) ? std::get<Coord>(cmd.payload) : 
                             g.GetBoardRef().CoordAfterDistance(start, g.GetDice(std::get<bool>(cmd.payload)));
+                start_selected = start.InBounds();
+            }  
             else
                 start_selected = false; // unselect start if illegal move attempted or no legal moves left
         }

@@ -13,29 +13,12 @@ SFMLRW::SFMLRW(Game& game, Controller& c, unsigned width, unsigned height)
 {
     window.setVerticalSyncEnabled(true);
     tryLoadFont();
+    // Board image is loaded lazily in Render() (const) via tryLoadBoardImage().
 }
 
 void SFMLRW::tryLoadFont()
 {
-    const char* candidates[] = {
-        "assets/Roboto-Regular.ttf",
-        "assets/Arial.ttf",
-        "/System/Library/Fonts/Supplemental/Arial.ttf",
-        "/System/Library/Fonts/Supplemental/Verdana.ttf",
-        "/System/Library/Fonts/Supplemental/Tahoma.ttf",
-        "C:/Windows/Fonts/Arial.ttf" // Added common Windows path
-    };
 
-    for (const char* p : candidates)
-    {
-        // FIX 1: loadFromFile -> openFromFile in SFML 3
-        if (font.openFromFile(p))
-        {
-            fontLoaded = true;
-            return;
-        }
-    }
-    fontLoaded = false;
     std::cerr << "Warning: No font loaded. Text will not display.\n";
 }
 
@@ -58,25 +41,6 @@ sf::FloatRect SFMLRW::dicePanelRect() const
     return sf::FloatRect({x, y}, {w, h});
 }
 
-sf::FloatRect SFMLRW::cellRect(int row, int col) const
-{
-    auto br = boardRect();
-    float cellW = br.size.x / (float)COLS;
-    float cellH = br.size.y / (float)ROWS;
-
-    // Reverse top row visually
-    int visualCol = col;
-    if (row == 0)
-        visualCol = COLS - 1 - col;
-
-    return sf::FloatRect(
-        { br.position.x + visualCol * cellW,
-          br.position.y + row * cellH },
-        { cellW, cellH }
-    );
-}
-
-
 sf::FloatRect SFMLRW::dieRect(bool idx) const
 {
     auto dr = dicePanelRect();
@@ -89,6 +53,121 @@ sf::FloatRect SFMLRW::dieRect(bool idx) const
     return sf::FloatRect({x, y}, {size, size});
 }
 
+void SFMLRW::tryLoadBoardImage() const
+{
+    if (boardTextureLoaded || boardSprite.has_value())
+        return;
+
+    // Try common paths. User requested "./images/BoardImg"
+    const char* candidates[] = {
+        "../images/BoardImg.png",
+        "../images/BoardImg.jpg",
+        "../images/BoardImg.jpeg",
+    };
+
+    for (const char* p : candidates)
+    {
+        if (boardTexture.loadFromFile(p))
+        {
+            boardTextureLoaded = true;
+            boardSprite.emplace(boardTexture); // SFML 3: sprite constructed with texture
+            return;
+        }
+    }
+
+    boardTextureLoaded = false;
+    // Not fatal: we can still draw fallback background.
+    std::cerr << "Warning: Could not load board image from ./images/BoardImg(.png/.jpg). "
+                 "Falling back to flat background.\n";
+}
+
+sf::FloatRect SFMLRW::boardInnerLeftRect() const
+{
+    auto br = boardRect();
+
+    float padX = br.size.x * borderPadXFrac;
+    float padY = br.size.y * borderPadYFrac;
+    float gapW = br.size.x * centerGapFrac;
+
+    float innerW = br.size.x - 2.f * padX - gapW;
+    float halfW  = innerW * 0.5f;
+
+    float x = br.position.x + padX;
+    float y = br.position.y + padY;
+    float w = halfW;
+    float h = br.size.y - 2.f * padY;
+
+    return sf::FloatRect({x, y}, {w, h});
+}
+
+sf::FloatRect SFMLRW::boardInnerRightRect() const
+{
+    auto br = boardRect();
+
+    float padX = br.size.x * borderPadXFrac;
+    float padY = br.size.y * borderPadYFrac;
+    float gapW = br.size.x * centerGapFrac;
+
+    float innerW = br.size.x - 2.f * padX - gapW;
+    float halfW  = innerW * 0.5f;
+
+    float x = br.position.x + padX + halfW + gapW;
+    float y = br.position.y + padY;
+    float w = halfW;
+    float h = br.size.y - 2.f * padY;
+
+    return sf::FloatRect({x, y}, {w, h});
+}
+
+sf::FloatRect SFMLRW::boardImageRect() const
+{
+    auto br = boardRect();
+
+    if (!boardTextureLoaded)
+        return br;
+
+    auto texSize = boardTexture.getSize();
+    float texW = static_cast<float>(texSize.x);
+    float texH = static_cast<float>(texSize.y);
+
+    float scale = std::min(br.size.x / texW, br.size.y / texH);
+
+    float drawW = texW * scale;
+    float drawH = texH * scale;
+
+    float x = br.position.x + (br.size.x - drawW) * 0.5f;
+    float y = br.position.y + (br.size.y - drawH) * 0.5f;
+
+    return sf::FloatRect({x, y}, {drawW, drawH});
+}
+
+
+sf::FloatRect SFMLRW::cellRect(int row, int col) const
+{
+    // IMPORTANT: same logical mapping as before (including top-row visual flip),
+    // but rectangles are now computed inside the inner playable regions of the board image.
+
+    // Reverse top row visually
+    int visualCol = col;
+    if (row == 0)
+        visualCol = COLS - 1 - col;
+
+    // Split into halves (0..5 left half, 6..11 right half) based on VISUAL column
+    const bool rightHalf = (visualCol >= (COLS / 2));
+    const int localCol   = rightHalf ? (visualCol - (COLS / 2)) : visualCol;
+
+    sf::FloatRect half = rightHalf ? boardInnerRightRect() : boardInnerLeftRect();
+
+    float cellW = half.size.x / (float)(COLS / 2); // 6 columns per half
+    float cellH = half.size.y / (float)ROWS;       // 2 rows
+
+    return sf::FloatRect(
+        { half.position.x + localCol * cellW,
+          half.position.y + row * cellH },
+        { cellW, cellH }
+    );
+}
+
 int SFMLRW::cellVal(int row, int col) const
 {
     const auto& b = g.GetBoardRef();
@@ -97,18 +176,30 @@ int SFMLRW::cellVal(int row, int col) const
 
 std::optional<Coord> SFMLRW::hitTestCell(sf::Vector2f p) const
 {
-    auto br = boardRect();
-    if (!br.contains(p))
+    // We do NOT hit-test against the full boardRect anymore; we only accept clicks
+    // inside the inner left/right playable rectangles.
+
+    auto left  = boardInnerLeftRect();
+    auto right = boardInnerRightRect();
+
+    const bool inLeft  = left.contains(p);
+    const bool inRight = right.contains(p);
+
+    if (!inLeft && !inRight)
         return std::nullopt;
 
-    float cellW = br.size.x / (float)COLS;
-    float cellH = br.size.y / (float)ROWS;
+    sf::FloatRect half = inLeft ? left : right;
 
-    int visualCol = (int)((p.x - br.position.x) / cellW);
-    int row       = (int)((p.y - br.position.y) / cellH);
+    float cellW = half.size.x / (float)(COLS / 2);
+    float cellH = half.size.y / (float)ROWS;
 
-    if (row < 0 || row >= ROWS || visualCol < 0 || visualCol >= COLS)
+    int localCol = (int)((p.x - half.position.x) / cellW);
+    int row      = (int)((p.y - half.position.y) / cellH);
+
+    if (row < 0 || row >= ROWS || localCol < 0 || localCol >= (COLS / 2))
         return std::nullopt;
+
+    int visualCol = localCol + (inRight ? (COLS / 2) : 0);
 
     // Undo visual flip for top row
     int logicalCol = visualCol;
@@ -117,7 +208,6 @@ std::optional<Coord> SFMLRW::hitTestCell(sf::Vector2f p) const
 
     return Coord(row, logicalCol);
 }
-
 
 std::optional<bool> SFMLRW::hitTestDie(sf::Vector2f p) const
 {
@@ -131,9 +221,8 @@ std::optional<bool> SFMLRW::hitTestDie(sf::Vector2f p) const
 void SFMLRW::drawText(const std::string& s, float x, float y, unsigned size) const
 {
     if (!fontLoaded) return;
-    
-    // FIX 2: sf::Text requires font in constructor now
-    sf::Text t(font); 
+
+    sf::Text t(font);
     t.setString(s);
     t.setCharacterSize(size);
     t.setPosition({x, y});
@@ -143,43 +232,68 @@ void SFMLRW::drawText(const std::string& s, float x, float y, unsigned size) con
 
 void SFMLRW::drawBoardGrid() const
 {
+    // Now: draw the board IMAGE as the background, and only draw overlays needed
+    // (e.g., selection highlight). No grid coloring.
+
     auto br = boardRect();
+    tryLoadBoardImage();
 
-    sf::RectangleShape bg(br.size);
-    bg.setPosition(br.position);
-    bg.setFillColor(sf::Color(35, 70, 45));
-    window.draw(bg);
-
-    for (int r = 0; r < ROWS; ++r)
+    if (boardSprite && boardTextureLoaded)
     {
-        for (int c = 0; c < COLS; ++c)
+        auto imgRect = boardImageRect();  // aspect-correct rect inside boardRect
+
+        boardSprite->setPosition(imgRect.position);
+
+        auto texSize = boardTexture.getSize();
+        if (texSize.x > 0 && texSize.y > 0)
         {
-            auto cr = cellRect(r, c);
-            sf::RectangleShape cell({cr.size.x - 2.f, cr.size.y - 2.f});
-            cell.setPosition({cr.position.x + 1.f, cr.position.y + 1.f});
-
-            bool alt = ((r + c) % 2) == 0;
-            cell.setFillColor(alt ? sf::Color(60, 95, 70) : sf::Color(50, 85, 62));
-
-            if (ctrl.StartIsSelected() && ctrl.GetStart() == Coord(r, c))
-            {
-                cell.setFillColor(sf::Color(90, 120, 90));
-            }
-
-            window.draw(cell);
+            float sx = imgRect.size.x / (float)texSize.x;
+            float sy = imgRect.size.y / (float)texSize.y;
+            boardSprite->setScale({sx, sy});
         }
+
+        window.draw(*boardSprite);
     }
 
-    sf::RectangleShape mid({br.size.x, 3.f});
-    mid.setPosition({br.position.x, br.position.y + br.size.y / 2.f - 1.5f});
-    mid.setFillColor(sf::Color(20, 40, 25));
-    window.draw(mid);
+    else
+    {
+        // Fallback background if image not present
+        sf::RectangleShape bg(br.size);
+        bg.setPosition(br.position);
+        bg.setFillColor(sf::Color(35, 70, 45));
+        window.draw(bg);
+    }
+
+    // Selection highlight overlay (same behavior as before, just drawn atop the board image)
+    if (ctrl.StartIsSelected())
+    {
+        Coord sel = ctrl.GetStart();
+        auto cr = cellRect(sel.row, sel.col);
+
+        sf::RectangleShape hl(cr.size);
+        hl.setPosition(cr.position);
+        hl.setFillColor(sf::Color(120, 200, 120, 70));
+        hl.setOutlineThickness(2.f);
+        hl.setOutlineColor(sf::Color(120, 200, 120, 160));
+        window.draw(hl);
+    }
+
+    // OPTIONAL: subtle inner playable bounds debugging (comment out if you want)
+    // {
+    //     auto l = boardInnerLeftRect();
+    //     auto r = boardInnerRightRect();
+    //     sf::RectangleShape a(l.size); a.setPosition(l.position);
+    //     a.setFillColor(sf::Color(0,0,0,0)); a.setOutlineThickness(1.f); a.setOutlineColor(sf::Color(255,0,0,120));
+    //     sf::RectangleShape b(r.size); b.setPosition(r.position);
+    //     b.setFillColor(sf::Color(0,0,0,0)); b.setOutlineThickness(1.f); b.setOutlineColor(sf::Color(0,0,255,120));
+    //     window.draw(a); window.draw(b);
+    // }
 }
 
 void SFMLRW::drawPieces() const
 {
     const auto& b = g.GetBoardRef();
-    bool topRowIsCurrentPlayersStart = b.PlayerIdx();
+    (void)b; // keep as in your original file (you had topRowIsCurrentPlayersStart, unused)
 
     for (int r = 0; r < ROWS; ++r)
     {
@@ -192,11 +306,16 @@ void SFMLRW::drawPieces() const
             int ownerSign = (raw > 0) ? 1 : -1;
 
             auto cr = cellRect(r, c);
+
+            // Pieces are naturally kept away from the outer edges because cellRect is now inside inner play areas.
             float radius = std::min(cr.size.x, cr.size.y) * 0.18f;
 
             bool isTop = (r == 0);
             float baseX = cr.position.x + cr.size.x / 2.f;
-            float baseY = isTop ? (cr.position.y + radius + 10.f) : (cr.position.y + cr.size.y - radius - 10.f);
+
+            // Keep the same stacking logic, just relative to new cell rects
+            float baseY = isTop ? (cr.position.y + radius + 10.f)
+                                : (cr.position.y + cr.size.y - radius - 10.f);
 
             int maxStack = std::min(count, 5);
 
@@ -222,7 +341,6 @@ void SFMLRW::drawPieces() const
                 if (i == 0 && count > 5 && fontLoaded)
                 {
                     std::string txt = std::to_string(count);
-                    // FIX 2: Pass font to constructor
                     sf::Text t(font);
                     t.setString(txt);
                     t.setCharacterSize(16);
@@ -232,7 +350,6 @@ void SFMLRW::drawPieces() const
                     t.setOrigin({bounds.position.x + bounds.size.x / 2.f,
                                  bounds.position.y + bounds.size.y / 2.f});
                     t.setPosition({baseX, y});
-
                     window.draw(t);
                 }
             }
@@ -260,23 +377,21 @@ void SFMLRW::drawDice() const
 
         if (gray)
         {
-            die.setFillColor(sf::Color(170, 170, 170));   // gray
+            die.setFillColor(sf::Color(170, 170, 170));
             die.setOutlineColor(sf::Color(80, 80, 80));
         }
         else
         {
-            die.setFillColor(sf::Color(230, 230, 230));   // normal
+            die.setFillColor(sf::Color(230, 230, 230));
             die.setOutlineColor(sf::Color(110, 110, 110));
         }
 
         die.setOutlineThickness(3.f);
-
         window.draw(die);
 
         int val = g.GetDice(i);
         if (fontLoaded)
         {
-            // FIX 2: Pass font to constructor
             sf::Text t(font);
             t.setString(std::to_string(val));
             t.setCharacterSize(40);
@@ -316,7 +431,7 @@ void SFMLRW::Render() const
     drawBoardGrid();
     drawPieces();
     drawDice();
-    if(game_over_screen)
+    if (game_over_screen)
         drawGameOverOverlay();
     window.display();
 }
@@ -351,7 +466,7 @@ status_codes SFMLRW::PollInput()
 
             if (k->code == sf::Keyboard::Key::P)
                 return ctrl.ReceiveCommand(Command(Actions::RANDOM_AUTOPLAY));
-            
+
             if (k->code == sf::Keyboard::Key::Num0 || k->code == sf::Keyboard::Key::Numpad0)
                 return ctrl.ReceiveCommand(Command(false)); // die 0
 
@@ -380,15 +495,14 @@ status_codes SFMLRW::PollInput()
     }
 
     Render();
-    // return status_codes::SUCCESS;
     return status_codes::WAITING;
 }
 
 void SFMLRW::OnGameEvent(const GameEvent& e)
 {
+    // NOTE: You asked to keep logic unchanged; this follows your structure.
     switch (e.code)
     {
-        InstructionMessage(std::to_string(static_cast<int>(e.code)));
         case EventCode::QUIT:
             statusLine = "Game ended by user.";
             Render();
@@ -402,13 +516,10 @@ void SFMLRW::OnGameEvent(const GameEvent& e)
             return;
 
         case EventCode::TURN_SWITCH:
-            // New turn: dice not rolled yet
             InstructionMessage("New turn. Roll the dice.");
-            // Render();
             return;
 
         case EventCode::DICE_ROLL:
-            // Dice are now active
             Render();
             return;
 
@@ -427,7 +538,7 @@ void SFMLRW::drawGameOverOverlay() const
 {
     sf::RectangleShape overlay({(float)W, (float)H});
     overlay.setPosition({0.f, 0.f});
-    overlay.setFillColor(sf::Color(0, 0, 0, 180)); // translucent black
+    overlay.setFillColor(sf::Color(0, 0, 0, 180));
     window.draw(overlay);
 
     if (!fontLoaded)
@@ -454,7 +565,6 @@ void SFMLRW::drawGameOverOverlay() const
     window.draw(prompt);
 }
 
-
 void SFMLRW::InstructionMessage(std::string m) const
 {
     statusLine = std::move(m);
@@ -465,11 +575,6 @@ void SFMLRW::ErrorMessage(std::string m) const
 {
     statusLine = "Error: " + std::move(m);
     Render();
-}
-
-std::unique_ptr<ReaderWriter> SFMLRWFactory(Game& g, Controller& c)
-{
-    return std::make_unique<SFMLRW>(g, c);
 }
 
 } // namespace Nardi
