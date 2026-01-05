@@ -54,7 +54,7 @@ private:
     {
         sf::Vector2f from;
         sf::Vector2f to;
-        float duration = 0.75f;
+        float duration = 0.5f;
         bool isRemove = false;
 
         std::optional<Coord> srcCell;

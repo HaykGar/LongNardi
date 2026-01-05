@@ -17,7 +17,3 @@ conv_2x_model.eval()
 res_model = ResNardiNet()
 res_model.load_state_dict(torch.load("res.pt", map_location=torch.device('cpu'), weights_only=True))
 res_model.eval()
-
-ensemble = NardiSemble([conv_2x_model, res_model, mlp_model])
-ensemble.load_state_dict(torch.load("ensemble2.pt", map_location=torch.device('cpu'), weights_only=True))
-ensemble.eval()

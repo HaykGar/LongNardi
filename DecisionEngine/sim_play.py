@@ -271,5 +271,5 @@ if __name__ =="__main__":
     
     model = models.res_model
     
-    sim = Simulator(0.5)
+    sim = Simulator(sleep_time=1)
     sim.play_with_graphics(model, "lookahead", from_endgame=False)
