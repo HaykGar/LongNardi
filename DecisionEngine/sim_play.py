@@ -261,11 +261,9 @@ class Simulator:
             print("exited due to quit")
       
 if __name__ =="__main__":
-    import nardi_net
-
-    model = nardi_net.ResNardiNet()
-    model.load_state_dict(torch.load("res.pt", map_location=torch.device('cpu'), weights_only=True))
-    model.eval()
+    import models
+    
+    model = models.res_model
     
     sim = Simulator()
     sim.play_with_graphics(model, "lookahead", from_endgame=False)

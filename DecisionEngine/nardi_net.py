@@ -45,8 +45,6 @@ class LegacyPipeline():
             return self.handle_list_case(features)
         return self.process_single(features)
 
-
-
 class NardiNet(nn.Module):
     def __init__(self, n_h1, n_h2, feature_pipeline=None, input_dim=None, p_dropout=0, out_dim=4):
         super().__init__()
@@ -76,7 +74,6 @@ class NardiNet(nn.Module):
         
         self.register_buffer("scores", torch.tensor([1.0, 2.0, -1.0, -2.0]))
         
-        
     def feature_to_tensor(self, feat : nardi.Features):
         return self.pipeline(feat)
     
@@ -92,7 +89,6 @@ class NardiNet(nn.Module):
     def forward(self, feat: nardi.Features) -> torch.Tensor:
         x = self.feature_to_tensor(feat)
         return self.forward_tensor(x)
-    
 
 class ConvPipeline(LegacyPipeline):
     def __init__(self):
@@ -109,11 +105,12 @@ class ConvPipeline(LegacyPipeline):
         ], dtype=torch.float32).unsqueeze(1)
 
 class ConvNardiNet(NardiNet):
-    def __init__(self, num_channels=8, dropout=0, extra_conv=False):
+    def __init__(self, num_channels=8, dropout=0, extra_conv=False, out_dim=4):
         pipeline = ConvPipeline()
         eng = nardi.Engine()
         dummy = pipeline(eng.board_features())
-        super().__init__(64, 16, pipeline, input_dim=20*num_channels+dummy.shape[-2], p_dropout=dropout)
+        super().__init__(64, 16, pipeline, input_dim=20*num_channels+dummy.shape[-2], 
+                            p_dropout=dropout, out_dim=out_dim)
         
         # (B, 6, 24) board input processed as 1D sequence of 6 channels
         self.conv = nn.Conv1d(dummy.shape[-2], num_channels, kernel_size=5)
@@ -191,9 +188,9 @@ class ResNardiNet(NardiNet):
         x = torch.cat([x, scalars], dim=1)
         return self.forward_tensor(x)
     
-class NardiSemble(NardiNet):
+class NardiSemble(ConvNardiNet):
     def __init__(self, models : list[NardiNet], freeze_models = True):
-        super().__init__(n_h1=12, n_h2=12, out_dim=len(models))
+        super().__init__(out_dim=len(models))
         self.models = nn.ModuleList(models)
         
         if freeze_models:
@@ -203,7 +200,7 @@ class NardiSemble(NardiNet):
                 m.eval()
 
     def forward(self, feat : nardi.Features | list[nardi.Features]):
-        weights = torch.softmax(self.forward_tensor(self.feature_to_tensor(feat)), dim=-1) # (B, n_models)
+        weights = torch.softmax(super().forward(feat), dim=-1) # (B, n_models)
         
         model_outputs = torch.stack([m(feat) for m in self.models], dim=-1) # (B, n_models)
             
