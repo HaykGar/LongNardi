@@ -7,6 +7,7 @@
 #include <optional>
 #include <memory>
 #include <string>
+#include <queue>
 
 namespace Nardi {
 
@@ -23,7 +24,7 @@ public:
     virtual void InstructionMessage(std::string m) const override;
     virtual void ErrorMessage(std::string m) const override;
 
-    virtual void OnGameEvent(const GameEvent& e) override;
+    virtual void ReceiveGameEvent(const Game::Event& e) override;
 
 private:
     // Window/resources
@@ -36,7 +37,7 @@ private:
     mutable bool boardTextureLoaded = false;
     mutable std::optional<sf::Sprite> boardSprite;
 
-    bool game_over_screen = false;
+    mutable bool game_over_screen = false;
 
     // Layout
     unsigned W, H;
@@ -46,6 +47,28 @@ private:
 
     // UI state (for click source / click die UX)
     mutable std::string statusLine = "Click a source point, then click a die.";
+
+    // ---- Move Animation ----
+
+    struct PieceAnimation
+    {
+        sf::Vector2f from;
+        sf::Vector2f to;
+        float duration = 0.75f;
+        bool isRemove = false;
+
+        std::optional<Coord> srcCell;
+        std::optional<Coord> dstCell;
+
+        int ownerSign;
+    };
+
+    mutable std::optional<PieceAnimation> activeAnim;
+    mutable sf::Clock animClock;
+
+    sf::Vector2f cellCenter(const Coord& c) const;
+    sf::Vector2f pieceStackTopCenter(const Coord& c) const;
+
 
     // ---- Board image layout tuning (percentages of boardRect) ----
     // These define the "playable" regions INSIDE the thick wooden border and the center divider.

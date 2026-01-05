@@ -124,30 +124,6 @@ struct StartAndDice
 
 using MoveSequence = std::vector<StartAndDice>;
 
-struct MoveData
-{
-    Coord from;
-    Coord to;
-    bool die_idx;
-};
-
-using RemoveData = StartAndDice;
-using EventData = std::variant<std::monostate, MoveData, RemoveData, DieType>;
-
-enum class EventCode {
-    DICE_ROLL,
-    MOVE,
-    REMOVE,
-    TURN_SWITCH,
-    GAME_OVER,
-    QUIT
-};
-
-struct GameEvent {
-    EventCode code;
-    EventData data;
-};
-
 
 struct Command // considering making this std::variant or something... 
 {

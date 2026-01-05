@@ -21,7 +21,7 @@ class TerminalRW : public ReaderWriter
         
         virtual status_codes PollInput() override;
 
-        virtual void OnGameEvent(const GameEvent& e) override;
+        virtual void ReceiveGameEvent(const Game::Event& e) override;
         
         virtual void Render() const override;         // show the current state of the game
 

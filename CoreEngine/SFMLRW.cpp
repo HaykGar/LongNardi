@@ -18,7 +18,25 @@ SFMLRW::SFMLRW(Game& game, Controller& c, unsigned width, unsigned height)
 
 void SFMLRW::tryLoadFont()
 {
+    const char* candidates[] = {
+        "assets/Roboto-Regular.ttf",
+        "assets/Arial.ttf",
+        "/System/Library/Fonts/Supplemental/Arial.ttf",
+        "/System/Library/Fonts/Supplemental/Verdana.ttf",
+        "/System/Library/Fonts/Supplemental/Tahoma.ttf",
+        "C:/Windows/Fonts/Arial.ttf"
+    };
 
+    for (const char* p : candidates)
+    {
+        if (font.openFromFile(p))   // SFML 3
+        {
+            fontLoaded = true;
+            return;
+        }
+    }
+
+    fontLoaded = false;
     std::cerr << "Warning: No font loaded. Text will not display.\n";
 }
 
@@ -170,7 +188,7 @@ sf::FloatRect SFMLRW::cellRect(int row, int col) const
 
 int SFMLRW::cellVal(int row, int col) const
 {
-    const auto& b = g.GetBoardRef();
+    auto& b = g.GetBoardRef();
     return (int)b.at((size_t)row, (size_t)col);
 }
 
@@ -292,9 +310,6 @@ void SFMLRW::drawBoardGrid() const
 
 void SFMLRW::drawPieces() const
 {
-    const auto& b = g.GetBoardRef();
-    (void)b; // keep as in your original file (you had topRowIsCurrentPlayersStart, unused)
-
     for (int r = 0; r < ROWS; ++r)
     {
         for (int c = 0; c < COLS; ++c)
@@ -317,7 +332,16 @@ void SFMLRW::drawPieces() const
             float baseY = isTop ? (cr.position.y + radius + 10.f)
                                 : (cr.position.y + cr.size.y - radius - 10.f);
 
-            int maxStack = std::min(count, 5);
+            bool suppressed = activeAnim && 
+                    (
+                        (!activeAnim->isRemove && 
+                        activeAnim->dstCell && 
+                        Coord(r, c) == *activeAnim->dstCell) 
+                    );
+
+            int maxStack = std::min(count - suppressed, 5);
+            if (maxStack <= 0)
+                continue;
 
             for (int i = 0; i < maxStack; ++i)
             {
@@ -390,6 +414,7 @@ void SFMLRW::drawDice() const
         window.draw(die);
 
         int val = g.GetDice(i);
+
         if (fontLoaded)
         {
             sf::Text t(font);
@@ -414,7 +439,7 @@ void SFMLRW::drawHUD() const
 {
     sf::RectangleShape hud({(float)W, hudH});
     hud.setPosition({0.f, 0.f});
-    hud.setFillColor(sf::Color(18, 18, 18));
+    hud.setFillColor(sf::Color(212, 180, 131)); //originally 18 18 18
     window.draw(hud);
 
     if (fontLoaded)
@@ -424,6 +449,37 @@ void SFMLRW::drawHUD() const
     }
 }
 
+sf::Vector2f SFMLRW::cellCenter(const Coord& c) const
+{
+    auto r = cellRect(c.row, c.col);
+    return {
+        r.position.x + r.size.x * 0.5f,
+        r.position.y + r.size.y * 0.5f
+    };
+}
+
+sf::Vector2f SFMLRW::pieceStackTopCenter(const Coord& c) const
+{
+    int raw = cellVal(c.row, c.col);
+    int count = std::abs(raw);
+
+    auto cr = cellRect(c.row, c.col);
+    float radius = std::min(cr.size.x, cr.size.y) * 0.18f;
+
+    bool isTop = (c.row == 0);
+    float baseX = cr.position.x + cr.size.x / 2.f;
+
+    float baseY = isTop
+        ? (cr.position.y + radius + 10.f)
+        : (cr.position.y + cr.size.y - radius - 10.f);
+
+    int i = std::max(0, std::min(count - 1, 4)); // top visible piece
+    float dy = (radius * 2.1f) * i;
+
+    float y = isTop ? (baseY + dy) : (baseY - dy);
+    return { baseX, y };
+}
+
 void SFMLRW::Render() const
 {
     window.clear(sf::Color(15, 15, 15));
@@ -431,8 +487,44 @@ void SFMLRW::Render() const
     drawBoardGrid();
     drawPieces();
     drawDice();
+
     if (game_over_screen)
         drawGameOverOverlay();
+
+    else if (activeAnim)
+    {
+        auto& anim = *activeAnim;
+
+        float t = animClock.getElapsedTime().asSeconds() / anim.duration;
+        t = std::min(t, 1.f);
+
+        if (t >= 1.f)
+        {
+            activeAnim.reset();
+        }
+
+        // ease-out cubic
+        float u = 1.f - std::pow(1.f - t, 3.f);
+
+        sf::Vector2f pos = anim.from + (anim.to - anim.from) * u;
+
+        // draw animated piece
+        float radius = 14.f; // reuse your existing radius logic if you want
+        sf::CircleShape piece(radius);
+        piece.setOrigin({radius, radius});
+        piece.setPosition(pos);
+
+        if (anim.ownerSign > 0)
+            piece.setFillColor(sf::Color(220, 220, 220));
+        else
+            piece.setFillColor(sf::Color(40, 40, 40));
+
+        piece.setOutlineThickness(2.f);
+        piece.setOutlineColor(sf::Color(10,10,10));
+
+        window.draw(piece);
+    }
+
     window.display();
 }
 
@@ -498,40 +590,70 @@ status_codes SFMLRW::PollInput()
     return status_codes::WAITING;
 }
 
-void SFMLRW::OnGameEvent(const GameEvent& e)
+void SFMLRW::ReceiveGameEvent(const Game::Event& e)
 {
-    // NOTE: You asked to keep logic unchanged; this follows your structure.
-    switch (e.code)
-    {
-        case EventCode::QUIT:
-            statusLine = "Game ended by user.";
-            Render();
-            window.close();
-            return;
+    switch (e.code) 
+    { 
+        case Game::EventCode::QUIT: 
+            statusLine = "Game ended by user."; 
+            Render(); 
+            window.close(); 
+            return; 
+        case Game::EventCode::GAME_OVER: 
+            game_over_screen = true; 
+            statusLine = "Game over!"; 
+            Render(); 
+            return; 
+        case Game::EventCode::TURN_SWITCH: 
+            InstructionMessage("New turn. Roll the dice."); 
+            return; 
+        case Game::EventCode::DICE_ROLL: 
+            Render(); 
+            return; 
+        case Game::EventCode::MOVE: 
+        { 
+            const auto& md = std::get<Game::MoveData>(e.data); 
+            PieceAnimation anim; 
+            anim.from = pieceStackTopCenter(md.from); 
+            anim.to = pieceStackTopCenter(md.to); 
+            anim.isRemove = false; 
+            anim.srcCell = md.from; 
+            anim.dstCell = md.to; 
+            anim.ownerSign = g.GetBoardRef().PlayerSign();
 
-        case EventCode::GAME_OVER:
-            game_over_screen = true;
-            statusLine = "Game over!";
-            Render();
-            return;
+            activeAnim = anim; 
+            animClock.restart(); 
 
-        case EventCode::TURN_SWITCH:
-            InstructionMessage("New turn. Roll the dice.");
-            return;
+            while(activeAnim)   // fix later
+                Render();
 
-        case EventCode::DICE_ROLL:
-            Render();
-            return;
+            return; 
+        } 
 
-        case EventCode::MOVE:
-        case EventCode::REMOVE:
-            Render();
-            return;
+        case Game::EventCode::REMOVE: 
+        { 
+            const auto& rd = std::get<Game::RemoveData>(e.data); 
+            PieceAnimation anim; 
+            anim.from = pieceStackTopCenter(rd._from); 
+            // Animate toward "off-board" direction 
+            auto off = anim.from; off.y += (rd._from.row == 0 ? -80.f : 80.f); 
+            anim.to = off;
+            anim.isRemove = true; 
+            anim.srcCell = rd._from; anim.dstCell.reset(); 
+            anim.ownerSign = g.GetBoardRef().PlayerSign();
 
-        default:
-            Render();
-            return;
-    }
+            activeAnim = anim; 
+            animClock.restart(); 
+
+            while(activeAnim)   // fix later
+                Render();
+
+            return; 
+        } 
+        default: 
+            Render(); 
+            return; 
+    } 
 }
 
 void SFMLRW::drawGameOverOverlay() const

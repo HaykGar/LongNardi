@@ -49,7 +49,7 @@ const Board& Game::GetBoardRef() const
     return board;
 }
 
-BoardConfig Game::GetBoardData() const
+const BoardConfig& Game::GetBoardData() const
 {
     return board.View();
 }
@@ -57,7 +57,7 @@ BoardConfig Game::GetBoardData() const
 int Game::GetDice(bool idx) const
 {   return dice[idx];   }
 
-const ReaderWriter* Game::GetConstRW() 
+const ReaderWriter* Game::GetConstRW() const
 {   return rw;   }
 
 
@@ -68,6 +68,14 @@ Coord Game::PlayerHead() const
 const std::unordered_map<BoardConfig, MoveSequence, BoardConfigHash>& Game::GetBoards2Seqs() const
 {
     return legal_turns.BrdsToSeqs();
+}
+
+Game::Snapshot Game::GetSnapshot() const
+{
+    Snapshot s;
+    s.board = GetBoardData();
+    s.dice = dice;
+    return s;
 }
 
 ///////////// Gameplay /////////////
@@ -86,7 +94,7 @@ status_codes Game::SimDice(DieType d_to)
 
 status_codes Game::OnRoll()
 {
-    EmitEvent(GameEvent{EventCode::DICE_ROLL, dice});
+    EmitEvent(Event{EventCode::DICE_ROLL, dice, GetSnapshot()});
     IncrementTurnNumber();  // starts at 0
 
     first_move_exception = false;
@@ -137,12 +145,12 @@ bool Game::AutoPlayTurn(const BoardConfig& key)
             UseDice(sd._diceIdx);
             if(arbiter.DiceRemovesFrom(sd._from, sd._diceIdx)) {
                 board.Remove(sd._from);
-                EmitEvent(GameEvent{EventCode::REMOVE, RemoveData{sd._from, sd._diceIdx}});
+                EmitEvent(Event{EventCode::REMOVE, RemoveData{sd._from, sd._diceIdx}, GetSnapshot()});
             }
             else {
                 Coord dest = board.CoordAfterDistance(sd._from, dice[sd._diceIdx]);
                 board.Move(sd._from, dest);
-                EmitEvent(GameEvent{EventCode::MOVE, MoveData{sd._from, dest, sd._diceIdx}});
+                EmitEvent(Event{EventCode::MOVE, MoveData{sd._from, dest, sd._diceIdx}, GetSnapshot()});
             }
             mvs_this_turn.emplace_back(sd._from, sd._diceIdx);
         }
@@ -217,9 +225,9 @@ status_codes Game::MakeMove(const Coord& start, bool dice_idx)
         Coord end = board.CoordAfterDistance(start, dice[dice_idx]);
 
         if(end.InBounds())
-            EmitEvent(GameEvent{EventCode::MOVE, MoveData{start, end, dice_idx}});
+            EmitEvent(Event{EventCode::MOVE, MoveData{start, end, dice_idx}, GetSnapshot()});
         else
-            EmitEvent(GameEvent{EventCode::REMOVE, RemoveData{start, dice_idx}});
+            EmitEvent(Event{EventCode::REMOVE, RemoveData{start, dice_idx}, GetSnapshot()});
 
         return arbiter.CheckForcedMoves();
     }
@@ -350,7 +358,6 @@ status_codes Game::UndoCurrentTurn()
     return OnRoll();
 }
 
-
 bool Game::TurnInProgress() const
 {
     return (times_dice_used[0] != 0 || times_dice_used[1] != 0);
@@ -360,7 +367,7 @@ bool Game::GameIsOver() const
 {   
     bool over = (board.PiecesLeft().at(0) == 0 || board.PiecesLeft().at(1) == 0);  
     if(over && !emitted_game_over){
-        EmitEvent(GameEvent{ EventCode::GAME_OVER, std::monostate{} });
+        EmitEvent(Event{ EventCode::GAME_OVER, std::monostate{}, GetSnapshot() });
         emitted_game_over = true;
     }
     return over;
@@ -385,18 +392,17 @@ void Game::SwitchPlayer()
     history.emplace(mvs_this_turn, dice);
     mvs_this_turn.clear();
 
-    EmitEvent(GameEvent{ EventCode::TURN_SWITCH, std::monostate{} });
+    EmitEvent(Event{ EventCode::TURN_SWITCH, std::monostate{}, GetSnapshot() });
 }
 
 void Game::IncrementTurnNumber()
 {   ++turn_number[board.PlayerIdx()];   }
 
-void Game::EmitEvent(const GameEvent& e) const
+void Game::EmitEvent(const Event& e) const
 {
     if(rw)
-        rw->OnGameEvent(e);
+        rw->ReceiveGameEvent(e);
 }
-
 
 ////////////////////////////
 ////////   Arbiter ////////

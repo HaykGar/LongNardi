@@ -4,11 +4,13 @@ import torch.nn.functional as F
 
 from functools import partial
 
+import time
+
 import nardi
 from tqdm import tqdm
 
 class Simulator:
-    def __init__(self):
+    def __init__(self, sleep_time=0):
         self.device = torch.device("cpu") # "mps" if torch.backends.mps.is_available() else "cpu")
         self.eng = nardi.Engine()
         self.config = self.eng.config()
@@ -17,6 +19,8 @@ class Simulator:
         self.turn_num = 0        # turn number in current game
         
         self.win_rates = []
+        
+        self.sleep_time = sleep_time
                 
     def add_dirichlet_noise(self, priors, eps):
         n = len(priors)
@@ -48,6 +52,7 @@ class Simulator:
     def apply_board(self, board):
         self.eng.apply_board(board)
         self.advance_turn()
+        time.sleep(self.sleep_time)
         return None
 
     def apply_greedy_move(self, model, eval_only=True):
@@ -192,7 +197,8 @@ class Simulator:
                 moves[is_p1_move]()
                 
             run = self.eng.restart_requested()
-            score[not is_p1_move] += self.eng.winner_result()
+            if self.eng.is_terminal():
+                score[not is_p1_move] += self.eng.winner_result()
             
         # game over, return true if first player won, false if second player won
         return score
@@ -265,5 +271,5 @@ if __name__ =="__main__":
     
     model = models.res_model
     
-    sim = Simulator()
+    sim = Simulator(0.5)
     sim.play_with_graphics(model, "lookahead", from_endgame=False)

@@ -18,7 +18,7 @@ class ReaderWriter
 
         virtual status_codes PollInput() = 0;
 
-        virtual void OnGameEvent(const GameEvent& event) = 0;
+        virtual void ReceiveGameEvent(const Game::Event& event) = 0;
 
         virtual void Render() const = 0;         // show the current state of the game
 

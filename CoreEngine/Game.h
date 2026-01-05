@@ -42,6 +42,37 @@ class Game
         void AttachReaderWriter(ReaderWriter* r);
         void AttachReaderWriter(std::shared_ptr<ReaderWriter> r);
 
+        // public member structs
+        struct Snapshot{
+            BoardConfig board;
+            DieType dice;
+        };
+       
+        struct MoveData
+        {
+            Coord from;
+            Coord to;
+            bool die_idx;
+        };
+
+        using RemoveData = StartAndDice;
+        using EventData = std::variant<std::monostate, MoveData, RemoveData, DieType>;
+
+        enum class EventCode {
+            DICE_ROLL,
+            MOVE,
+            REMOVE,
+            TURN_SWITCH,
+            GAME_OVER,
+            QUIT
+        };
+
+        struct Event {
+            EventCode code;
+            EventData data;
+            Snapshot  snapshot;
+        };
+
         // Gameplay
         status_codes RollDice();
         status_codes SimDice(DieType to_set);
@@ -67,11 +98,13 @@ class Game
 
         // Getters
         const Board& GetBoardRef() const;
-        BoardConfig GetBoardData() const;
+        const BoardConfig& GetBoardData() const;
         const std::unordered_map<BoardConfig, MoveSequence, BoardConfigHash>& GetBoards2Seqs() const;
 
         int GetDice(bool idx) const;
-        const ReaderWriter* GetConstRW();
+        const ReaderWriter* GetConstRW() const;
+
+        Snapshot GetSnapshot() const;
 
         // Friend class for testing
         friend class ScenarioBuilder;
@@ -210,7 +243,7 @@ class Game
 
         // Updates
         void IncrementTurnNumber();
-        void EmitEvent(const GameEvent& e) const;
+        void EmitEvent(const Event& e) const;
         
         // Moving
         status_codes MakeMove(const Coord& start, bool dice_idx);

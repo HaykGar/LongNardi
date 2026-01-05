@@ -92,9 +92,9 @@ status_codes TerminalRW::PollInput()
         return code;
 }
 
-void TerminalRW::OnGameEvent(const GameEvent& e)
+void TerminalRW::ReceiveGameEvent(const Game::Event& e)
 {
-    if (e.code != EventCode::QUIT)
+    if (e.code != Game::EventCode::QUIT)
         Render();
     else
         InstructionMessage("Game ended by user.");
@@ -112,12 +112,6 @@ Command TerminalRW::Input_to_Command() const
         
         else if(ch == 'r')
             return Command(Actions::ROLL_DICE);
-
-        else if(ch == 'p')
-        {
-            Render();
-            return Command(Actions::NO_OP);
-        }
 
         else if(isdigit(ch))
             return Command(static_cast<bool>(ch - '0'));
