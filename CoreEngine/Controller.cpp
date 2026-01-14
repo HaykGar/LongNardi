@@ -40,7 +40,7 @@ void Controller::OnTurnSwitch()
 status_codes Controller::ReceiveCommand(const Command& cmd)
 {
     if(g.GameIsOver() && cmd.action != Actions::UNDO 
-        && cmd.action != Actions::RESTART && cmd.action != Actions::QUIT)   // can undo terminal positions
+        && cmd.action != Actions::REQUEST_RESTART && cmd.action != Actions::QUIT)   // can undo terminal positions
         return status_codes::NO_LEGAL_MOVES_LEFT; 
 
     status_codes outcome = status_codes::MISC_FAILURE;
@@ -52,7 +52,7 @@ status_codes Controller::ReceiveCommand(const Command& cmd)
         quit_requested = true;
         outcome = status_codes::NO_LEGAL_MOVES_LEFT;
         break;
-    case Actions::RESTART:
+    case Actions::REQUEST_RESTART:
         restart_requested = true;
         outcome = status_codes::NO_LEGAL_MOVES_LEFT;
         break;
@@ -134,8 +134,10 @@ status_codes Controller::ReceiveCommand(const Command& cmd)
             outcome = auto_played ? status_codes::NO_LEGAL_MOVES_LEFT : status_codes::MISC_FAILURE;
             if(!auto_played)
             {
-                std::cerr << "failed to auto-play with key\n";
+                std::cout << "failed to random auto-play with key\n";
                 DisplayKey(std::get<BoardConfig>(cmd.payload));
+                std::cout << "current board is:\n";
+                DisplayBoard(g.GetBoardData());
             }
         }
     }
@@ -149,6 +151,8 @@ status_codes Controller::ReceiveCommand(const Command& cmd)
             {
                 std::cerr << "failed to auto-play with key\n";
                 DisplayKey(std::get<BoardConfig>(cmd.payload));
+                std::cout << "current board is:\n";
+                DisplayBoard(g.GetBoardData());
             }
         }
         break;

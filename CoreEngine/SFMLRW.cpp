@@ -488,8 +488,10 @@ void SFMLRW::Render() const
     drawPieces();
     drawDice();
 
-    if (game_over_screen)
+    if (g.GameIsOver()){
         drawGameOverOverlay();
+        activeAnim.reset();
+    }
 
     else if (activeAnim)
     {
@@ -539,14 +541,13 @@ status_codes SFMLRW::PollInput()
 
         if (const auto* k = event->getIf<sf::Event::KeyPressed>())
         {
-            if (game_over_screen)
+            if (g.GameIsOver())
             {
-                game_over_screen = false;
                 if (k->code != sf::Keyboard::Key::Enter) {
                     return ctrl.ReceiveCommand(Command(Actions::QUIT));
                 }
                 else {
-                    return ctrl.ReceiveCommand(Command(Actions::RESTART));
+                    return ctrl.ReceiveCommand(Command(Actions::REQUEST_RESTART));
                 }
             }
 
@@ -600,7 +601,6 @@ void SFMLRW::ReceiveGameEvent(const Game::Event& e)
             window.close(); 
             return; 
         case Game::EventCode::GAME_OVER: 
-            game_over_screen = true; 
             statusLine = "Game over!"; 
             Render(); 
             return; 

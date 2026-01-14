@@ -89,7 +89,7 @@ enum class Actions
     SELECT_SLOT, 
     MOVE_BY_DICE,
     AUTOPLAY,
-    RESTART,
+    REQUEST_RESTART,
     RANDOM_AUTOPLAY,
     RELEASE_SELECTED,
     NO_OP

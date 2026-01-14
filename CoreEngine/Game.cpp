@@ -95,7 +95,6 @@ status_codes Game::SimDice(DieType d_to)
 status_codes Game::OnRoll()
 {
     EmitEvent(Event{EventCode::DICE_ROLL, dice, GetSnapshot()});
-    IncrementTurnNumber();  // starts at 0
 
     first_move_exception = false;
     maxdice_exception = false;
@@ -338,7 +337,6 @@ status_codes Game::UndoCurrentTurn()
         return status_codes::MISC_FAILURE;
     }
 
-    --turn_number[board.PlayerIdx()];
     auto [mvs, old_d] = history.top();
     SetDice(old_d[0], old_d[1]);
 
@@ -355,6 +353,7 @@ status_codes Game::UndoCurrentTurn()
     times_dice_used[1] = 0;
 
     --turn_number[board.PlayerIdx()];   // other player... incremented in onroll
+
     return OnRoll();
 }
 
@@ -367,8 +366,9 @@ bool Game::GameIsOver() const
 {   
     bool over = (board.PiecesLeft().at(0) == 0 || board.PiecesLeft().at(1) == 0);  
     if(over && !emitted_game_over){
+        emitted_game_over = true;   // this order is crucial else seg fault as 
+                                    // sfml render keeps calling back here
         EmitEvent(Event{ EventCode::GAME_OVER, std::monostate{}, GetSnapshot() });
-        emitted_game_over = true;
     }
     return over;
 }
@@ -385,6 +385,8 @@ bool Game::CanUseDice(bool idx) {return arbiter.CanUseDice(idx);}
 
 void Game::SwitchPlayer()
 {   
+    IncrementTurnNumber();
+
     board.SwitchPlayer();
     times_dice_used[0] = 0;
     times_dice_used[1] = 0;
@@ -702,7 +704,7 @@ void Game::LegalSeqComputer::dfs(std::vector<StartAndDice>& seq)
 
 bool Game::LegalSeqComputer::FirstMoveException()   // fixme re-compute mid turn
 {
-    if (_g.turn_number[_g.board.PlayerIdx()] == 1 && _g.doubles_rolled && (_g.dice[0] == 4 || _g.dice[0] == 6 ) ) // first move exception
+    if (_g.turn_number[_g.board.PlayerIdx()] == 0 && _g.doubles_rolled && (_g.dice[0] == 4 || _g.dice[0] == 6 ) ) // first move exception
     {
         /*
         
@@ -748,11 +750,26 @@ bool Game::LegalSeqComputer::FirstMoveException()   // fixme re-compute mid turn
             _brdsToSeqs.emplace(key, seq);
 
             if(_g.dice[0] == 6 && abs(_g.board.at(_g.board.PlayerIdx(), 6)) != 2 )
+            {
+                std::cout << "seqs was:\n";
+                for (auto& sd : seq)
+                {
+                    std::cout << sd._from.AsStr() << " by " << _g.dice[sd._diceIdx] << "\n";
+                }
+                DisplayBoard(_g.board.View());
+                std::cout << "curr player idx is " << _g.board.PlayerIdx() << "\n";
                 throw std::runtime_error("First Move error on 6 6");
+            }
+                
             
             else if(_g.dice[0] == 4 && abs(_g.board.at(_g.board.PlayerIdx(), 8)) != 2 && _g.board.PlayerSign() * _g.board.at(_g.board.PlayerIdx(), 8) != -1)
             {
                 DisplayBoard(_g.board.View());
+                std::cout << "seqs was:\n";
+                for (auto& sd : seq)
+                {
+                    std::cout << sd._from.AsStr() << " by " << _g.dice[sd._diceIdx] << "\n";
+                }
                 throw std::runtime_error("First Move error on 4 4");
             }
                 

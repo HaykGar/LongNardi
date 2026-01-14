@@ -37,8 +37,6 @@ private:
     mutable bool boardTextureLoaded = false;
     mutable std::optional<sf::Sprite> boardSprite;
 
-    mutable bool game_over_screen = false;
-
     // Layout
     unsigned W, H;
     float margin = 40.f;

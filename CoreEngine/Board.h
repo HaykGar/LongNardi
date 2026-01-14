@@ -87,6 +87,7 @@ public:
 
     const Features ExtractFeatures() const;
     const Features ExtractFeatures(const BoardConfig& other_data) const;
+    const Features ExtractFeatures(const BoardConfig& other_data, bool p_idx) const;
 
     friend class ScenarioBuilder;
 private:

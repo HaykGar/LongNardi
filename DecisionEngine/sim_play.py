@@ -37,10 +37,16 @@ class Simulator:
         eval = self.sign * model(self.eng.board_features())
         return eval
     
-    def reset(self, build_pos = None):
+    def reset(self, *, build_pos = None, scenario=None):
         self.sign = 1
         self.turn_num = 0
-        if build_pos is None:
+        
+        if scenario:
+            self.config.withScenario(scenario.player_idx, 
+                                     scenario.board_config, 
+                                     scenario.dice[0], scenario.dice[1])
+            self.sign = -1 if scenario.player_idx else 1
+        elif build_pos is None:
             self.eng.reset()
         else:
             build_pos()
@@ -66,8 +72,8 @@ class Simulator:
 
             best = options[int(evals.argmax().item())]
             return self.apply_board(best.raw_data)
-
-        self.advance_turn()
+        else:
+            self.advance_turn()
         
     def apply_noisy_move(self, K, eps, temperature, model):            
         if self.turn_num > K:
@@ -85,8 +91,8 @@ class Simulator:
                 chosen_idx = np.random.choice(len(noisy_priors), p=noisy_priors)
                 chosen = options[chosen_idx]
                 return self.apply_board(chosen.raw_data)
-            
-            self.advance_turn()        
+            else:
+                self.advance_turn()        
 
     def evaluate_subtree(self, root : nardi.Node, evaluator):
         if root.result is not None:
@@ -115,12 +121,13 @@ class Simulator:
             return avg_opp_eval * -1
         
     def apply_lookahead_move(self, evaluator):
-        turn_over = not self.eng.roll()
+        turn_over = not self.eng.roll_has_children()
         if turn_over:
             self.advance_turn()
             return
-        
-        root = self.eng.tree_search(2)
+                
+        root = self.eng.one_ply_lookahead()
+                        
         if root.result is not None:
             print("warning, tried to lookahead in terminal position")
             return None
@@ -138,29 +145,33 @@ class Simulator:
                 if eval > best_eval:
                     best_child = child
                     best_eval = eval
-                    
+                                        
         if best_child is not None:
             return self.apply_board(best_child.features.raw_data)
-        
+        else:
+            print("best_child was none") # impossible due to early advance turn if roll gives false
 
     def play_random_move(self):
         options = self.eng.roll_and_enumerate()
         if len(options) != 0:               # at least 1 possible move   
             rand_idx = np.random.choice(len(options))
             return self.apply_board(options[rand_idx].raw_data)
-        self.advance_turn()
+        else:
+            self.advance_turn()
     
     def heuristic_move(self):
         options = self.eng.roll_and_enumerate()
         if len(options) != 0:               # at least 1 possible move 
             coverages = np.array([f.player.sq_occ for f in options])
             return self.apply_board(options[coverages.argmax()].raw_data)
-        self.advance_turn()
+        else:
+            self.advance_turn()
         
     # TODO add more sophisticated heuristics and tie breakers for the above
     
     def human_turn(self):
         self.eng.human_turn()
+        time.sleep(self.sleep_time * 0.5)
         self.advance_turn()
         
     def strat_to_func(self, model, strat):
@@ -190,17 +201,18 @@ class Simulator:
         
         run = True
         while run:
-            self.reset(position_setup)
+            self.reset(build_pos=position_setup)
             self.eng.Render()
             while self.eng.should_continue_game():
                 is_p1_move = (self.sign == 1 and not swap_order) or (self.sign == -1 and swap_order)
                 moves[is_p1_move]()
-                
-            run = self.eng.restart_requested()
+                                
+            self.eng.restart_or_quit()
+            run = not self.eng.quit_requested()
+            
             if self.eng.is_terminal():
                 score[not is_p1_move] += self.eng.winner_result()
             
-        # game over, return true if first player won, false if second player won
         return score
 
     def benchmark(self, p1, p1_strat="greedy", p2=None, p2_strat="heuristic", num_games = 100, position_setup=None, 

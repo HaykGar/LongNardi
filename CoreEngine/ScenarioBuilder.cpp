@@ -16,7 +16,6 @@ ScenarioBuilder::ScenarioBuilder(const ScenarioBuilder& other) : _game(other._ga
     _ctrl.dice_rolled = other._ctrl.dice_rolled;
     _ctrl.quit_requested = other._ctrl.quit_requested;
     _ctrl.sim_mode = other._ctrl.sim_mode;
-
     /*
     even if other has a view attached, I don't want the view pointers to look at the same view object, so this
     also has default behavior of no view
@@ -34,6 +33,11 @@ status_codes ScenarioBuilder::withScenario(bool p_idx, const BoardConfig& b, int
 {
     StartPreRoll(p_idx, b);
     return withDice(d1, d2, d1u, d2u);
+}
+
+status_codes ScenarioBuilder::withScenario(const Scenario& s)
+{
+    return withScenario(s.player_idx, s.board, s.dice[0], s.dice[1], s.dice_used[0], s.dice_used[1]);
 }
 
 status_codes ScenarioBuilder::withDice(int d1, int d2, int d1_used, int d2_used)
@@ -136,6 +140,18 @@ void ScenarioBuilder::AttachNewRW(const IRWFactory& f)
 }
 
 void ScenarioBuilder::DetachRW() { _game.rw = nullptr; _view = nullptr; }
+
+void ScenarioBuilder::ToSimMode()
+{
+    _ctrl.ToSimMode();
+    _game.AttachReaderWriter(nullptr); // headless simulation
+}
+
+void ScenarioBuilder::EndSimMode()
+{
+    _ctrl.EndSimMode();
+    _game.AttachReaderWriter(_view.get());
+}
 
 void ScenarioBuilder::Render() { if(_view) _view->Render(); }
 

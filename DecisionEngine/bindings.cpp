@@ -163,8 +163,7 @@ public:
         _builder.Render();
     }
 
-    // consider renaming for clarity... maybe just store the last status received from any command in a member?
-    bool roll() {
+    bool roll_has_children() {
         auto status = _builder.ReceiveCommand(Nardi::Command(Nardi::Actions::ROLL_DICE));
         return status != Nardi::status_codes::NO_LEGAL_MOVES_LEFT;
     }
@@ -228,7 +227,7 @@ public:
         }
     };
 
-    std::shared_ptr<Node> TreeSearch(int depth=2)
+    std::shared_ptr<Node> OnePlyLookahead()
     {
         std::shared_ptr<Node> root = std::make_shared<Node>();
         root->features = board_features();
@@ -238,52 +237,38 @@ public:
 
         int d_idx = dice_as_idx();
 
-        for(auto& f : children_features)
-            root->MakeChild(f, d_idx);
+        _builder.ToSimMode();
 
-        _builder.GetCtrl().ToSimMode();
-
-        #pragma omp parallel for
-        for(int i = 0; i < root->children_by_dice[d_idx].data.size(); ++i)
+        for(int i = 0; i < children_features.size(); ++i)
         {
+            root->MakeChild(children_features[i], d_idx);
             auto child = root->children_by_dice[d_idx].data.at(i);
-            Nardi::ScenarioBuilder bldr(_builder);
-            bldr.SimulateMove(child->features.raw_data);    // auto-play this position
-            RTreeSearch(child, 1, depth, bldr);
-            // no undo needed because we use a fresh builder after
+            _builder.SimulateMove(child->features.raw_data);    // auto-play this position
+
+            if(!_builder.GetGame().GameIsOver())
+            {
+                #pragma omp parallel for schedule(dynamic)
+                for(int c = 0; c < N_DICE_COMB; ++c)
+                {
+                    std::vector<std::shared_ptr<Node>> buffer;                
+                    Nardi::ScenarioBuilder builder(_builder);
+                    auto& dice = DICE_COMBOS[c];
+                    auto feats = set_and_enumerate(dice[0], dice[1], builder);
+                    for (auto& f : feats)
+                    {
+                        auto gc = std::make_shared<Node>();
+                        gc->features = f;
+                        buffer.push_back(gc);
+                    }
+                    child->children_by_dice[c].data = std::move(buffer);                    
+                }
+            }
+            _builder.ReceiveCommand(Nardi::Command(Nardi::Actions::UNDO));  // undo
         }
 
-        _builder.GetCtrl().EndSimMode();
+        _builder.EndSimMode();
 
         return root;
-    }
-
-    void RTreeSearch(std::shared_ptr<Node> root, 
-                    int curr_depth, int max_depth, 
-                    Nardi::ScenarioBuilder& builder)
-    {
-
-        if(builder.GetGame().GameIsOver()) 
-        {
-            root->result = builder.GetGame().IsMars() ? 2 : 1;
-            return;
-        }
-        else if(curr_depth >= max_depth)
-            return;
-
-        for(int i = 0; i < N_DICE_COMB; ++i)
-        {
-            auto& dice = DICE_COMBOS[i];
-            auto feat = set_and_enumerate(dice[0], dice[1], builder);
-            for (auto& f : feat)
-            {
-                auto child = root->MakeChild(f, i);
-
-                builder.SimulateMove(f.raw_data);
-                RTreeSearch(child, curr_depth+1, max_depth, builder);
-                builder.ReceiveCommand(Nardi::Command(Nardi::Actions::UNDO));
-            }
-        }
     }
 
     void human_turn() 
@@ -298,15 +283,16 @@ public:
             GetHumanInput();
     }
 
-    bool restart_requested()
+    void restart_or_quit()
     {
         if(!_builder.GetView())
-            return false;
+            return;
 
         if(!_builder.GetCtrl().QuitRequested() && !_builder.GetCtrl().RestartRequested())
             GetHumanInput();
-
-        return _builder.GetCtrl().RestartRequested();
+            
+        if (_builder.GetCtrl().RestartRequested())
+            reset();
     }
 
     bool is_terminal() const {
@@ -404,8 +390,10 @@ private:
         while(true)
         {
             Nardi::status_codes status = _builder.GetView()->PollInput();
-            if (status != Nardi::status_codes::WAITING)
+            
+            if (status != Nardi::status_codes::WAITING){
                 _builder.GetView()->DispErrorCode(status);
+            }
 
             if (status == Nardi::status_codes::NO_LEGAL_MOVES_LEFT)
                 break;
@@ -464,7 +452,7 @@ PYBIND11_MODULE(nardi, m)
              R"(Return 1x2 uint8 dice values.)")    
         .def("dice_as_idx",         &NardiEngine::dice_as_idx,
              R"(Get dice pair as a flattened idx corresponding to DICE_COMBOS)")
-        .def("roll",                &NardiEngine::roll,
+        .def("roll_has_children",   &NardiEngine::roll_has_children,
              R"(Roll dice. Return false if no legal moves left)")
         .def("roll_and_enumerate",  &NardiEngine::roll_and_enumerate,
              R"(Roll dice and return uint8 array of shape [N,6,25] with end-of-turn boards.)")
@@ -472,15 +460,15 @@ PYBIND11_MODULE(nardi, m)
              py::overload_cast<int, int>(&NardiEngine::set_and_enumerate),
              py::arg("d1"), py::arg("d2"),
              R"(Set dice and enumerate all legal end-of-turn positions.)")
-        .def("tree_search",         &NardiEngine::TreeSearch, py::arg("depth") = 2,
-             R"(Look `depth` plies ahead and return the root of the search tree.)")
+        .def("one_ply_lookahead",   &NardiEngine::OnePlyLookahead,
+             R"(Look 1 ply ahead and return the root of the search tree.)")
         .def("status_report",       &NardiEngine::status_report)
         .def("status_str",          &NardiEngine::status_str)
         .def("is_terminal",         &NardiEngine::is_terminal)
         .def("winner_result",       &NardiEngine::winner_result)
         .def("reset",               &NardiEngine::reset)
         .def("should_continue_game",&NardiEngine::should_continue_game)
-        .def("restart_requested",   &NardiEngine::restart_requested)
+        .def("restart_or_quit",   &NardiEngine::restart_or_quit)
         .def("quit_requested",      &NardiEngine::quit_requested);
 
     py::class_<ScenarioConfig>(m, "ScenarioConfig")

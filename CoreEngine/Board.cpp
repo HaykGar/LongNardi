@@ -335,11 +335,16 @@ const Board::Features Board::ExtractFeatures() const
     return features;
 }
 
-const Board::Features Board::ExtractFeatures(const BoardConfig& other_data) const
+const Board::Features Board::ExtractFeatures(const BoardConfig& other_data, bool p_idx) const
 {
     Board helper(other_data);
-    if(helper.PlayerIdx() != player_idx)
+    if(helper.PlayerIdx() != p_idx)
         helper.SwitchPlayer();
     
     return helper.ExtractFeatures();
+}
+
+const Board::Features Board::ExtractFeatures(const BoardConfig& other_data) const
+{
+    return ExtractFeatures(other_data, player_idx);
 }
