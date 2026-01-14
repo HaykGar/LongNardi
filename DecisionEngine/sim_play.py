@@ -208,7 +208,7 @@ class Simulator:
                 moves[is_p1_move]()
                                 
             self.eng.restart_or_quit()
-            run = not self.eng.quit_requested()
+            run = self.eng.should_continue_game()
             
             if self.eng.is_terminal():
                 score[not is_p1_move] += self.eng.winner_result()
