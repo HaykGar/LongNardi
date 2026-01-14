@@ -17,3 +17,7 @@ conv_2x_model.eval()
 res_model = ResNardiNet()
 res_model.load_state_dict(torch.load("res.pt", map_location=torch.device('cpu'), weights_only=True))
 res_model.eval()
+
+res_v2 = ResNardiNet()
+res_v2.load_state_dict(torch.load("res2.pt", map_location=torch.device('cpu'), weights_only=True))
+res_v2.eval()
