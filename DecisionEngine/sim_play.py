@@ -21,6 +21,10 @@ class Simulator:
         self.win_rates = []
         
         self.sleep_time = sleep_time
+        
+    def set_dice_from_input(self):
+        dice = input("please enter desired dice: ").split()  # no extra checks for now
+        return self.eng.set_and_enumerate(int(dice[0]), int(dice[1]))        
                 
     def add_dirichlet_noise(self, priors, eps):
         n = len(priors)
@@ -33,9 +37,37 @@ class Simulator:
         noisy_priors = noisy_priors / np.sum(noisy_priors)
         return noisy_priors
 
-    def eval_current(self, model):
-        eval = self.sign * model(self.eng.board_features())
+    def eval_position(self, model, pos=None):
+        if pos is None:
+            eval = self.sign * model(self.eng.board_features())
+        else:
+            eval = self.sign * model(pos)
         return eval
+    
+    def lookahead_eval(self, model):
+        root = self.eng.one_ply_lookahead()
+                        
+        if root.result is not None:
+            raise Exception("tried to do lookahead in terminal position")
+        
+        children = root.children_by_dice[self.eng.dice_as_idx()].data
+                        
+        best_eval = -float("inf")
+        
+        for i, child in enumerate(children):
+            if child.result is not None:
+                return child.result # true result, don't care about falsely high or low evaluations
+            else:
+                eval = self.evaluate_subtree(child, model)
+                if eval > best_eval:
+                    best_eval = eval
+                    
+        return best_eval
+    
+    def best_child_eval(self, model):
+        children = self.eng.get_children()
+        evals = model(children)
+        return evals.max()    
     
     def reset(self, *, build_pos = None, scenario=None):
         self.sign = 1
@@ -61,8 +93,9 @@ class Simulator:
         time.sleep(self.sleep_time)
         return None
 
-    def apply_greedy_move(self, model, eval_only=True):
-        options = self.eng.roll_and_enumerate() # no negation since we are looking from current perspective
+    def apply_greedy_move(self, model, options=None, eval_only=True):
+        if options is None:
+            options = self.eng.roll_and_enumerate() # no negation since we are looking from current perspective
         if len(options) != 0:
             if eval_only:
                 with torch.inference_mode():
@@ -75,11 +108,12 @@ class Simulator:
         else:
             self.advance_turn()
         
-    def apply_noisy_move(self, K, eps, temperature, model):            
+    def apply_noisy_move(self, K, eps, temperature, model, options=None):            
         if self.turn_num > K:
-            self.apply_greedy_move(model) # advances turn internally
+            self.apply_greedy_move(model, options) # advances turn internally
         else:
-            options = self.eng.roll_and_enumerate()
+            if options is None:
+                options = self.eng.roll_and_enumerate()
             if len(options) == 1:
                 return self.apply_board(options[0].raw_data)
             elif len(options) != 0:
@@ -120,7 +154,8 @@ class Simulator:
                 
             return avg_opp_eval * -1
         
-    def apply_lookahead_move(self, evaluator):
+    def apply_lookahead_move(self, evaluator, options = None):
+        # options arg just for compatibility...
         turn_over = not self.eng.roll_has_children()
         if turn_over:
             self.advance_turn()
@@ -151,16 +186,18 @@ class Simulator:
         else:
             print("best_child was none") # impossible due to early advance turn if roll gives false
 
-    def play_random_move(self):
-        options = self.eng.roll_and_enumerate()
+    def play_random_move(self, options=None):
+        if options is None:
+            options = self.eng.roll_and_enumerate()
         if len(options) != 0:               # at least 1 possible move   
             rand_idx = np.random.choice(len(options))
             return self.apply_board(options[rand_idx].raw_data)
         else:
             self.advance_turn()
     
-    def heuristic_move(self):
-        options = self.eng.roll_and_enumerate()
+    def heuristic_move(self, options=None):
+        if options is None:
+            options = self.eng.roll_and_enumerate()
         if len(options) != 0:               # at least 1 possible move 
             coverages = np.array([f.player.sq_occ for f in options])
             return self.apply_board(options[coverages.argmax()].raw_data)
@@ -169,8 +206,9 @@ class Simulator:
         
     # TODO add more sophisticated heuristics and tie breakers for the above
     
-    def human_turn(self):
-        self.eng.human_turn()
+    def human_turn(self, options=None):
+        self.eng.human_turn(options is None)    # will roll fresh or use manually set dice
+            
         time.sleep(self.sleep_time * 0.5)
         self.advance_turn()
         
@@ -191,7 +229,7 @@ class Simulator:
         print("invalid model and strat provided, no valid function call found")
         return None
 
-    def simulate_game(self, p1_move, p2_move, swap_order=False, position_setup=None):    
+    def simulate_game(self, p1_move, p2_move, swap_order=False, position_setup=None, manual_dice=False):    
         if p1_move is None or p2_move is None:
             print("failure initializing model and opp moves, aborting simulation")
             return None
@@ -199,13 +237,19 @@ class Simulator:
         moves = [p2_move, p1_move]
         score = [0, 0]
         
+        dice_roll = self.set_dice_from_input if manual_dice else self.eng.roll_and_enumerate
+                        
         run = True
         while run:
             self.reset(build_pos=position_setup)
             self.eng.Render()
             while self.eng.should_continue_game():
                 is_p1_move = (self.sign == 1 and not swap_order) or (self.sign == -1 and swap_order)
-                moves[is_p1_move]()
+                options = dice_roll()
+                if not options:
+                    self.advance_turn()
+                else:
+                    moves[is_p1_move](options=options)
                                 
             self.eng.restart_or_quit()
             run = self.eng.should_continue_game()
@@ -252,14 +296,20 @@ class Simulator:
                 
         return scores
    
-    def play_with_graphics(self, opp_model=None, opp_strat="human", from_endgame=False):
-        p1_move = self.human_turn
-        p2_move = self.strat_to_func(opp_model, opp_strat)
+    def play_with_graphics(self, 
+                           opp_model=None, 
+                           opp_strat="human", 
+                           from_endgame=False, 
+                           manual_dice=False, 
+                           switch_order = False
+    ):
+        p1_move = self.human_turn if not switch_order else self.strat_to_func(opp_model, opp_strat)
+        p2_move = self.strat_to_func(opp_model, opp_strat) if not switch_order else self.human_turn
         
         setup = self.config.withRandomEndgame if from_endgame else None
         
         self.eng.AttachNewSFMLRW()
-        scores = self.simulate_game(p1_move, p2_move, position_setup=setup)
+        scores = self.simulate_game(p1_move, p2_move, position_setup=setup, manual_dice=manual_dice)
         if self.eng.is_terminal():
             if scores[0] > scores[1]:
                 winner = 1
@@ -281,7 +331,9 @@ class Simulator:
 if __name__ =="__main__":
     import models
     
-    model = models.res_model
-    
+    model = models.res_v2
     sim = Simulator(sleep_time=1)
-    sim.play_with_graphics(model, "lookahead", from_endgame=False)
+    
+    switch = len(input("Press Enter for normal play or input something to switch order ")) > 0
+    
+    sim.play_with_graphics(model, "lookahead", manual_dice=True, switch_order=switch)
