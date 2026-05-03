@@ -43,9 +43,20 @@ class Game
         void AttachReaderWriter(std::shared_ptr<ReaderWriter> r);
 
         // public member structs
-        struct Snapshot{
+        struct Snapshot
+        {
+            Snapshot(bool p, const BoardConfig& b, DieType d, std::array<int, 2> d_u = {0, 0});
+
+            Snapshot(bool p, DieType d, Board::Features feat);
+
+            Board::Features ToFeatures() {
+                Board helper;
+                return helper.ExtractFeatures(board, player_idx);
+            }
             BoardConfig board;
             DieType dice;
+            std::array<int, 2> dice_used;
+            bool player_idx;
         };
        
         struct MoveData
@@ -62,6 +73,7 @@ class Game
             DICE_ROLL,
             MOVE,
             REMOVE,
+            REPLACE,
             TURN_SWITCH,
             GAME_OVER,
             QUIT
@@ -87,6 +99,7 @@ class Game
         
         // Undoing
         status_codes UndoCurrentTurn(); // fixme rename `
+        bool UndoLast();
 
         // State Checks
         bool TurnInProgress() const;

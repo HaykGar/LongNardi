@@ -85,8 +85,6 @@ class ScenarioConfig
 
         void withFirstTurn() { _builder.withFirstTurn(); }
 
-        void Reset() { _builder.Reset(); }
-
     private:
         Nardi::ScenarioBuilder& _builder;
 };
@@ -111,6 +109,7 @@ public:
     void AttachNewSFMLRW()
     {
         _builder.AttachNewRW(Nardi::SFMLRWFactory());
+        _builder.GetView()->PollInput();
     }
 
     void DetachRW()
@@ -263,7 +262,7 @@ public:
                     child->children_by_dice[c].data = std::move(buffer);                    
                 }
             }
-            _builder.ReceiveCommand(Nardi::Command(Nardi::Actions::UNDO));  // undo
+            _builder.ReceiveCommand(Nardi::Command(Nardi::Actions::UNDO_TURN));  // undo
         }
 
         _builder.EndSimMode();
@@ -271,14 +270,22 @@ public:
         return root;
     }
 
-    void human_turn() 
+    void human_turn(bool dice_rolled = false) 
     {
         if(!_builder.GetView())
             throw std::runtime_error("Tried human moves without initializing view");
         
         _builder.GetView()->InstructionMessage("Awaiting command\n");
 
-        auto status = _builder.ReceiveCommand(Nardi::Command(Nardi::Actions::ROLL_DICE));
+        Nardi::status_codes status;
+
+        if(!dice_rolled)
+            status = _builder.ReceiveCommand(Nardi::Command(Nardi::Actions::ROLL_DICE));
+        else {
+            status = _builder.GetCtrl().AwaitingRoll() ? Nardi::status_codes::NO_LEGAL_MOVES_LEFT :
+                                                         Nardi::status_codes::SUCCESS;
+        }
+
         if(status != Nardi::status_codes::NO_LEGAL_MOVES_LEFT)
             GetHumanInput();
     }
@@ -305,8 +312,33 @@ public:
         return _builder.GetGame().IsMars() ? 2 : 1;
     }
 
+    std::vector<Nardi::Board::Features> enumerate(Nardi::status_codes status)
+    {
+        if (status == Nardi::status_codes::NO_LEGAL_MOVES_LEFT) {
+            return {};
+        } else if (status != Nardi::status_codes::SUCCESS) {
+            Nardi::DispErrorCode(status);
+            throw std::runtime_error("RollDice: unexpected controller status (should never happen).");
+        } else if (_builder.GetCtrl().AwaitingRoll()) {
+            throw std::runtime_error("Incorrect usage, have not yet rolled dice.");
+        }
+
+        // Success: get map<BoardConfig, MoveSequence, ...>
+        const auto& b2s = _builder.GetGame().GetBoards2Seqs();
+
+        std::vector<Nardi::Board::Features> features_vec;
+        features_vec.reserve(b2s.size());
+        for (const auto& kv : b2s)
+            features_vec.push_back(_builder.GetGame().GetBoardRef().ExtractFeatures(kv.first));
+
+        return features_vec;
+    }
+
     void reset() {
         _builder.Reset();
+        // Nardi::BoardConfig brd = {{ {6,-1,-1,-1,-1,-1,-1,-1,-2, 0, 0, 0},
+        //                             {0, 0, 0, 0, 0, 0, 0, 0, 0, 0,-6, 9}}};
+        // _builder.ResetPreRoll(false, brd);
     }
 
     void status_report()
@@ -345,26 +377,6 @@ private:
         int d_idx = N_DICE_COMB - row_offset + (dice[1] - dice[0]);
 
         return d_idx;
-    }
-
-    std::vector<Nardi::Board::Features> enumerate(Nardi::status_codes status)
-    {
-        if (status == Nardi::status_codes::NO_LEGAL_MOVES_LEFT) {
-            return {};
-        } else if (status != Nardi::status_codes::SUCCESS) {
-            Nardi::DispErrorCode(status);
-            throw std::runtime_error("RollDice: unexpected controller status (should never happen).");
-        }
-
-        // Success: get map<BoardConfig, MoveSequence, ...>
-        const auto& b2s = _builder.GetGame().GetBoards2Seqs();
-
-        std::vector<Nardi::Board::Features> features_vec;
-        features_vec.reserve(b2s.size());
-        for (const auto& kv : b2s)
-            features_vec.push_back(_builder.GetGame().GetBoardRef().ExtractFeatures(kv.first));
-
-        return features_vec;
     }
 
     std::vector<Nardi::Board::Features> set_and_enumerate(int d1, int d2, Nardi::ScenarioBuilder& b) 
@@ -442,7 +454,7 @@ PYBIND11_MODULE(nardi, m)
              R"(Detaches ReaderWriter removing any view of game.)")
         .def("Render",              &NardiEngine::Render,
                 R"(If view attached, then display)")
-        .def("human_turn",          &NardiEngine::human_turn,
+        .def("human_turn",          &NardiEngine::human_turn, py::arg("dice_rolled") = false,
              R"(Prompt human user for move and return false if their turn is over, true otherwise)")
         .def("board_features",      &NardiEngine::board_features,
              R"(Return 6x25 uint8 board (player-perspective).)")
@@ -460,6 +472,8 @@ PYBIND11_MODULE(nardi, m)
              py::overload_cast<int, int>(&NardiEngine::set_and_enumerate),
              py::arg("d1"), py::arg("d2"),
              R"(Set dice and enumerate all legal end-of-turn positions.)")
+        .def("get_children",        &NardiEngine::enumerate,
+             R"(List all children given the current dice roll. Error if dice not yet rolled.)")
         .def("one_ply_lookahead",   &NardiEngine::OnePlyLookahead,
              R"(Look 1 ply ahead and return the root of the search tree.)")
         .def("status_report",       &NardiEngine::status_report)

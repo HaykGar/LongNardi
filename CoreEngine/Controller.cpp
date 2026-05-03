@@ -39,7 +39,7 @@ void Controller::OnTurnSwitch()
 
 status_codes Controller::ReceiveCommand(const Command& cmd)
 {
-    if(g.GameIsOver() && cmd.action != Actions::UNDO 
+    if(g.GameIsOver() && cmd.action != Actions::UNDO_TURN 
         && cmd.action != Actions::REQUEST_RESTART && cmd.action != Actions::QUIT)   // can undo terminal positions
         return status_codes::NO_LEGAL_MOVES_LEFT; 
 
@@ -52,12 +52,18 @@ status_codes Controller::ReceiveCommand(const Command& cmd)
         quit_requested = true;
         outcome = status_codes::NO_LEGAL_MOVES_LEFT;
         break;
+        
     case Actions::REQUEST_RESTART:
         restart_requested = true;
         outcome = status_codes::NO_LEGAL_MOVES_LEFT;
         break;
-
+        
     case Actions::UNDO:
+        g.UndoLast();
+        outcome = status_codes::SUCCESS;
+        break;
+
+    case Actions::UNDO_TURN:
         if(sim_mode)
         {
             outcome = g.UndoCurrentTurn();          // fixme undoing into no legal moves case. Specifically for chaining undo `

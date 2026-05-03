@@ -84,6 +84,7 @@ enum class Actions
 {
     QUIT,
     UNDO,
+    UNDO_TURN,
     ROLL_DICE,
     SET_DICE,
     SELECT_SLOT, 

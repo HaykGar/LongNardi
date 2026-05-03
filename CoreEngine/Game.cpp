@@ -72,10 +72,7 @@ const std::unordered_map<BoardConfig, MoveSequence, BoardConfigHash>& Game::GetB
 
 Game::Snapshot Game::GetSnapshot() const
 {
-    Snapshot s;
-    s.board = GetBoardData();
-    s.dice = dice;
-    return s;
+    return Snapshot(board.PlayerIdx(), board.View(), dice, times_dice_used);
 }
 
 ///////////// Gameplay /////////////
@@ -264,7 +261,6 @@ bool Game::MockMove(const Coord& start, const Coord& end)
     return true;
 }
 
-
 bool Game::UndoMove(const Coord& start, const Coord& end)
 {
     if(end.OutOfBounds() || start.OutOfBounds())
@@ -329,6 +325,22 @@ bool Game::UndoMove(const StartAndDice& sd)
     return UndoMove(sd._from, sd._diceIdx);
 }
 
+bool Game::UndoLast() {
+    size_t n = mvs_this_turn.size();
+    if(n > 0) {
+        auto [start, dice_idx] = mvs_this_turn[n-1];
+        UndoMove(start, dice_idx);
+        auto dest = board.CoordAfterDistance(start, dice[dice_idx]);
+        if (dest.InBounds())
+            EmitEvent(Event{EventCode::MOVE, MoveData{dest, start, dice_idx}, GetSnapshot()});
+        else
+            EmitEvent(Event{EventCode::REPLACE, RemoveData{start, dice_idx}, GetSnapshot()});
+        mvs_this_turn.pop_back();
+        return true;
+    }
+    return false;
+}
+
 status_codes Game::UndoCurrentTurn()
 {
     if(TurnInProgress() || history.empty())
@@ -352,7 +364,7 @@ status_codes Game::UndoCurrentTurn()
     times_dice_used[0] = 0;
     times_dice_used[1] = 0;
 
-    --turn_number[board.PlayerIdx()];   // other player... incremented in onroll
+    --turn_number[board.PlayerIdx()];   // other player... incremented in onroll... ???
 
     return OnRoll();
 }
@@ -405,6 +417,16 @@ void Game::EmitEvent(const Event& e) const
     if(rw)
         rw->ReceiveGameEvent(e);
 }
+
+/////////////////////////////
+////////  Snapshot  ////////
+///////////////////////////
+
+Game::Snapshot::Snapshot(bool p, const BoardConfig& b, DieType d, std::array<int, 2> d_u) : 
+    player_idx(p), board(b), dice(d), dice_used(d_u) {}
+
+Game::Snapshot::Snapshot(bool p, DieType d, Board::Features feat) : 
+    player_idx(p), board(feat.raw_data), dice(d), dice_used{0, 0} {}
 
 ////////////////////////////
 ////////   Arbiter ////////

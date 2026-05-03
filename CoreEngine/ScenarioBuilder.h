@@ -10,24 +10,6 @@
 namespace Nardi
 {
 
-struct Scenario{
-    Scenario(bool p, const BoardConfig& b, DieType d, DieType d_u = {0, 0}) : 
-        player_idx(p), board(b), dice(d), dice_used(d_u) {}
-
-    Scenario(bool p, DieType d, Board::Features feat) : 
-        player_idx(p), board(feat.raw_data), dice(d), dice_used{0, 0} {}
-
-    Board::Features ToFeatures() {
-        Board helper;
-        return helper.ExtractFeatures(board, player_idx);
-    }
-
-    bool player_idx;
-    BoardConfig board;
-    DieType dice;
-    DieType dice_used;
-};
-
 class ScenarioBuilder
 {
     public:
@@ -38,8 +20,9 @@ class ScenarioBuilder
         void withFirstTurn();
 
         // setting internals explicitly
+        void ResetPreRoll(bool p_idx, const BoardConfig& b);
         status_codes withScenario(bool p_idx, const BoardConfig& b, int d1, int d2, int d1u=0, int d2u=0);
-        status_codes withScenario(const Scenario& s);
+        status_codes withScenario(const Game::Snapshot& s);
         status_codes withDice(int d1, int d2, int d1_used = 0, int d2_used = 0);
 
         // more general scenarios
@@ -82,8 +65,6 @@ class ScenarioBuilder
         Game _game;
         Controller _ctrl;
         std::shared_ptr<ReaderWriter> _view;
-
-        void StartPreRoll(bool p_idx, const BoardConfig& b );
 
         void withPlayer(bool p_idx);
         void withBoard(const BoardConfig& b);

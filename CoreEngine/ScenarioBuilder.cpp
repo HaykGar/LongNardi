@@ -22,7 +22,7 @@ ScenarioBuilder::ScenarioBuilder(const ScenarioBuilder& other) : _game(other._ga
     */
 }
 
-void ScenarioBuilder::StartPreRoll(bool p_idx, const BoardConfig& b)
+void ScenarioBuilder::ResetPreRoll(bool p_idx, const BoardConfig& b)
 {
     withPlayer(p_idx);
     withBoard(b);
@@ -31,11 +31,11 @@ void ScenarioBuilder::StartPreRoll(bool p_idx, const BoardConfig& b)
 
 status_codes ScenarioBuilder::withScenario(bool p_idx, const BoardConfig& b, int d1, int d2, int d1u, int d2u)
 {
-    StartPreRoll(p_idx, b);
+    ResetPreRoll(p_idx, b);
     return withDice(d1, d2, d1u, d2u);
 }
 
-status_codes ScenarioBuilder::withScenario(const Scenario& s)
+status_codes ScenarioBuilder::withScenario(const Game::Snapshot& s)
 {
     return withScenario(s.player_idx, s.board, s.dice[0], s.dice[1], s.dice_used[0], s.dice_used[1]);
 }
@@ -88,7 +88,7 @@ void ScenarioBuilder::withRandomEndgame(bool p_idx)
     _game.turn_number = {2, 2}; // avoid first turn exceptions
 
     // feed in randomly generated endgame board scenario
-    StartPreRoll(p_idx, rand_board);        
+    ResetPreRoll(p_idx, rand_board);        
 }
 
 void ScenarioBuilder::ResetControllerState()

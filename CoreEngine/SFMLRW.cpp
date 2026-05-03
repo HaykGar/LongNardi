@@ -551,6 +551,9 @@ status_codes SFMLRW::PollInput()
                 }
             }
 
+            if (k->code == sf::Keyboard::Key::U)
+                return ctrl.ReceiveCommand(Command(Actions::UNDO));
+
             if (k->code == sf::Keyboard::Key::Q)
                 return ctrl.ReceiveCommand(Command(Actions::QUIT));
 
@@ -650,6 +653,33 @@ void SFMLRW::ReceiveGameEvent(const Game::Event& e)
 
             return; 
         } 
+        case Game::EventCode::REPLACE:
+        {
+            const auto& rd = std::get<Game::RemoveData>(e.data);
+
+            PieceAnimation anim;
+
+            // Destination is the cell
+            anim.to = pieceStackTopCenter(rd._from);
+
+            // Start from the same "off-board" position used in REMOVE
+            auto off = anim.to;
+            off.y += (rd._from.row == 0 ? -80.f : 80.f);
+            anim.from = off;
+
+            anim.isRemove = false;
+            anim.srcCell.reset();
+            anim.dstCell = rd._from;
+            anim.ownerSign = g.GetBoardRef().PlayerSign();
+
+            activeAnim = anim;
+            animClock.restart();
+
+            while (activeAnim)   // fix later
+                Render();
+
+            return;
+        }
         default: 
             Render(); 
             return; 
