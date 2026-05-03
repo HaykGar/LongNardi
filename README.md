@@ -26,7 +26,7 @@ pip install -e .
 
 only once. After this, you can run 
 ```bash
-python play.py
+python xagh.py
 ```
 
 and play against a computer or (in-person) human opponent.
@@ -57,8 +57,8 @@ For a simple 2-layer MLP, I trained several architectures in parallel, namely wi
 
 I also experimented with Convolutional Neural Networks, performing 1 or 2 1D convolutions with a kernel size of 5 on extracted board features, then passing them through a 2-layer (64 and 16) MLP to get the final evaluation. The models with 1 and 2 convolutions performed significantly better than the MLP. 
 
-Most recently, I experimented with ResNet inspired models. This performed the best out of all of them in terms of ELO rating, but is not significantly better in head to head matches against either convolutional model.
+Most recently, I experimented with ResNet inspired models. This performed the best out of all of them in terms of ELO rating, but is not significantly better in head to head matches against either convolutional model. However, the performance gap between the ResNet and standard Convolutional models appears to grow wider when we incorporate a lookahead move selection strategy, where all models plan ahead to have more accurate evaluation estimates for each move.
 
-I also experimented with ensemble methods, but as I expected these were not particularly fruitful. I briefly considered adding an attention layer, but I think this will be very computationally intensive and will have too much difficulty converging with TD training. In general, too much complexity has made training very difficult, and lead to very poorly performing models. For example, adding dropout or a second residual block resulted in worse performance than the hueristic strategy.
+I also experimented with ensemble methods, but (as I expected) these were not particularly fruitful. I briefly considered adding an attention layer, but I think this will be very computationally intensive and will have too much difficulty converging with TD training. In general, too much complexity has made training very difficult, and lead to very poorly performing models. For example, adding dropout or a second residual block resulted in worse performance than the hueristic strategy.
 
-Future plans include exploring MCTS based training approaches as in AlphaGoZero, adding sharper handcrafted features (these made a big difference for TD Gammon), and making the whole thing more presentable/pretty.
+Future plans include exploring MCTS based training approaches as in AlphaGoZero, adding sharper handcrafted features (these made a big difference for TD Gammon), and making the whole thing more presentable/pretty. I also have ideas on how to make lookahead search much more efficient, as the current version was only implemented for proof-of-concept and sometimes takes several seconds despite parallelization.
