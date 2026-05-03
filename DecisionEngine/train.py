@@ -1,7 +1,9 @@
 from sim_play import Simulator
-import nardi_net
+import nardi
 
 import torch
+import torch.nn.functional as F
+
 import numpy as np
 from tqdm import tqdm
 import os
@@ -16,7 +18,7 @@ class TDTrainer:
         weights_file=None,
 
         # ---- learning params ----
-        LAMBDA=0.7,
+        LAMBDA=0.5,
         alpha=0.01,
         alpha_min_factor=0.1,
 
@@ -32,8 +34,9 @@ class TDTrainer:
         h_t=20,
         
         # ---- benchmarks ----
-        baseline_args=(None, "heuristic")
-
+        baseline_args=(None, "heuristic"),
+        # ---- config ----
+        endgame_finetune = False
     ):
         if not weights_file:
             print("WARNING - training results will not save anywhere. Press enter to proceed")
@@ -79,6 +82,8 @@ class TDTrainer:
         self.model.to(self.simulator.device)
                 
         self.baseline = baseline_args
+        
+        self.build_pos = self.simulator.config.withRandomEndgame if endgame_finetune else None
         
     #################################
     ######### training vars #########     
@@ -136,8 +141,8 @@ class TDTrainer:
             plt.savefig(os.path.join(self.output_dir, 'win_rate_per_stage.png'))
             plt.close()
 
-    def eval_and_grad(self):
-        eval = self.simulator.eval_current(self.model)
+    def eval_and_grad(self, pos=None):
+        eval = self.simulator.eval_position(self.model, pos)            
         
         grads = torch.autograd.grad(
             eval,
@@ -152,10 +157,21 @@ class TDTrainer:
             buf.copy_(g)
             
         return eval.squeeze(), self.grad_buf
+    
+    def update(self, delta, grad):
+        delta = torch.clamp(delta, min=-1, max=1)
+        
+        with torch.no_grad():
+            scale = self.alpha * delta         
+            for p, e in zip(self.params, grad):
+                p.add_(e * scale)
         
     def playout(self, track_eval : bool):
-        
-        self.simulator.reset()
+        if np.random.random() < 0.1:
+            self.simulator.reset(build_pos=self.build_pos)
+        else:
+            self.simulator.reset()
+            
         max_surprise = torch.zeros((), device=self.simulator.device)
             # greatest swing in position evaluation after one move in a game
         evals = []
@@ -179,7 +195,8 @@ class TDTrainer:
             if not self.simulator.eng.is_terminal():
                 Y_new, g = self.eval_and_grad()
             else:
-                Y_new = torch.tensor(-self.simulator.sign * self.simulator.eng.winner_result(), device=self.simulator.device, dtype=torch.float32)   
+                Y_new = torch.tensor(-self.simulator.sign * self.simulator.eng.winner_result(), 
+                                     device=self.simulator.device, dtype=torch.float32)   
                     # need to unflip sign here
                 self.points[(self.simulator.sign == -1)] += self.simulator.eng.winner_result()
 
@@ -191,12 +208,7 @@ class TDTrainer:
             delta_abs = delta.abs()
             max_surprise = torch.maximum(max_surprise, delta_abs)
 
-            delta = torch.clamp(delta, min=-1, max=1)
-            
-            with torch.no_grad():
-                scale = self.alpha * delta         
-                for p, e in zip(self.params, accum_grad):
-                    p.add_(e * scale)
+            self.update(delta, accum_grad)
                 
         if track_eval:
             return max_surprise, evals
@@ -249,20 +261,22 @@ class TDTrainer:
             self.eval_traces.append(evals)
             if self.weights_file is not None:
                 torch.save(self.model.state_dict(), self.weights_file)    # save weights to file after each stage
-            ################################ end stage report + actions ################################     
+            ################################ end stage report + actions ################################   
+                    
 
         print(f"post-training simulation")
         self.report_progress(1000)
 
         print("total points each: ", self.points)
         self.record_results()
-
+        
 ####################################
 ########   end train loop   ########            
 ####################################
 
 if __name__ == "__main__":
     import argparse
+    import nardi_net
 
     #####################################    
     ######### command line args #########     
@@ -295,20 +309,20 @@ if __name__ == "__main__":
         
         return filepath
     
-    def valid_dropout(x):
+    def valid_float_0to1(x):
         x = float(x)
         if not 0.0 <= x < 1.0:
             raise argparse.ArgumentTypeError("dropout must be in [0.0, 1.0)")
         return x
 
     parser = argparse.ArgumentParser(
-        description="Process a str architecture name, float dropout rate, directory path and an optional filename."
+        description="Process model and traiing configuration with optional save file and directory for figures."
     )
 
     parser.add_argument(
         "--directory", 
         type=valid_dir, 
-        help="Optional path to an existing directory", 
+        help="Optional path to an existing directory to store figures", 
         default=None)
     
     parser.add_argument(
@@ -329,7 +343,7 @@ if __name__ == "__main__":
 
     parser.add_argument(
         "--dropout",
-        type=float,
+        type=valid_float_0to1,
         default=0.0,
         help="Dropout probability (default: 0.0)"
     )
@@ -348,32 +362,53 @@ if __name__ == "__main__":
         help="number of stages in training"
     )
     
+    parser.add_argument(
+        "--lambda", 
+        type=valid_float_0to1, 
+        help="Optional value for LAMBDA in TDTrainer, must be in (0,1).", 
+        default=0.7
+    )
+    
+    parser.add_argument(
+        "--lr", 
+        type=valid_float_0to1, 
+        help="Optional value for learning rate in TDTrainer, must be in (0,1).", 
+        default=0.01
+    )
+    
+    parser.add_argument(
+        "--endgame",
+        action='store_true',
+        help='Optional flag to enable training only in endgame scenarios'
+    )
+    
     args = parser.parse_args()
     
     if args.architecture == "Conv":
-        model = nardi_net.ConvNardiNet(dropout=args.dropout)
+        model = nardi_net.ConvNardiNet(dropout=args.dropout, extra_conv=True)
     elif args.architecture == "MLP":
-        model = nardi_net.NardiNet(p_dropout=args.dropout)
+        model = nardi_net.NardiNet(64, 16, p_dropout=args.dropout)
     elif args.architecture == "ResNet":
         model = nardi_net.ResNardiNet()
 
-    trainer = TDTrainer(model, weights_file=args.file, output_dir=args.directory)
+    trainer = TDTrainer(model, weights_file=args.file, output_dir=args.directory, endgame_finetune=args.endgame)
     trainer.train(n_stages=args.stages, games_per_stage=args.games)
 
 # ToDo:
-    # add features for longest block and pieces behind it... maybe also pieces moving per dice?
-    # maybe block robustness? ie how many pieces in the block have more than one piece on them or something similar
-    # Pieces in home or pieces not yet in home... several training games far into simulations failed to detect that it was about to do Mars,
-    # but this would be obvious from such features
+
+# tail chasing problem: freeze old Value function before using it to bootstrap TD targets !!!
+
+
+# add features for longest block and pieces behind it... maybe also pieces moving per dice?
+# maybe block robustness? ie how many pieces in the block have more than one piece on them or something similar
+# Pieces in home or pieces not yet in home... several training games far into simulations failed to detect that it was about to do Mars,
+# but this would be obvious from such features
 
 # instead of solver - resignation threshold, so look at raw probability nodes in the model and based on that decide game outcomes...
 # set this threshold pretty high, at least 90%, and see how AGZ training handled this I think they had a holdout set without this...
 
-# experiment with lower lambda
-# schedule learning rate ?
-# train 2 models - 64 and 16 hidden units for one, 128 and 32 for the other
-
 # pruning in lookahead search?
+# lookahead in C++
 
 # coming to think that MCTS is a necessity
 # also considering ViT approach
