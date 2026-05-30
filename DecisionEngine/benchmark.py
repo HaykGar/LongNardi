@@ -126,13 +126,15 @@ def benchmark_parallel(model1, model1_cfg, model_strat="greedy",
 import torch
 
 if __name__ == "__main__":
+    weights_dir = os.path.join(os.path.dirname(__file__), "weights")
+
     # build models on CPU
     m1 = NardiNet(64, 16)
-    m1.load_state_dict(torch.load("mw64_16.pt", map_location="cpu"))
+    m1.load_state_dict(torch.load(os.path.join(weights_dir, "mw64_16.pt"), map_location="cpu"))
     m1.eval()
 
     m2 = NardiNet(128, 32)
-    m2.load_state_dict(torch.load("mw128_32.pt", map_location="cpu"))
+    m2.load_state_dict(torch.load(os.path.join(weights_dir, "mw128_32.pt"), map_location="cpu"))
     m2.eval()
 
     score_64 = score_128 = score_h = 0
