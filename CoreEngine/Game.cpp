@@ -57,6 +57,12 @@ const BoardConfig& Game::GetBoardData() const
 int Game::GetDice(bool idx) const
 {   return dice[idx];   }
 
+int Game::GetTurnNumber(bool player) const
+{   return turn_number[player];   }
+
+int Game::GetTotalTurnNumber() const
+{   return turn_number[0] + turn_number[1];   }
+
 const ReaderWriter* Game::GetConstRW() const
 {   return rw;   }
 
