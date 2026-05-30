@@ -38,7 +38,7 @@ class Simulator:
             eval = self.sign * model(self.eng.board_features())
         else:
             eval = self.sign * model(pos)
-        return eval
+        return eval        
 
     def model_feature_args(self, model):
         pipeline = getattr(model, "pipeline", None)
@@ -69,8 +69,19 @@ class Simulator:
         return
 
     def evaluate_lookahead_batch(self, batch, model):
+        """
+        Args:
+            batch: batched grandchildren (if any) to evaluate with model, wrapped in lookahead_batch
+            model: NardiNet model used for evaluation
+        Returns:
+            np.array: grandchild values in the *side-to-move's* perspective
+                      (possibly empty). NOT sign-flipped: the C++ aggregation
+                      (child_values / best_index) does a min over the opponent's
+                      replies assuming this perspective, so the values must stay
+                      in it. Convert to the white frame only after aggregation.
+        """
         if batch.num_eval_features == 0:
-            return np.empty((0,), dtype=np.float32)
+            return np.empty(0, dtype=np.float32)
 
         kind, flatten = self.model_feature_args(model)
         self.ensure_model_on_device(model)
@@ -80,14 +91,21 @@ class Simulator:
         with torch.inference_mode():
             values = model(x)
         return values.detach().cpu().numpy().astype(np.float32, copy=False)
-    
-    def lookahead_eval(self, model):
-        batch = self.eng.make_lookahead_batch()
-        if batch.num_children == 0:
-            raise Exception("tried to do lookahead with no legal moves")
 
-        values = self.evaluate_lookahead_batch(batch, model)
-        return float(batch.child_values(values).max())
+    def lookahead_eval_and_values(self, model, batch=None):
+        """Return (lookahead value in white perspective, raw grandchild values).
+
+        child_values aggregates in the side-to-move's perspective, so the model
+        values fed to it must NOT be sign-flipped. The white-frame conversion
+        (* self.sign) is applied only to the final scalar. self.sign is read here,
+        before any move is applied, so it is the lookahead root player's sign.
+        """
+        if batch is None:
+            batch = self.eng.make_lookahead_batch()
+
+        values = self.evaluate_lookahead_batch(batch, model)  # works with empty batch too
+        eval_white = float(self.sign * batch.child_values(values).max())
+        return eval_white, values
     
     def best_child_eval(self, model):
         children = self.eng.get_children()
@@ -123,22 +141,21 @@ class Simulator:
         else:
             self.advance_turn()
         
-    def apply_noisy_move(self, K, eps, temperature, model, options=None):            
-        if self.turn_num > K:
-            self.apply_greedy_move(model, options) # advances turn internally
-        else:
-            if options is None:
-                options = self.eng.roll_and_enumerate()
-            if len(options) == 0:
-                self.advance_turn()
-                return
-
-            with torch.inference_mode():
-                values = model(options).detach().cpu().numpy().astype(np.float32, copy=False)
-            # C++ duplicates the old softmax + Dirichlet-noise move sampling,
-            # then applies the selected child through the normal controller.
-            self.eng.apply_noisy_board(values, eps, temperature)
+    def apply_noisy_move(self, eps, temperature, model, options=None):
+        # Noisy for the whole game (no turn-number cutoff): every move is sampled
+        # with softmax + Dirichlet noise.
+        if options is None:
+            options = self.eng.roll_and_enumerate()
+        if len(options) == 0:
             self.advance_turn()
+            return
+
+        with torch.inference_mode():
+            values = model(options).detach().cpu().numpy().astype(np.float32, copy=False)
+        # C++ duplicates the old softmax + Dirichlet-noise move sampling,
+        # then applies the selected child through the normal controller.
+        self.eng.apply_noisy_board(values, eps, temperature)
+        self.advance_turn()
 
     def apply_lookahead_move(self, evaluator, options = None):
         if options is None and not self.eng.roll_has_children():

@@ -8,7 +8,201 @@ from tqdm import tqdm
 import os
 import matplotlib.pyplot as plt
 
+
+class GameEnv:
+    """A gym-style self-play environment for TD(lambda) training.
+
+    Each env owns everything specific to one game in flight:
+      - its own engine (via Simulator),
+      - its own TD(lambda) eligibility trace (accum_grad),
+      - and the computation of its own value and gradient (eval_and_grad).
+
+    The trainer owns the *shared* model weights and decides how/when to apply
+    updates; an env never touches the weights. `step` plays one move and hands
+    back this game's update direction, so the trainer can average across envs
+    before applying. This keeps weight ownership global and trajectory state local.
+
+    API:
+      env.reset()                -> initial value (also clears trace)
+      env.step(move_fn)          -> (update, done, info)
+
+    where move_fn(sim) applies one move with whatever strategy the caller wants
+    (e.g. noisy/greedy), `update` is a per-parameter list (this game's
+    clamp(delta) * eligibility_trace), and `info` carries the result on terminal.
+    """
+
+    __slots__ = ("model", "params", "build_pos", "LAMBDA", "device",
+                 "sim", "accum_grad", "Y_new", "g",
+                 "track", "eval_trace", "max_surprise")
+
+    def __init__(self, model, params, *, build_pos=None, lam=0.7, track=False):
+        self.model = model
+        self.params = params
+        self.build_pos = build_pos
+        self.LAMBDA = lam
+
+        self.sim = Simulator()
+        self.device = self.sim.device
+
+        # Eligibility trace + cached current value/gradient (this env's own copy,
+        # so a sibling env's eval can never clobber it).
+        self.accum_grad = [torch.zeros_like(p) for p in params]
+        self.Y_new = None
+        self.g = None
+
+        self.track = track          # env 0 records a trajectory for plotting
+        self.eval_trace = []
+        self.max_surprise = 0.0
+
+    def eval_and_grad(self, pos=None):
+        """Evaluate the current (or given) position and its gradient w.r.t. params."""
+        value = self.sim.eval_position(self.model, pos)
+        grads = torch.autograd.grad(
+            value, self.params,
+            retain_graph=False, create_graph=False, allow_unused=False,
+        )
+        # grads are freshly allocated by autograd, so this env keeps its own copy.
+        return value.squeeze(), list(grads)
+
+    def reset(self):
+        """Start a fresh game, clear the eligibility trace, cache the initial eval."""
+            
+        self.sim.reset(build_pos=self.build_pos)
+
+        for e in self.accum_grad:
+            e.zero_()
+
+        self.Y_new, self.g = self.eval_and_grad()
+        self.max_surprise = 0.0
+        self.eval_trace = [float(self.Y_new.item())] if self.track else []
+        return self.Y_new
+
+    def step(self, move_fn):
+        """Advance one move via move_fn(sim); return (update, done, info).
+
+        update : list[Tensor] per trainable parameter, this game's TD(lambda)
+                 update direction  clamp(delta) * eligibility_trace.
+        done   : whether the game ended on this move.
+        info   : {} normally; {'result', 'sign'} on termination (for scoring).
+        """
+        Y_old = self.Y_new
+
+        # Eligibility trace: e <- lambda * e + grad(Y_old)
+        for e, gi in zip(self.accum_grad, self.g):
+            e.mul_(self.LAMBDA).add_(gi)
+
+        with torch.no_grad():
+            move_fn(self.sim)
+
+        done = self.sim.eng.is_terminal()
+        info = {}
+        if not done:
+            self.Y_new, self.g = self.eval_and_grad()
+        else:
+            result = self.sim.eng.winner_result()
+            sign = self.sim.sign
+            # sign is read from C++; after a completed terminal move the controller
+            # has advanced to the losing side, so unflip to keep Y_new in the
+            # previous eval frame.
+            self.Y_new = torch.tensor(-sign * result, device=self.device, dtype=torch.float32)
+            info = {"result": result, "sign": sign}
+
+        delta = self.Y_new - Y_old
+        self.max_surprise = max(self.max_surprise, float(delta.abs().item()))
+        if self.track:
+            self.eval_trace.append(float(self.Y_new.item()))
+
+        # clamp(delta) * trace, mirroring the original per-move TD update; the
+        # trainer averages these across envs before scaling by alpha.
+        clamped = torch.clamp(delta, min=-1, max=1)
+        update = [clamped * e for e in self.accum_grad]
+        return update, done, info
+
+
+class LookaheadGameEnv(GameEnv):
+    """A self-play env whose TD targets come from 1-ply lookahead (expectimax)
+    instead of the raw model value.
+
+    We still train the raw value function V(s) = model(s): its gradient feeds the
+    eligibility trace exactly as in GameEnv. What changes is the *bootstrap
+    target*. For an afterstate a (the board after a player's move), the better
+    estimate of its value is the lookahead value L(a) = the value of the best
+    move under 1-ply search, which the C++ batch already computes as the chosen
+    child's `child_value` (an expectation over the opponent's dice). So:
+
+        delta_t = L(a_t) - V(a_{t-1})          (semi-gradient TD; target = lookahead)
+        trace  += grad V(a_{t-1})
+
+    Since the target only enters delta as a scalar (its gradient is never used),
+    the lookahead value is computed with the model in inference mode.
+
+    self.Y_new always holds the *prediction* V(a) for the current afterstate (so
+    it can play Y_old next step); the lookahead target is computed fresh each step
+    by the move itself and used immediately. The lookahead picks the move and
+    yields its target value together, so step() drives the move and ignores the
+    move_fn argument.
+    """
+
+    def _lookahead_move(self):
+        """Roll, pick the best 1-ply move, and return (target, done, info).
+
+        target : white-perspective value of the resulting afterstate — the
+                 lookahead value of the chosen move (or the true result on a win).
+        """
+        sim = self.sim
+        model = self.model
+
+        # No legal move for this roll: the turn passes with the board unchanged.
+        # No lookahead is possible, so fall back to the naive model value.
+        if not sim.eng.roll_has_children():
+            with torch.inference_mode():
+                target = float(sim.sign * model(sim.eng.board_features()).item())
+            return target, False, {}
+
+        batch = sim.eng.make_lookahead_batch()
+        if batch.num_children == 0:
+            raise Exception("roll has children but batch has none")
+            
+        target, values = sim.lookahead_eval_and_values(model, batch)
+        sim.eng.apply_best_lookahead(values) # ok if num_eval_features is 0
+        
+        if sim.eng.is_terminal():
+            # A winning move: the true game result replaces the estimate. sign has
+            # flipped to the losing side, so unflip to stay in the same frame.
+            result = sim.eng.winner_result()
+            return float(-sim.sign * result), True, {"result": result, "sign": sim.sign} 
+
+        return target, False, {}
+
+    def step(self, move_fn=None):
+        # Y_old is the *prediction* V(a_{t-1}) cached from the previous step.
+        Y_old = self.Y_new
+
+        # Eligibility trace: e <- lambda * e + grad(V(a_{t-1}))
+        for e, gi in zip(self.accum_grad, self.g):
+            e.mul_(self.LAMBDA).add_(gi)
+
+        target, done, info = self._lookahead_move()
+
+        if not done:
+            # Prediction at the new afterstate (its gradient feeds next step's trace).
+            self.Y_new, self.g = self.eval_and_grad()
+        else:
+            self.Y_new = torch.tensor(target, device=self.device, dtype=torch.float32)
+
+        delta = target - Y_old
+        self.max_surprise = max(self.max_surprise, float(delta.abs().item()))
+        if self.track:
+            self.eval_trace.append(float(target))
+
+        clamped = torch.clamp(delta, min=-1, max=1)
+        update = [clamped * e for e in self.accum_grad]
+        return update, done, info
+
+
 class TDTrainer:
+    env_cls = GameEnv   # which environment class run_batch drives (see LookaheadTDTrainer)
+
     def __init__(
         self,
         model,
@@ -35,7 +229,8 @@ class TDTrainer:
         # ---- benchmarks ----
         baseline_args=(None, "heuristic"),
         # ---- config ----
-        endgame_finetune = False
+        endgame_finetune = False,
+        num_envs = 1,
     ):
         if not weights_file:
             print("WARNING - training results will not save anywhere. Press enter to proceed")
@@ -67,10 +262,13 @@ class TDTrainer:
         self.h_t = h_t
 
     #######################################
-    ######### model and simulator #########     
+    ######### model and simulator #########
     #######################################
+        # A dedicated simulator used only for benchmarking / reporting, kept
+        # separate from the training environments so a benchmark never disturbs
+        # an in-flight training game.
         self.simulator = Simulator()
-        
+
         self.model = model
         if weights_file:
             if not os.path.exists(weights_file):
@@ -79,26 +277,40 @@ class TDTrainer:
                 self.model.load_state_dict(torch.load(weights_file))
 
         self.model.to(self.simulator.device)
-                
+        self.device = self.simulator.device
+
         self.baseline = baseline_args
-        
+
         self.build_pos = self.simulator.config.withRandomEndgame if endgame_finetune else None
-        
+
     #################################
-    ######### training vars #########     
+    ######### training vars #########
     #################################
         self.points = [0, 0]
         self.eval_traces = []
         self.surprises = []
         self.last_wr = 0
         self.no_improve = 0
-        
+
         self.output_dir = output_dir
         self.weights_file = weights_file
-        
-        self.grad_buf = [torch.zeros_like(p) for p in self.model.parameters()]
-        
-        self.params = [p for p in self.model.parameters() if p.requires_grad] 
+
+        self.params = [p for p in self.model.parameters() if p.requires_grad]
+
+    #################################
+    ######### environments ##########
+    #################################
+        # Each environment owns its own engine (via Simulator) and its own
+        # TD(lambda) eligibility trace. Games run as a synchronized batch: every
+        # env steps one move, the per-game updates are averaged, and a single
+        # averaged update is applied (see run_batch). num_envs == 1 reproduces
+        # the original one-game-at-a-time behavior exactly.
+        self.num_envs = max(1, num_envs)
+        self.envs = [
+            self.env_cls(self.model, self.params,
+                         build_pos=self.build_pos, lam=self.LAMBDA, track=(i == 0))
+            for i in range(self.num_envs)
+        ]
         
     ####################################
     ######### helper functions #########     
@@ -140,79 +352,91 @@ class TDTrainer:
             plt.savefig(os.path.join(self.output_dir, 'win_rate_per_stage.png'))
             plt.close()
 
-    def eval_and_grad(self, pos=None):
-        eval = self.simulator.eval_position(self.model, pos)            
-        
-        grads = torch.autograd.grad(
-            eval,
-            self.params,
-            retain_graph=False,
-            create_graph=False,
-            allow_unused=False
-        )
+    def make_move_fn(self, noisy):
+        """Build the per-move strategy passed to env.step for the current stage.
 
-        # copy into persistent buffer (NO allocation)
-        for buf, g in zip(self.grad_buf, grads):
-            buf.copy_(g)
-            
-        return eval.squeeze(), self.grad_buf
-    
-    def update(self, delta, grad):
-        delta = torch.clamp(delta, min=-1, max=1)
-        
-        with torch.no_grad():
-            scale = self.alpha * delta         
-            for p, e in zip(self.params, grad):
-                p.add_(e * scale)
-        
-    def playout(self, track_eval : bool):
-        if np.random.random() < 0.1:
-            self.simulator.reset(build_pos=self.build_pos)
+        noisy=True  -> noisy exploration for the whole game (softmax + Dirichlet
+                       noise, using the current annealed eps/temperature).
+        noisy=False -> greedy play.
+
+        run_batch calls this once per stage; train() uses noisy for the first
+        half of the stages, then switches to greedy.
+        """
+        model = self.model
+
+        if noisy:
+            eps, temperature = self.eps, self.temperature
+
+            def move_fn(sim):
+                sim.apply_noisy_move(eps, temperature, model)
         else:
-            self.simulator.reset()
-            
-        max_surprise = torch.zeros((), device=self.simulator.device)
-            # greatest swing in position evaluation after one move in a game
-        evals = []
+            def move_fn(sim):
+                sim.apply_greedy_move(model)
 
-        Y_new, g = self.eval_and_grad()
-        
-        if track_eval:
-            evals.append(float(Y_new.item()))
-        
-        accum_grad = [torch.zeros_like(p, device=self.simulator.device) for p in self.model.parameters()] # in shape of weights gradient
+        return move_fn
 
-        while not self.simulator.eng.is_terminal():
-            Y_old = Y_new
-            
-            for e, gi in zip(accum_grad, g):
-                e.mul_(self.LAMBDA).add_(gi)
-            
-            with torch.no_grad():
-                self.simulator.apply_noisy_move(self.K, self.eps, self.temperature, self.model)
+    def run_batch(self, games_per_stage, desc="Inner Loop", noisy=False):
+        """Run games_per_stage games, stepping all envs as a synchronized batch.
 
-            if not self.simulator.eng.is_terminal():
-                Y_new, g = self.eval_and_grad()
-            else:
-                # sign is read from C++; after a completed terminal move the controller has
-                # advanced to the losing side, so unflip to keep Y_new in the previous eval frame.
-                Y_new = torch.tensor(-self.simulator.sign * self.simulator.eng.winner_result(), 
-                                     device=self.simulator.device, dtype=torch.float32)   
-                self.points[(self.simulator.sign == -1)] += self.simulator.eng.winner_result()
+        Each iteration steps every active env one move, averages the per-game
+        TD updates, and applies a single averaged weight update. Finished games
+        are immediately reset so the batch stays full until the target count is
+        reached. Returns (max_surprise, first_game_eval_trace) for reporting,
+        mirroring the old per-stage "first game" tracking.
 
-            if track_eval:
-                evals.append(float(Y_new.item()))
+        A whole stage runs inside this one call, so it carries its own progress
+        bar (over completed games) — otherwise the outer per-stage bar would sit
+        at 0% for the entire stage and look frozen.
+        """
+        move_fn = self.make_move_fn(noisy)
 
-            delta = Y_new - Y_old
-            
-            delta_abs = delta.abs()
-            max_surprise = torch.maximum(max_surprise, delta_abs)
+        for env in self.envs:
+            env.reset()
 
-            self.update(delta, accum_grad)
-                
-        if track_eval:
-            return max_surprise, evals
-        
+        games_completed = 0
+        first_trace = None
+        first_max_surprise = 0.0
+        captured_first = False
+
+        pbar = tqdm(total=games_per_stage, desc=desc, leave=False)
+        while games_completed < games_per_stage:
+            batch_update = [torch.zeros_like(p) for p in self.params]
+            n_contrib = 0
+
+            for env in self.envs:
+                update_contrib, done, info = env.step(move_fn)
+                for acc, c in zip(batch_update, update_contrib):
+                    acc.add_(c)
+                n_contrib += 1
+
+                if done:
+                    games_completed += 1
+                    pbar.update(1)
+                    self.points[(info["sign"] == -1)] += info["result"]
+                    # env 0's first completed game is the one we plot/report.
+                    if env.track and not captured_first:
+                        first_trace = list(env.eval_trace)
+                        first_max_surprise = env.max_surprise
+                        captured_first = True
+                    if games_completed < games_per_stage:
+                        env.reset()
+
+            # Apply the batch-averaged update once per synchronized step.
+            if n_contrib > 0:
+                scale = self.alpha / n_contrib
+                with torch.no_grad():
+                    for p, acc in zip(self.params, batch_update):
+                        p.add_(acc, alpha=scale)
+        pbar.close()
+
+        # If env 0 never finished a game this stage (only happens if env 0 was
+        # still mid-game when the target was hit), fall back to its partial trace.
+        if not captured_first:
+            first_trace = list(self.envs[0].eval_trace)
+            first_max_surprise = self.envs[0].max_surprise
+
+        return first_max_surprise, first_trace
+
     def report_progress(self, ng):
         mod_score, base_score = self.simulator.benchmark(self.model, 
                                                          "greedy", 
@@ -227,26 +451,24 @@ class TDTrainer:
 ################################
 
     def train(self, n_stages=100, games_per_stage=5000):
-        print("pre-training simulation")
+        print(f"pre-training simulation (training with {self.num_envs} parallel env(s))")
         self.report_progress(ng=20)
-        
-        evals = []
 
         for stage in tqdm(range(n_stages), desc="Outer Loop", leave=False):
             # anneal noise and temperature
-            self.eps = self.eps_min + (self.eps0 - self.eps_min) * 2.0**(-stage / self.h_e)  
+            self.eps = self.eps_min + (self.eps0 - self.eps_min) * 2.0**(-stage / self.h_e)
             self.temperature = self.t_min + (self.t0 - self.t_min) * 2.0**(-stage / self.h_t)
-            
-            for game in tqdm(range(games_per_stage), desc=f"Inner Loop {stage+1}", leave=False):
-                if game == 0:
-                    max_surprise, evals = self.playout(track_eval=True)
-                else:
-                    self.playout(track_eval=False)
-            ################################ per stage report + actions ################################     
+
+            # Noisy exploration for the first half of stages, then pure greedy.
+            noisy = stage < n_stages // 2
+
+            # Run games_per_stage games as a synchronized batch across all envs.
+            max_surprise, evals = self.run_batch(games_per_stage, desc=f"Inner Loop {stage+1}", noisy=noisy)
+            ################################ per stage report + actions ################################
             print()
-            self.surprises.append(float(max_surprise.item()))      # greatest swing in eval during the first game            
+            self.surprises.append(float(max_surprise))      # greatest swing in eval during the first game
             print("max surprise of ", max_surprise)
-            
+
             print(f"results of simulation {stage+1}")
             self.wr = self.report_progress(ng=100)
             print()
@@ -271,8 +493,24 @@ class TDTrainer:
         self.record_results()
         
 ####################################
-########   end train loop   ########            
+########   end train loop   ########
 ####################################
+
+
+class LookaheadTDTrainer(TDTrainer):
+    """TDTrainer whose envs bootstrap from 1-ply lookahead targets.
+
+    Everything else (batched synchronized updates, annealing, reporting) is
+    inherited. Only the environment class changes: each env selects moves by
+    1-ply expectimax and uses the chosen afterstate's lookahead value as the TD
+    target instead of the raw model value. Because the lookahead drives the move
+    itself, the noisy/greedy move_fn from make_move_fn is ignored by the env, so
+    the noisy-vs-greedy stage schedule has no effect here (lookahead play is
+    deterministic).
+    """
+
+    env_cls = LookaheadGameEnv
+
 
 if __name__ == "__main__":
     import argparse
@@ -354,7 +592,23 @@ if __name__ == "__main__":
         default=5000,
         help="number of games per stage"
     )
-    
+
+    parser.add_argument(
+        "--envs",
+        type=positive_int,
+        default=1,
+        help="number of parallel self-play environments (batch size of games). "
+             "Per synchronized step every env plays one move and the TD updates "
+             "are averaged before being applied. Default 1 reproduces single-game training."
+    )
+
+    parser.add_argument(
+        "--lookahead",
+        action="store_true",
+        help="use 1-ply lookahead (expectimax) values as TD targets instead of "
+             "raw model evaluations (LookaheadTDTrainer). Slower per move."
+    )
+
     parser.add_argument(
         "--stages",
         type=positive_int,
@@ -391,24 +645,7 @@ if __name__ == "__main__":
     elif args.architecture == "ResNet":
         model = nardi_net.ResNardiNet()
 
-    trainer = TDTrainer(model, weights_file=args.file, output_dir=args.directory, endgame_finetune=args.endgame)
+    trainer_cls = LookaheadTDTrainer if args.lookahead else TDTrainer
+    trainer = trainer_cls(model, weights_file=args.file, output_dir=args.directory,
+                          endgame_finetune=args.endgame, num_envs=args.envs)
     trainer.train(n_stages=args.stages, games_per_stage=args.games)
-
-# ToDo:
-
-# tail chasing problem: freeze old Value function before using it to bootstrap TD targets !!!
-
-
-# add features for longest block and pieces behind it... maybe also pieces moving per dice?
-# maybe block robustness? ie how many pieces in the block have more than one piece on them or something similar
-# Pieces in home or pieces not yet in home... several training games far into simulations failed to detect that it was about to do Mars,
-# but this would be obvious from such features
-
-# instead of solver - resignation threshold, so look at raw probability nodes in the model and based on that decide game outcomes...
-# set this threshold pretty high, at least 90%, and see how AGZ training handled this I think they had a holdout set without this...
-
-# pruning in lookahead search?
-# lookahead in C++
-
-# coming to think that MCTS is a necessity
-# also considering ViT approach

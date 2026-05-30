@@ -142,7 +142,8 @@ PYBIND11_MODULE(nardi, m)
     py::class_<Nardi::Board::Features>(m, "Features")
         .def_readonly("player",             &Nardi::Board::Features::player)
         .def_readonly("opp",                &Nardi::Board::Features::opp)
-        .def_property_readonly("raw_data",  &raw_data_view);
+        .def_property_readonly("raw_data",  &raw_data_view)
+        .def("swap_perspective",            &Nardi::Board::Features::SwapPerspective);
 
     py::class_<Nardi::Board::Features::PlayerBoardInfo>(m, "PlayerBoardInfo")
         .def_readonly("pip_count",          &Nardi::Board::Features::PlayerBoardInfo::pip_count)
