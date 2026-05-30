@@ -273,6 +273,10 @@ bool Board::CurrPlayerInEndgame() const
 
 ///////////// Feature extraction /////////////
 
+void Board::Features::SwapPerspective() {
+    std::swap(opp, player);
+}
+
 const Board::Features Board::ExtractFeatures() const
 {
     Features features;

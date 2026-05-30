@@ -78,6 +78,8 @@ public:
             uint8_t pieces_not_reached;
             uint8_t sq_occ;
         };
+
+        void SwapPerspective();
         
         PlayerBoardInfo player;
         PlayerBoardInfo opp;
