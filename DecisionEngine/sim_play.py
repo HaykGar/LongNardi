@@ -1,6 +1,5 @@
 import torch
 import numpy as np
-import torch.nn.functional as F
 
 from functools import partial
 
@@ -15,54 +14,80 @@ class Simulator:
         self.eng = nardi.Engine()
         self.config = self.eng.config()
         
-        self.sign = 1            # represents player's turn and change in perspective
-        self.turn_num = 0        # turn number in current game
+        # self.sign = 1            # represents player's turn and change in perspective
+        # self.turn_num = 0        # turn number in current game
         
         self.win_rates = []
         
         self.sleep_time = sleep_time
+
+    @property
+    def sign(self):
+        return self.eng.sign()
+
+    @property
+    def turn_num(self):
+        return self.eng.turn_num()
         
     def set_dice_from_input(self):
         dice = input("please enter desired dice: ").split()  # no extra checks for now
         return self.eng.set_and_enumerate(int(dice[0]), int(dice[1]))        
                 
-    def add_dirichlet_noise(self, priors, eps):
-        n = len(priors)
-        if(n <= 1):
-            return priors
-    
-        alpha = np.clip(6.0 / n, 0.2, 0.8)
-        noise = np.random.dirichlet([alpha] * len(priors))
-        noisy_priors = (1 - eps) * priors + eps * noise
-        noisy_priors = noisy_priors / np.sum(noisy_priors)
-        return noisy_priors
-
     def eval_position(self, model, pos=None):
         if pos is None:
             eval = self.sign * model(self.eng.board_features())
         else:
             eval = self.sign * model(pos)
         return eval
+
+    def model_feature_args(self, model):
+        pipeline = getattr(model, "pipeline", None)
+        if pipeline is None:
+            raise TypeError("Model must expose a .pipeline for C++ feature batching.")
+
+        if not hasattr(pipeline, "kind") or not hasattr(pipeline, "flatten"):
+            raise TypeError("Model pipeline must define .kind and .flatten for C++ feature batching.")
+
+        if pipeline.kind not in {"legacy", "conv"}:
+            raise ValueError(f"Unsupported C++ feature pipeline kind: {pipeline.kind!r}")
+
+        if not isinstance(pipeline.flatten, bool):
+            raise TypeError("Model pipeline .flatten must be a bool.")
+
+        return (
+            pipeline.kind,
+            pipeline.flatten,
+        )
+
+    def ensure_model_on_device(self, model):
+        for p in model.parameters():
+            if p.device != self.device:
+                raise RuntimeError(
+                    f"Model is on {p.device}, but simulator device is {self.device}. "
+                    "Call model.to(simulator.device) before lookahead evaluation."
+                )
+        return
+
+    def evaluate_lookahead_batch(self, batch, model):
+        if batch.num_eval_features == 0:
+            return np.empty((0,), dtype=np.float32)
+
+        kind, flatten = self.model_feature_args(model)
+        self.ensure_model_on_device(model)
+        # C++ owns the search tree and feature layout; Python only runs the model
+        # over the flat feature batch and returns values to C++ for aggregation.
+        x = torch.from_numpy(batch.tensor(kind, flatten)).to(self.device)
+        with torch.inference_mode():
+            values = model(x)
+        return values.detach().cpu().numpy().astype(np.float32, copy=False)
     
     def lookahead_eval(self, model):
-        root = self.eng.one_ply_lookahead()
-                        
-        if root.result is not None:
-            raise Exception("tried to do lookahead in terminal position")
-        
-        children = root.children_by_dice[self.eng.dice_as_idx()].data
-                        
-        best_eval = -float("inf")
-        
-        for i, child in enumerate(children):
-            if child.result is not None:
-                return child.result # true result, don't care about falsely high or low evaluations
-            else:
-                eval = self.evaluate_subtree(child, model)
-                if eval > best_eval:
-                    best_eval = eval
-                    
-        return best_eval
+        batch = self.eng.make_lookahead_batch()
+        if batch.num_children == 0:
+            raise Exception("tried to do lookahead with no legal moves")
+
+        values = self.evaluate_lookahead_batch(batch, model)
+        return float(batch.child_values(values).max())
     
     def best_child_eval(self, model):
         children = self.eng.get_children()
@@ -70,28 +95,17 @@ class Simulator:
         return evals.max()    
     
     def reset(self, *, build_pos = None, scenario=None):
-        self.sign = 1
-        self.turn_num = 0
-        
         if scenario:
             self.config.withScenario(scenario.player_idx, 
                                      scenario.board_config, 
                                      scenario.dice[0], scenario.dice[1])
-            self.sign = -1 if scenario.player_idx else 1
         elif build_pos is None:
             self.eng.reset()
         else:
             build_pos()
            
     def advance_turn(self):
-        self.sign *= -1
-        self.turn_num += 1
-        
-    def apply_board(self, board):
-        self.eng.apply_board(board)
-        self.advance_turn()
         time.sleep(self.sleep_time)
-        return None
 
     def apply_greedy_move(self, model, options=None, eval_only=True):
         if options is None:
@@ -103,8 +117,9 @@ class Simulator:
             else:
                 evals = model(options)
 
-            best = options[int(evals.argmax().item())]
-            return self.apply_board(best.raw_data)
+            values = evals.detach().cpu().numpy().astype(np.float32, copy=False)
+            self.eng.apply_greedy_board(values)
+            self.advance_turn()
         else:
             self.advance_turn()
         
@@ -114,93 +129,47 @@ class Simulator:
         else:
             if options is None:
                 options = self.eng.roll_and_enumerate()
-            if len(options) == 1:
-                return self.apply_board(options[0].raw_data)
-            elif len(options) != 0:
-                evals = model(options).detach().cpu()
-                evals = evals - evals.max()
-                priors = F.softmax(evals / temperature, dim=0).cpu().numpy()
-                
-                noisy_priors = self.add_dirichlet_noise(priors, eps)
-                chosen_idx = np.random.choice(len(noisy_priors), p=noisy_priors)
-                chosen = options[chosen_idx]
-                return self.apply_board(chosen.raw_data)
-            else:
-                self.advance_turn()        
+            if len(options) == 0:
+                self.advance_turn()
+                return
 
-    def evaluate_subtree(self, root : nardi.Node, evaluator):
-        if root.result is not None:
-            return root.result
-        elif root.is_leaf():
-            return evaluator(root.features)
-        else:
-            avg_opp_eval = 0    # avg eval from opponents perspective
-            for dice_grp in range(21):
-                # best eval opponent gets from one of these child positions
-                if not root.children_by_dice[dice_grp].data:
-                    opps_best = evaluator(root.features) * -1 
-                    # if no legal moves with dice, just consider current position
-                else:
-                    opps_best = -float("inf")
-                    
-                for child in root.children_by_dice[dice_grp].data:
-                    if child.result is not None:
-                        opps_best = child.result
-                        break 
-                    else:                        
-                        eval = self.evaluate_subtree(child, evaluator)
-                        opps_best = max(opps_best, eval)
-                avg_opp_eval += opps_best * root.children_by_dice[dice_grp].prob
-                
-            return avg_opp_eval * -1
-        
+            with torch.inference_mode():
+                values = model(options).detach().cpu().numpy().astype(np.float32, copy=False)
+            # C++ duplicates the old softmax + Dirichlet-noise move sampling,
+            # then applies the selected child through the normal controller.
+            self.eng.apply_noisy_board(values, eps, temperature)
+            self.advance_turn()
+
     def apply_lookahead_move(self, evaluator, options = None):
-        # options arg just for compatibility...
-        turn_over = not self.eng.roll_has_children()
-        if turn_over:
+        if options is None and not self.eng.roll_has_children():
             self.advance_turn()
             return
-                
-        root = self.eng.one_ply_lookahead()
-                        
-        if root.result is not None:
-            print("warning, tried to lookahead in terminal position")
-            return None
-        
-        children = root.children_by_dice[self.eng.dice_as_idx()].data
-                        
-        best_eval = -float("inf")
-        best_child = None
-        
-        for child in children:
-            if child.result is not None:
-                return self.apply_board(child.features.raw_data)
-            else:
-                eval = self.evaluate_subtree(child, evaluator)
-                if eval > best_eval:
-                    best_child = child
-                    best_eval = eval
-                                        
-        if best_child is not None:
-            return self.apply_board(best_child.features.raw_data)
-        else:
-            print("best_child was none") # impossible due to early advance turn if roll gives false
+
+        batch = self.eng.make_lookahead_batch()
+        if batch.num_children == 0:
+            self.advance_turn()
+            return
+
+        values = self.evaluate_lookahead_batch(batch, evaluator)
+        # C++ aggregates the values, chooses the best child, and applies it.
+        self.eng.apply_best_lookahead(values)
+        self.advance_turn()
 
     def play_random_move(self, options=None):
         if options is None:
             options = self.eng.roll_and_enumerate()
+            
         if len(options) != 0:               # at least 1 possible move   
-            rand_idx = np.random.choice(len(options))
-            return self.apply_board(options[rand_idx].raw_data)
-        else:
-            self.advance_turn()
+            self.eng.apply_random_board()
+            
+        self.advance_turn()
     
     def heuristic_move(self, options=None):
         if options is None:
             options = self.eng.roll_and_enumerate()
         if len(options) != 0:               # at least 1 possible move 
-            coverages = np.array([f.player.sq_occ for f in options])
-            return self.apply_board(options[coverages.argmax()].raw_data)
+            self.eng.apply_heuristic_board()
+            return self.advance_turn()
         else:
             self.advance_turn()
         

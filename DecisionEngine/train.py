@@ -2,7 +2,6 @@ from sim_play import Simulator
 import nardi
 
 import torch
-import torch.nn.functional as F
 
 import numpy as np
 from tqdm import tqdm
@@ -195,9 +194,10 @@ class TDTrainer:
             if not self.simulator.eng.is_terminal():
                 Y_new, g = self.eval_and_grad()
             else:
+                # sign is read from C++; after a completed terminal move the controller has
+                # advanced to the losing side, so unflip to keep Y_new in the previous eval frame.
                 Y_new = torch.tensor(-self.simulator.sign * self.simulator.eng.winner_result(), 
                                      device=self.simulator.device, dtype=torch.float32)   
-                    # need to unflip sign here
                 self.points[(self.simulator.sign == -1)] += self.simulator.eng.winner_result()
 
             if track_eval:

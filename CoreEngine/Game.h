@@ -115,6 +115,8 @@ class Game
         const std::unordered_map<BoardConfig, MoveSequence, BoardConfigHash>& GetBoards2Seqs() const;
 
         int GetDice(bool idx) const;
+        int GetTurnNumber(bool player) const;
+        int GetTotalTurnNumber() const;
         const ReaderWriter* GetConstRW() const;
 
         Snapshot GetSnapshot() const;

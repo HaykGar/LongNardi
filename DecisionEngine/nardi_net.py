@@ -8,42 +8,21 @@ import nardi
     
 class LegacyPipeline():
     def __init__(self, flatten=True):
-        self.flatten=flatten
-            
-    def handle_list_case(self, features : list[nardi.Features]):
-        xs = [self.process_single(f) for f in features]
-        return torch.cat(xs, dim=0) # assumes batch dimension
-        
-    def process_board(self, features : nardi.Features):
-        return torch.cat([
-            torch.from_numpy(features.player.occ).float(),
-            torch.from_numpy(features.opp.occ).float()
-        ], dim=0)
-        
-    def process_scalars(self, features : nardi.Features):
-        return torch.tensor([
-            features.player.pieces_off, 
-            features.opp.pieces_off,
-            features.player.sq_occ, 
-            features.opp.sq_occ,
-            features.player.pieces_not_reached, 
-            features.opp.pieces_not_reached
-        ], dtype=torch.float32).unsqueeze(1)
-        
-    def process_single(self, features : nardi.Features):
-        board = self.process_board(features)
-        scalars = self.process_scalars(features)
-        
-        ret = torch.cat([board, scalars], dim=1).unsqueeze(0).div_(15.0)
-        if self.flatten:
-            return ret.flatten(-2)
-        else:
-            return ret
+        self.flatten = flatten
+        self.kind = "legacy"
     
     def __call__(self, features : list[nardi.Features]):
+        if torch.is_tensor(features):
+            return features.float()
+        if isinstance(features, np.ndarray):
+            return torch.from_numpy(features).float()
         if isinstance(features, (list, tuple)):
-            return self.handle_list_case(features)
-        return self.process_single(features)
+            return torch.from_numpy(
+                nardi.feature_batch_to_tensor(features, self.kind, self.flatten)
+            ).float()
+        return torch.from_numpy(
+            nardi.features_to_tensor(features, self.kind, self.flatten)
+        ).float()
 
 class NardiNet(nn.Module):
     def __init__(self, n_h1, n_h2, feature_pipeline=None, input_dim=None, p_dropout=0, out_dim=4):
@@ -93,16 +72,7 @@ class NardiNet(nn.Module):
 class ConvPipeline(LegacyPipeline):
     def __init__(self):
         super().__init__(flatten=False)
-        
-    def process_scalars(self, features):
-        return torch.tensor([
-            features.player.pieces_off, 
-            features.opp.pieces_off,
-            features.player.pip_count, 
-            features.opp.pip_count,
-            features.player.pieces_not_reached, 
-            features.opp.pieces_not_reached
-        ], dtype=torch.float32).unsqueeze(1)
+        self.kind = "conv"
 
 class ConvNardiNet(NardiNet):
     def __init__(self, num_channels=8, dropout=0, extra_conv=False, out_dim=4):
