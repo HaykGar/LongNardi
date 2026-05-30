@@ -41,6 +41,12 @@ int LookaheadBatch::best_index(
     if(children.empty())
         throw std::runtime_error("Cannot select from an empty lookahead batch.");
 
+    // A true winning child is always optimal. Do not compare it against model
+    // estimates, because overestimated non-terminal states must not hide a win.
+    for(size_t i = 0; i < children.size(); ++i)
+        if(children[i].terminal_value.has_value())
+            return static_cast<int>(i);
+
     std::vector<float> parsed_values = parse_values(values);
     int best = 0;
     float best_value = child_value(children[0], parsed_values);
