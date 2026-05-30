@@ -3,7 +3,6 @@
 #include <algorithm>
 #include <future>
 #include <iostream>
-#include <limits>
 #include <stdexcept>
 
 namespace nardi_py
@@ -482,20 +481,11 @@ std::shared_ptr<LookaheadBatch> NardiEngine::require_lookahead_batch() const
 std::optional<size_t> NardiEngine::terminal_child_index(
     const std::vector<Nardi::Board::Features>& children)
 {
-    std::optional<size_t> best_idx;
-    float best_value = -std::numeric_limits<float>::infinity();
-
     for(size_t i = 0; i < children.size(); ++i)
-    {
-        const auto terminal_value = terminal_value_for_side_to_move(children[i]);
-        if(terminal_value.has_value() && terminal_value.value() > best_value)
-        {
-            best_idx = i;
-            best_value = terminal_value.value();
-        }
-    }
+        if(terminal_value_for_side_to_move(children[i]).has_value())
+            return i;
 
-    return best_idx;
+    return std::nullopt;
 }
 
 int NardiEngine::flat_dice_idx(int d1, int d2)
