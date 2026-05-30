@@ -5,6 +5,11 @@ ext = Extension(
     name="nardi",
     sources=[
         "bindings.cpp",
+        "binding_utils.cpp",
+        "lookahead_batch.cpp",
+        "nardi_engine.cpp",
+        "python_views.cpp",
+        "scenario_config.cpp",
         "../CoreEngine/Auxilaries.cpp",
         "../CoreEngine/Board.cpp",
         "../CoreEngine/Controller.cpp",
