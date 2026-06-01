@@ -430,6 +430,89 @@ void NardiEngine::apply_lookahead_target()
     apply_lookahead_with(_target_model);
 }
 
+void NardiEngine::configure_players(Strategy white, Strategy black)
+{
+    _player_strats[0] = white;
+    _player_strats[1] = black;
+}
+
+void NardiEngine::set_mcts_params(int n_sims, float temperature, bool exploratory,
+                                  float c_uct, float dirichlet_eps, float dirichlet_alpha,
+                                  int rollouts_per_leaf)
+{
+    _mcts_params.n_sims = n_sims;
+    _mcts_params.temperature = temperature;
+    _mcts_params.exploratory = exploratory;
+    _mcts_params.c_uct = c_uct;
+    _mcts_params.dirichlet_eps = dirichlet_eps;
+    _mcts_params.dirichlet_alpha = dirichlet_alpha;
+    _mcts_params.rollouts_per_leaf = rollouts_per_leaf;
+}
+
+StepResult NardiEngine::advance()
+{
+    if(!should_continue_game())
+        return StepResult::GameOver;
+
+    // index 0 == white (player idx false), 1 == black (player idx true)
+    const Strategy strat = _player_strats[static_cast<size_t>(current_player())];
+
+    // Roll once for the current player. A roll with no legal moves switches the
+    // turn (non-sim NO_LEGAL_MOVES_LEFT handling) and leaves no cached children.
+    if(_builder.GetCtrl().AwaitingRoll())
+        roll_and_enumerate();
+
+    if(_last_children.empty())
+        return StepResult::TurnPassed;
+
+    if(strat == Strategy::Human)
+        return StepResult::AwaitingHuman;
+
+    switch(strat)
+    {
+    case Strategy::Greedy:
+        apply_greedy_target();
+        break;
+    case Strategy::Lookahead:
+        apply_lookahead_target();
+        break;
+    case Strategy::Mcts:
+        mcts_apply_move(_mcts_params.n_sims, _mcts_params.temperature, _mcts_params.exploratory,
+                        _mcts_params.c_uct, _mcts_params.dirichlet_eps,
+                        _mcts_params.dirichlet_alpha, _mcts_params.rollouts_per_leaf);
+        break;
+    case Strategy::Heuristic:
+        apply_heuristic_board();
+        break;
+    case Strategy::Random:
+        apply_random_board();
+        break;
+    case Strategy::Human:
+        break; // unreachable (handled above)
+    }
+    return StepResult::BotMoved;
+}
+
+std::vector<Nardi::Board::Features> NardiEngine::current_options() const
+{
+    return _last_children;
+}
+
+int NardiEngine::legal_move_count() const
+{
+    return static_cast<int>(_last_children.size());
+}
+
+void NardiEngine::apply_human_move(int idx)
+{
+    const auto& children = require_children();
+    if(idx < 0 || static_cast<size_t>(idx) >= children.size())
+        throw std::runtime_error("apply_human_move: move index out of range.");
+    // Copy out before apply_board() clears _last_children.
+    const Nardi::BoardConfig board = children.at(static_cast<size_t>(idx)).raw_data;
+    apply_board(board);
+}
+
 void NardiEngine::apply_random_board()
 {
     const auto& children = require_children();

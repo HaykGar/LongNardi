@@ -128,6 +128,25 @@ loaded target network in C++ (no move applied).)")
 by the loaded target network in C++ (no move applied). Requires dice rolled.)")
         .def("apply_lookahead_target",&NardiEngine::apply_lookahead_target,
              R"(Play the 1-ply lookahead bot's move using the loaded target network (C++).)")
+        .def("configure_players",     &NardiEngine::configure_players,
+             py::arg("white"), py::arg("black"),
+             R"(Set the per-player move Strategy (white = player idx 0, black = idx 1).)")
+        .def("set_mcts_params",       &NardiEngine::set_mcts_params,
+             py::arg("n_sims"), py::arg("temperature") = 1.0f, py::arg("exploratory") = false,
+             py::arg("c_uct") = 0.1f, py::arg("dirichlet_eps") = 0.25f,
+             py::arg("dirichlet_alpha") = 0.3f, py::arg("rollouts_per_leaf") = 0,
+             R"(Configure MCTS search tunables used by the Mcts strategy in advance().)")
+        .def("advance",               &NardiEngine::advance,
+             R"(Advance the match one step: roll for the current player and either play a
+bot move (BotMoved), report a human move is awaited (AwaitingHuman), report a
+forced pass (TurnPassed), or report the game is over (GameOver).)")
+        .def("current_options",       &NardiEngine::current_options,
+             R"(The cached legal end-of-turn options (Features) for the current player.)")
+        .def("legal_move_count",      &NardiEngine::legal_move_count,
+             R"(Number of cached legal options for the current player.)")
+        .def("apply_human_move",      &NardiEngine::apply_human_move,
+             py::arg("idx"),
+             R"(Apply the human-chosen legal option by index into current_options().)")
         .def("status_report",       &NardiEngine::status_report)
         .def("status_str",          &NardiEngine::status_str)
         .def("is_terminal",         &NardiEngine::is_terminal)
@@ -200,6 +219,20 @@ move (model-informed UCT); exploratory=True (train) samples Boltzmann+Dirichlet.
              py::arg("d2_used") = 0)
         .def("withRandomEndgame",   &ScenarioConfig::withRandomEndgame,
              py::arg("p_idx") = false);
+
+    py::enum_<Strategy>(m, "Strategy")
+        .value("Human",     Strategy::Human)
+        .value("Greedy",    Strategy::Greedy)
+        .value("Lookahead", Strategy::Lookahead)
+        .value("Mcts",      Strategy::Mcts)
+        .value("Heuristic", Strategy::Heuristic)
+        .value("Random",    Strategy::Random);
+
+    py::enum_<StepResult>(m, "StepResult")
+        .value("GameOver",      StepResult::GameOver)
+        .value("AwaitingHuman", StepResult::AwaitingHuman)
+        .value("BotMoved",      StepResult::BotMoved)
+        .value("TurnPassed",    StepResult::TurnPassed);
 
     py::enum_<Nardi::status_codes>(m, "status_codes")
         .value("SUCCESS",               Nardi::status_codes::SUCCESS)

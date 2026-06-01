@@ -27,6 +27,26 @@ namespace nardi_py
 
 namespace py = pybind11;
 
+// Per-player move strategy used by the in-C++ match orchestrator (advance()).
+enum class Strategy
+{
+    Human,
+    Greedy,
+    Lookahead,
+    Mcts,
+    Heuristic,
+    Random
+};
+
+// Result of one advance() step, driving an external UI / caller loop.
+enum class StepResult
+{
+    GameOver,       // game is finished; query winner_result()
+    AwaitingHuman,  // dice rolled, legal options cached; caller must apply_human_move()
+    BotMoved,       // a bot played its turn this step
+    TurnPassed      // current player had no legal moves; turn switched, no move made
+};
+
 // A thin wrapper that owns a live Game and provides Python-friendly methods.
 class NardiEngine
 {
@@ -101,6 +121,20 @@ public:
     int lookahead_choice_target();
     void apply_lookahead_target();
 
+    // --- In-C++ match orchestrator (the turn loop, moved out of Python). The
+    // caller repeatedly calls advance(); each step rolls for the current player
+    // and either plays a bot move, reports that a human move is awaited, reports
+    // a forced pass, or reports the game is over. For a model-bot side, load the
+    // value network once via load_target_network().
+    void configure_players(Strategy white, Strategy black);
+    void set_mcts_params(int n_sims, float temperature = 1.0f, bool exploratory = false,
+                         float c_uct = 0.1f, float dirichlet_eps = 0.25f,
+                         float dirichlet_alpha = 0.3f, int rollouts_per_leaf = 0);
+    StepResult advance();
+    std::vector<Nardi::Board::Features> current_options() const;
+    int legal_move_count() const;
+    void apply_human_move(int idx);
+
     void human_turn(bool dice_rolled = false);
     void restart_or_quit();
     bool is_terminal() const;
@@ -142,6 +176,20 @@ private:
     std::shared_ptr<LookaheadBatch> _last_lookahead_batch;
     TargetModel _target_model;
     std::mt19937 _rng{std::random_device{}()};
+
+    // Orchestrator state: per-player strategy (index 0 = white, 1 = black) and
+    // MCTS search tunables used when a side plays the Mcts strategy.
+    std::array<Strategy, 2> _player_strats{Strategy::Human, Strategy::Greedy};
+    struct
+    {
+        int n_sims = 200;
+        float temperature = 1.0f;
+        bool exploratory = false;
+        float c_uct = 0.1f;
+        float dirichlet_eps = 0.25f;
+        float dirichlet_alpha = 0.3f;
+        int rollouts_per_leaf = 0;
+    } _mcts_params;
 
     const std::vector<Nardi::Board::Features>& require_children() const;
     std::shared_ptr<LookaheadBatch> require_lookahead_batch() const;
