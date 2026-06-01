@@ -585,8 +585,8 @@ if __name__ == "__main__":
     
     def valid_float_0to1(x):
         x = float(x)
-        if not 0.0 <= x < 1.0:
-            raise argparse.ArgumentTypeError("dropout must be in [0.0, 1.0)")
+        if not 0.0 <= x <= 1.0:
+            raise argparse.ArgumentTypeError("Expected [0, 1], got float out of range")
         return x
 
     parser = argparse.ArgumentParser(
@@ -614,19 +614,19 @@ if __name__ == "__main__":
         required=True,
         help="Architecture to train"
     )
-
-    parser.add_argument(
-        "--dropout",
-        type=valid_float_0to1,
-        default=0.0,
-        help="Dropout probability (default: 0.0)"
-    )
     
     parser.add_argument(
         "--noise-frac",
         type=valid_float_0to1,
         default=0,
         help="fraction of training stages with noisy move selection"
+    )
+    
+    parser.add_argument(
+        "--stages",
+        type=positive_int,
+        default=100,
+        help="number of stages in training"
     )
     
     parser.add_argument(
@@ -650,13 +650,6 @@ if __name__ == "__main__":
         action="store_true",
         help="use 1-ply lookahead (expectimax) values as TD targets instead of "
              "raw model evaluations (LookaheadTDTrainer). Slower per move."
-    )
-
-    parser.add_argument(
-        "--stages",
-        type=positive_int,
-        default=100,
-        help="number of stages in training"
     )
     
     parser.add_argument(
@@ -682,9 +675,9 @@ if __name__ == "__main__":
     args = parser.parse_args()
     
     if args.architecture == "Conv":
-        model = nardi_net.ConvNardiNet(dropout=args.dropout, extra_conv=True)
+        model = nardi_net.ConvNardiNet(extra_conv=True)
     elif args.architecture == "MLP":
-        model = nardi_net.NardiNet(64, 16, p_dropout=args.dropout)
+        model = nardi_net.NardiNet(64, 16)
     elif args.architecture == "ResNet":
         model = nardi_net.ResNardiNet()
 
