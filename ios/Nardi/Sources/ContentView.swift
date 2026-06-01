@@ -41,6 +41,13 @@ struct ContentView: View {
             Spacer()
         }
         .padding()
+        .onAppear {
+            // Debug/demo hook: `simctl launch ... --demo` auto-starts a game so the
+            // live board can be captured without UI tapping. No effect normally.
+            if ProcessInfo.processInfo.arguments.contains("--demo") {
+                game.newGame(opponent: opponent)
+            }
+        }
     }
 }
 
