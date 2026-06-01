@@ -8,6 +8,21 @@
 namespace nardi_py
 {
 
+namespace
+{
+
+std::vector<Nardi::BoardConfig> legal_boards_for_current_dice(const Nardi::ScenarioBuilder& b)
+{
+    const auto& b2s = b.GetGame().GetBoards2Seqs();
+    std::vector<Nardi::BoardConfig> boards;
+    boards.reserve(b2s.size());
+    for(const auto& kv : b2s)
+        boards.push_back(kv.first);
+    return boards;
+}
+
+} // namespace
+
 NardiEngine::NardiEngine()
 : _builder(), _config(_builder)
 {
@@ -460,6 +475,176 @@ bool NardiEngine::should_continue_game() const
 bool NardiEngine::quit_requested() const
 {
     return _builder.GetCtrl().QuitRequested();
+}
+
+void NardiEngine::load_target_network(const std::string& path)
+{
+    _target_model.load(path);
+}
+
+float NardiEngine::debug_target_eval()
+{
+    // Evaluate the current board (side-to-move perspective) with the C++ target
+    // model. For comparison against the Python model to validate the bridge.
+    return _target_model.evaluate(board_features());
+}
+
+std::vector<std::pair<Nardi::Board::Features, float>> NardiEngine::run_mcts_game(
+    int n_sims,
+    float temperature,
+    int max_turns,
+    float c_uct,
+    float dirichlet_eps,
+    float dirichlet_alpha,
+    int rollouts_per_leaf)
+{
+    if(!_target_model.is_loaded())
+        throw std::runtime_error("run_mcts_game requires load_target_network(path) first.");
+    if(n_sims <= 0)
+        throw std::runtime_error("run_mcts_game n_sims must be positive.");
+    if(temperature <= 0.0f)
+        throw std::runtime_error("run_mcts_game temperature must be positive.");
+    if(max_turns <= 0)
+        throw std::runtime_error("run_mcts_game max_turns must be positive.");
+
+    reset();
+    _builder.ToSimMode();
+
+    // Apply the search/exploration tunables to every tree built this game.
+    const auto configure = [&](MCTSTree& t)
+    {
+        t.c_uct = c_uct;
+        t.dirichlet_eps = dirichlet_eps;
+        t.dirichlet_alpha = dirichlet_alpha;
+        t.rollouts_per_leaf = rollouts_per_leaf;
+    };
+
+    // Record (features, side-to-move) for every position we actually move from.
+    // The value target is assigned only once the game ends: the actual outcome
+    // (Monte-Carlo / AGZ value target), expressed in each position's side-to-move
+    // frame. This is unbiased w.r.t. the search; the MCTS only drives play.
+    struct Pending
+    {
+        Nardi::Board::Features features;
+        bool player;
+    };
+    std::vector<Pending> pending;
+    pending.reserve(128);
+
+    try
+    {
+        for(int turn = 0; turn < max_turns && !_builder.GetGame().GameIsOver(); ++turn)
+        {
+            const bool player = current_player();
+            const auto& board = _builder.GetGame().GetBoardData();
+
+            const auto status = _builder.ReceiveCommand(Nardi::Command(Nardi::Actions::ROLL_DICE));
+            if(status == Nardi::status_codes::NO_LEGAL_MOVES_LEFT)
+            {
+                _builder.GetCtrl().AdvanceSimTurn(); // forced pass, no decision recorded
+                continue;
+            }
+            if(status != Nardi::status_codes::SUCCESS)
+            {
+                Nardi::DispErrorCode(status);
+                throw std::runtime_error("MCTS self-play failed to roll dice.");
+            }
+
+            const auto legal_boards = legal_boards_for_current_dice(_builder);
+            if(legal_boards.empty())
+                throw std::runtime_error("MCTS self-play roll succeeded with no legal boards.");
+
+            // Fresh tree each move, rooted at the real rolled dice.
+            MCTSTree tree(board, player);
+            configure(tree);
+            tree.run_simulations(n_sims, _builder, _target_model, _rng);
+
+            pending.push_back({tree.root_features(), player});
+
+            const auto chosen = tree.select_move(legal_boards, temperature, _rng);
+            const auto move_status = _builder.SimulateMove(chosen);
+            if(move_status != Nardi::status_codes::NO_LEGAL_MOVES_LEFT)
+            {
+                Nardi::DispErrorCode(move_status);
+                throw std::runtime_error("MCTS self-play failed to apply selected move.");
+            }
+        }
+    }
+    catch(...)
+    {
+        _builder.EndSimMode();
+        throw;
+    }
+
+    // Label every recorded position with the final game outcome. After the
+    // winning move the controller has switched to the loser, so winner =
+    // !current_player and the margin is winner_result() (1 normal, 2 mars).
+    std::vector<std::pair<Nardi::Board::Features, float>> samples;
+    if(_builder.GetGame().GameIsOver())
+    {
+        const float margin = static_cast<float>(winner_result());
+        const bool winner = !current_player();
+        samples.reserve(pending.size());
+        for(const auto& p : pending)
+        {
+            const float target = (p.player == winner) ? margin : -margin;
+            samples.emplace_back(p.features, target);
+        }
+    }
+    // else: game hit max_turns without finishing -> no outcome, drop its samples.
+
+    _builder.EndSimMode();
+    _last_children.clear();
+    _last_lookahead_batch.reset();
+    return samples;
+}
+
+void NardiEngine::mcts_apply_move(
+    int n_sims,
+    float temperature,
+    bool exploratory,
+    float c_uct,
+    float dirichlet_eps,
+    float dirichlet_alpha,
+    int rollouts_per_leaf)
+{
+    if(!_target_model.is_loaded())
+        throw std::runtime_error("mcts_apply_move requires load_target_network(path) first.");
+    if(n_sims <= 0)
+        throw std::runtime_error("mcts_apply_move n_sims must be positive.");
+    if(_builder.GetCtrl().AwaitingRoll())
+        throw std::runtime_error("mcts_apply_move requires dice to be rolled first.");
+
+    const auto legal_boards = legal_boards_for_current_dice(_builder);
+    if(legal_boards.empty())
+        throw std::runtime_error("mcts_apply_move called with no legal moves.");
+
+    MCTSTree tree(_builder.GetGame().GetBoardData(), current_player());
+    tree.c_uct = c_uct;
+    tree.dirichlet_eps = dirichlet_eps;
+    tree.dirichlet_alpha = dirichlet_alpha;
+    tree.rollouts_per_leaf = rollouts_per_leaf;
+
+    // Run the search headlessly on copies of the real builder, then apply the
+    // chosen move through the normal (non-sim) path so graphics/turn-switching
+    // behave exactly as for the other move strategies.
+    _builder.ToSimMode();
+    try
+    {
+        tree.run_simulations(n_sims, _builder, _target_model, _rng);
+    }
+    catch(...)
+    {
+        _builder.EndSimMode();
+        throw;
+    }
+    _builder.EndSimMode();
+
+    const Nardi::BoardConfig chosen = exploratory
+        ? tree.select_move(legal_boards, temperature, _rng)
+        : tree.select_best(legal_boards);
+
+    apply_board(chosen);
 }
 
 const std::vector<Nardi::Board::Features>& NardiEngine::require_children() const

@@ -3,6 +3,8 @@ import numpy as np
 
 from functools import partial
 
+import os
+import tempfile
 import time
 
 import nardi
@@ -13,13 +15,23 @@ class Simulator:
         self.device = torch.device("cpu") # "mps" if torch.backends.mps.is_available() else "cpu")
         self.eng = nardi.Engine()
         self.config = self.eng.config()
-        
+
         # self.sign = 1            # represents player's turn and change in perspective
         # self.turn_num = 0        # turn number in current game
-        
+
         self.win_rates = []
-        
+
         self.sleep_time = sleep_time
+
+        # ---- MCTS move-strategy config (used by the "mcts" strategy) ----
+        self.mcts_n_sims = 200
+        self.mcts_mode = "eval"       # "eval": most-visited move; "train": Boltzmann+Dirichlet
+        self.mcts_temperature = 1.0
+        self.mcts_c_uct = 0.1         # small: sibling value spreads are tiny
+        self.mcts_dirichlet_eps = 0.25
+        self.mcts_dirichlet_alpha = 0.3
+        self.mcts_rollouts_per_leaf = 0   # 0 => value-net leaf (recommended); >0 => avg rollouts
+        self._mcts_target_path = None
 
     @property
     def sign(self):
@@ -172,6 +184,49 @@ class Simulator:
         self.eng.apply_best_lookahead(values)
         self.advance_turn()
 
+    def prepare_mcts(self, model):
+        """Export `model` to TorchScript and load it as the C++ MCTS target network.
+
+        Call once before using the "mcts" strategy (strat_to_func does this).
+        Requires a conv-pipeline model (ConvNardiNet / ResNardiNet), since the C++
+        feature bridge uses [N, 6, 25] conv tensors.
+        """
+        from nardi_net import export_target_network
+
+        pipeline = getattr(model, "pipeline", None)
+        if pipeline is None or getattr(pipeline, "kind", None) != "conv":
+            raise TypeError("MCTS requires a conv-pipeline model (e.g. ConvNardiNet / ResNardiNet).")
+
+        model.eval()
+        # One target file per process so parallel workers never collide.
+        path = os.path.join(tempfile.gettempdir(), f"mcts_target_{os.getpid()}.pt")
+        export_target_network(model, path, device=str(self.device))
+        self.eng.load_target_network(path)
+        self._mcts_target_path = path
+
+    def apply_mcts_move(self, options=None):
+        """MCTS move strategy. Dice are assumed already rolled (options = legal
+        end boards). Uses the self.mcts_* config: mode "eval" plays the most-visited
+        move (model-informed UCT), mode "train" samples Boltzmann+Dirichlet.
+        Requires prepare_mcts() to have loaded the target network first.
+        """
+        if options is None:
+            options = self.eng.roll_and_enumerate()
+        if len(options) == 0:
+            self.advance_turn()
+            return
+
+        self.eng.mcts_apply_move(
+            self.mcts_n_sims,
+            self.mcts_temperature,
+            self.mcts_mode == "train",
+            self.mcts_c_uct,
+            self.mcts_dirichlet_eps,
+            self.mcts_dirichlet_alpha,
+            self.mcts_rollouts_per_leaf,
+        )
+        self.advance_turn()
+
     def play_random_move(self, options=None):
         if options is None:
             options = self.eng.roll_and_enumerate()
@@ -211,7 +266,10 @@ class Simulator:
                 return partial(self.apply_greedy_move, model=model, eval_only=True)
             elif strat == "lookahead":
                 return partial(self.apply_lookahead_move, evaluator=model)
-            
+            elif strat == "mcts":
+                self.prepare_mcts(model)   # export + load target network once
+                return self.apply_mcts_move
+
         print("invalid model and strat provided, no valid function call found")
         return None
 
