@@ -4,6 +4,7 @@
 #include "Board.h"
 
 #include <array>
+#include <memory>
 #include <stack>
 #include <algorithm>
 #include <ranges>

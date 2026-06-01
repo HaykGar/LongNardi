@@ -5,6 +5,7 @@
 #include "Auxilaries.h"
 #include "ReaderWriter.h"
 #include "Board.h"
+#include <memory>
 #include <sstream>
 
 namespace Nardi

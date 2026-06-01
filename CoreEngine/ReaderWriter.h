@@ -1,5 +1,7 @@
 #pragma once
 
+#include <memory>
+
 #include "Game.h"
 #include "Controller.h"
 
