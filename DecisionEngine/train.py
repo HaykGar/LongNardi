@@ -130,47 +130,56 @@ class LookaheadGameEnv(GameEnv):
     move under 1-ply search, which the C++ batch already computes as the chosen
     child's `child_value` (an expectation over the opponent's dice). So:
 
-        delta_t = L(a_t) - V(a_{t-1})          (semi-gradient TD; target = lookahead)
+        delta_t = L_frozen(a_t) - V(a_{t-1})   (semi-gradient TD; target = lookahead)
         trace  += grad V(a_{t-1})
 
-    Since the target only enters delta as a scalar (its gradient is never used),
-    the lookahead value is computed with the model in inference mode.
-
-    self.Y_new always holds the *prediction* V(a) for the current afterstate (so
-    it can play Y_old next step); the lookahead target is computed fresh each step
-    by the move itself and used immediately. The lookahead picks the move and
-    yields its target value together, so step() drives the move and ignores the
-    move_fn argument.
+    The lookahead target is computed with a *frozen* target_model (a copy of the
+    live model, updated only between stages). This prevents the target from
+    chasing its own tail as weights update mid-stage — the same instability that
+    DQN solved with a frozen target network. The live model is still used for
+    eval_and_grad (gradient computation).
     """
+
+    __slots__ = GameEnv.__slots__ + ("target_model",)
+
+    def __init__(self, model, params, *, build_pos=None, lam=0.7, track=False,
+                 target_model=None):
+        super().__init__(model, params, build_pos=build_pos, lam=lam, track=track)
+        # Frozen copy used for target computation. Set by LookaheadTDTrainer and
+        # updated between stages; falls back to the live model if not provided
+        # (preserves the original behaviour when used standalone).
+        self.target_model = target_model if target_model is not None else model
 
     def _lookahead_move(self):
         """Roll, pick the best 1-ply move, and return (target, done, info).
 
         target : white-perspective value of the resulting afterstate — the
-                 lookahead value of the chosen move (or the true result on a win).
+                 lookahead value of the chosen move under the frozen target_model
+                 (or the true result on a win).
         """
         sim = self.sim
-        model = self.model
+        # Frozen model for the target; live model for gradients elsewhere.
+        target_model = self.target_model
 
         # No legal move for this roll: the turn passes with the board unchanged.
         # No lookahead is possible, so fall back to the naive model value.
         if not sim.eng.roll_has_children():
             with torch.inference_mode():
-                target = float(sim.sign * model(sim.eng.board_features()).item())
+                target = float(sim.sign * target_model(sim.eng.board_features()).item())
             return target, False, {}
 
         batch = sim.eng.make_lookahead_batch()
         if batch.num_children == 0:
             raise Exception("roll has children but batch has none")
-            
-        target, values = sim.lookahead_eval_and_values(model, batch)
-        sim.eng.apply_best_lookahead(values) # ok if num_eval_features is 0
-        
+
+        target, values = sim.lookahead_eval_and_values(target_model, batch)
+        sim.eng.apply_best_lookahead(values)
+
         if sim.eng.is_terminal():
             # A winning move: the true game result replaces the estimate. sign has
             # flipped to the losing side, so unflip to stay in the same frame.
             result = sim.eng.winner_result()
-            return float(-sim.sign * result), True, {"result": result, "sign": sim.sign} 
+            return float(-sim.sign * result), True, {"result": result, "sign": sim.sign}
 
         return target, False, {}
 
@@ -486,7 +495,9 @@ class TDTrainer:
             self.eval_traces.append(evals)
             if self.weights_file is not None:
                 torch.save(self.model.state_dict(), self.weights_file)    # save weights to file after each stage
-            ################################ end stage report + actions ################################   
+
+            self.after_stage(stage)
+            ################################ end stage report + actions ################################
                     
 
         print(f"post-training simulation")
@@ -494,7 +505,11 @@ class TDTrainer:
 
         print("total points each: ", self.points)
         self.record_results()
-        
+
+    def after_stage(self, *_):
+        """Called at the end of every stage. Subclasses use this to sync frozen
+        target networks or perform other per-stage housekeeping."""
+
 ####################################
 ########   end train loop   ########
 ####################################
@@ -503,16 +518,34 @@ class TDTrainer:
 class LookaheadTDTrainer(TDTrainer):
     """TDTrainer whose envs bootstrap from 1-ply lookahead targets.
 
-    Everything else (batched synchronized updates, annealing, reporting) is
-    inherited. Only the environment class changes: each env selects moves by
-    1-ply expectimax and uses the chosen afterstate's lookahead value as the TD
-    target instead of the raw model value. Because the lookahead drives the move
-    itself, the noisy/greedy move_fn from make_move_fn is ignored by the env, so
-    the noisy-vs-greedy stage schedule has no effect here (lookahead play is
-    deterministic).
+    Adds a *frozen target network* that is used exclusively for computing the
+    lookahead bootstrap value L(s). The live model is still trained normally; the
+    frozen copy is snapped to the live model at the end of every stage (fitted-VI
+    rhythm). This prevents the target from chasing its own tail mid-stage.
+
+    The noisy/greedy move_fn is still respected: move selection and target
+    computation are now decoupled — the env always uses the frozen model for the
+    Bellman target L(s) regardless of which move was chosen.
     """
 
     env_cls = LookaheadGameEnv
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        import copy
+        # Frozen copy, updated only between stages. Starts as an exact clone so
+        # the first stage's targets are consistent with the starting weights.
+        self.target_model = copy.deepcopy(self.model)
+        self.target_model.eval()
+        # Distribute the shared frozen object to every env. All envs hold the
+        # same reference, so after_stage's load_state_dict propagates to all.
+        for env in self.envs:
+            env.target_model = self.target_model
+
+    def after_stage(self, *_):
+        """Snap the frozen target network to the current live model weights."""
+        self.target_model.load_state_dict(self.model.state_dict())
+        self.target_model.eval()
 
 
 if __name__ == "__main__":
