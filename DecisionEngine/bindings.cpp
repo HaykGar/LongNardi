@@ -101,7 +101,50 @@ PYBIND11_MODULE(nardi, m)
         .def("reset",               &NardiEngine::reset)
         .def("should_continue_game",&NardiEngine::should_continue_game)
         .def("restart_or_quit",     &NardiEngine::restart_or_quit)
-        .def("quit_requested",      &NardiEngine::quit_requested);
+        .def("quit_requested",      &NardiEngine::quit_requested)
+        .def("load_target_network", &NardiEngine::load_target_network,
+             py::arg("path"),
+             R"(Load a TorchScript value network for C++ MCTS self-play.)")
+        .def("debug_target_eval", &NardiEngine::debug_target_eval)
+        .def("run_mcts_game",
+             [](NardiEngine& eng, int n_sims, float temperature, int max_turns,
+                float c_uct, float dirichlet_eps, float dirichlet_alpha, int rollouts_per_leaf)
+             {
+                 py::gil_scoped_release release;
+                 return eng.run_mcts_game(n_sims, temperature, max_turns,
+                                          c_uct, dirichlet_eps, dirichlet_alpha, rollouts_per_leaf);
+             },
+             py::arg("n_sims"),
+             py::arg("temperature") = 1.0f,
+             py::arg("max_turns") = 1000,
+             py::arg("c_uct") = 0.1f,
+             py::arg("dirichlet_eps") = 0.25f,
+             py::arg("dirichlet_alpha") = 0.3f,
+             py::arg("rollouts_per_leaf") = 0,
+             R"(Run one MCTS self-play game and return (Features, target) pairs.
+
+The played-move (implicit) policy is Boltzmann exploration over visit counts at
+the given temperature, mixed with Dirichlet(dirichlet_alpha) noise weighted by
+dirichlet_eps. Set dirichlet_eps=0 to disable the noise. c_uct scales the UCT
+exploration term during search.)")
+        .def("mcts_apply_move",
+             [](NardiEngine& eng, int n_sims, float temperature, bool exploratory,
+                float c_uct, float dirichlet_eps, float dirichlet_alpha, int rollouts_per_leaf)
+             {
+                 py::gil_scoped_release release;
+                 eng.mcts_apply_move(n_sims, temperature, exploratory,
+                                     c_uct, dirichlet_eps, dirichlet_alpha, rollouts_per_leaf);
+             },
+             py::arg("n_sims"),
+             py::arg("temperature") = 1.0f,
+             py::arg("exploratory") = false,
+             py::arg("c_uct") = 0.1f,
+             py::arg("dirichlet_eps") = 0.25f,
+             py::arg("dirichlet_alpha") = 0.3f,
+             py::arg("rollouts_per_leaf") = 0,
+             R"(MCTS move strategy: with dice already rolled, search from the current
+position and apply the chosen move. exploratory=False (eval) plays the most-visited
+move (model-informed UCT); exploratory=True (train) samples Boltzmann+Dirichlet.)");
 
     py::class_<ScenarioConfig>(m, "ScenarioConfig")
         .def("withScenario",

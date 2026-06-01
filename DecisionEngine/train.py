@@ -216,10 +216,11 @@ class TDTrainer:
         alpha_min_factor=0.1,
 
         # ---- noise / exploration ----
-        K=24,
+        # K=24,
         eps=0.25,
         eps_min=0.1,
         h_e=15,
+        noise_fraction=0.0,
 
         # ---- temperature ----
         temperature=1.0,
@@ -249,7 +250,7 @@ class TDTrainer:
         self.alpha_0 = alpha
         self.alpha_min = alpha * alpha_min_factor
 
-        self.K = K
+        # self.K = K
 
         self.eps = eps
         self.eps0 = eps
@@ -260,6 +261,8 @@ class TDTrainer:
         self.t0 = temperature
         self.t_min = t_min
         self.h_t = h_t
+        
+        self.noise_fraction = noise_fraction
 
     #######################################
     ######### model and simulator #########
@@ -460,7 +463,7 @@ class TDTrainer:
             self.temperature = self.t_min + (self.t0 - self.t_min) * 2.0**(-stage / self.h_t)
 
             # Noisy exploration for the first half of stages, then pure greedy.
-            noisy = stage < n_stages // 2
+            noisy = (stage / n_stages) < self.noise_fraction
 
             # Run games_per_stage games as a synchronized batch across all envs.
             max_surprise, evals = self.run_batch(games_per_stage, desc=f"Inner Loop {stage+1}", noisy=noisy)
@@ -584,6 +587,13 @@ if __name__ == "__main__":
         type=valid_float_0to1,
         default=0.0,
         help="Dropout probability (default: 0.0)"
+    )
+    
+    parser.add_argument(
+        "--noise-frac",
+        type=valid_float_0to1,
+        default=0,
+        help="fraction of training stages with noisy move selection"
     )
     
     parser.add_argument(

@@ -5,12 +5,15 @@
 #include <array>
 #include <memory>
 #include <optional>
+#include <utility>
 #include <random>
 #include <string>
 #include <vector>
 
 #include "lookahead_batch.h"
+#include "mcts_node.h"
 #include "scenario_config.h"
+#include "target_model.h"
 #include "../CoreEngine/Auxilaries.h"
 #include "../CoreEngine/Controller.h"
 #include "../CoreEngine/Game.h"
@@ -93,11 +96,35 @@ public:
     bool should_continue_game() const;
     bool quit_requested() const;
 
+    void load_target_network(const std::string& path);
+    float debug_target_eval();
+    std::vector<std::pair<Nardi::Board::Features, float>> run_mcts_game(
+        int n_sims,
+        float temperature = 1.0f,
+        int max_turns = 1000,
+        float c_uct = 0.1f,
+        float dirichlet_eps = 0.25f,
+        float dirichlet_alpha = 0.3f,
+        int rollouts_per_leaf = 0);
+
+    // Move strategy: with dice already rolled, run MCTS from the current position
+    // and apply the chosen move. exploratory=false (eval) plays the most-visited
+    // move; exploratory=true (train) samples the Boltzmann+Dirichlet policy.
+    void mcts_apply_move(
+        int n_sims,
+        float temperature = 1.0f,
+        bool exploratory = false,
+        float c_uct = 0.1f,
+        float dirichlet_eps = 0.25f,
+        float dirichlet_alpha = 0.3f,
+        int rollouts_per_leaf = 0);
+
 private:
     Nardi::ScenarioBuilder _builder;
     ScenarioConfig _config;
     std::vector<Nardi::Board::Features> _last_children;
     std::shared_ptr<LookaheadBatch> _last_lookahead_batch;
+    TargetModel _target_model;
     std::mt19937 _rng{std::random_device{}()};
 
     const std::vector<Nardi::Board::Features>& require_children() const;

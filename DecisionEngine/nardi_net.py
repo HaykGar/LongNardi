@@ -65,9 +65,15 @@ class NardiNet(nn.Module):
         else:
             return logits
                 
-    def forward(self, feat: nardi.Features) -> torch.Tensor:
-        x = self.feature_to_tensor(feat)
+    def value_from_tensor(self, x: torch.Tensor) -> torch.Tensor:
+        """Evaluate from a pipeline-format feature tensor (i.e. the output of
+        feature_to_tensor). This is the entry point traced for TorchScript export
+        and called by the C++ MCTS target network. Subclasses with a conv stem
+        override this to run their stem before the trunk."""
         return self.forward_tensor(x)
+
+    def forward(self, feat: nardi.Features) -> torch.Tensor:
+        return self.value_from_tensor(self.feature_to_tensor(feat))
 
 class ConvPipeline(LegacyPipeline):
     def __init__(self):
@@ -93,18 +99,21 @@ class ConvNardiNet(NardiNet):
         self.norm = nn.LayerNorm(num_channels*20)
         self.relu = nn.ReLU()
         
-    def forward(self, feat : nardi.Features):
-        feat = self.feature_to_tensor(feat) # shape (B, 6, 25)    
+    def value_from_tensor(self, feat : torch.Tensor):
+        # feat: conv-pipeline tensor, shape (B, 6, 25)
         board = feat[:, :, :-1]
         scalars = feat[:, :, -1].squeeze(1)
-        
+
         x = self.conv(board).flatten(1)
         x = self.norm(x)
         x = self.relu(x)
-        
+
         x = torch.cat([x, scalars], dim=1)
         return self.forward_tensor(x)
-    
+
+    def forward(self, feat : nardi.Features):
+        return self.value_from_tensor(self.feature_to_tensor(feat))
+
 
 class ResidualBlock(nn.Module):
     def __init__(self, 
@@ -146,18 +155,47 @@ class ResNardiNet(NardiNet):
         self.norm = nn.LayerNorm(24*conv_out)
         self.relu = nn.ReLU()
         
-    def forward(self, feat : nardi.Features):
-        feat = self.feature_to_tensor(feat) # shape (B, 6, 25)    
+    def value_from_tensor(self, feat : torch.Tensor):
+        # feat: conv-pipeline tensor, shape (B, 6, 25)
         board = feat[:, :, :-1]
         scalars = feat[:, :, -1].squeeze(1)
-        
+
         x = self.res_block(board).flatten(1)
         x = self.norm(x)
         x = self.relu(x)
-        
+
         x = torch.cat([x, scalars], dim=1)
         return self.forward_tensor(x)
-    
+
+    def forward(self, feat : nardi.Features):
+        return self.value_from_tensor(self.feature_to_tensor(feat))
+
+class _ValueWrapper(nn.Module):
+    """Exposes model.value_from_tensor as a module forward() so it can be traced
+    and called via the standard Module.forward in C++ (torch.jit.trace cannot
+    trace a bound method directly)."""
+    def __init__(self, model):
+        super().__init__()
+        self.model = model
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        return self.model.value_from_tensor(x)
+
+def export_target_network(model, path, device="cpu"):
+    """Trace value_from_tensor and save as TorchScript for the C++ MCTS target
+    network. Input is a conv-pipeline feature tensor [N, 6, 25]; output is the
+    side-to-move value. The C++ TargetModel loads this and runs forward() in inference."""
+    was_training = model.training
+    model.eval()
+    model.to(device)
+    wrapper = _ValueWrapper(model).eval()
+    dummy = torch.zeros(1, 6, 25, device=device)
+    with torch.no_grad():
+        traced = torch.jit.trace(wrapper, dummy)
+    traced.save(path)
+    if was_training:
+        model.train()
+    return path
+
 class NardiSemble(ConvNardiNet):
     def __init__(self, models : list[NardiNet], freeze_models = True):
         super().__init__(out_dim=len(models))
