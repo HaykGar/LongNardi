@@ -14,6 +14,7 @@ ext = Extension(
         "lookahead_batch.cpp",
         "mcts_node.cpp",
         "nardi_c_api.cpp",
+        "nardi_core.cpp",
         "nardi_engine.cpp",
         "nardi_infer.cpp",
         "python_views.cpp",

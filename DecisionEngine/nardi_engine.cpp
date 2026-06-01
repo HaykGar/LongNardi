@@ -50,21 +50,6 @@ void NardiEngine::DetachRW()
     _builder.DetachRW();
 }
 
-py::array_t<uint8_t> NardiEngine::dice() const
-{
-    std::array<int, 2> dice = {
-        _builder.GetGame().GetDice(0),
-        _builder.GetGame().GetDice(1)
-    };
-    py::array_t<uint8_t> arr(py::ssize_t(2));
-
-    auto buf = arr.mutable_unchecked<1>();
-    buf(0) = dice[0];
-    buf(1) = dice[1];
-
-    return arr;
-}
-
 std::array<int, 2> NardiEngine::dice_values() const
 {
     return {_builder.GetGame().GetDice(0), _builder.GetGame().GetDice(1)};
@@ -78,24 +63,6 @@ int NardiEngine::dice_as_idx() const
 Nardi::Board::Features NardiEngine::board_features() const
 {
     return _builder.GetGame().GetBoardRef().ExtractFeatures();
-}
-
-void NardiEngine::PrintArray3D(py::array_t<uint8_t>& arr)
-{
-    auto buf = arr.unchecked<3>();
-    auto shape = arr.shape();
-    std::cout << "Array shape: [" << shape[0] << "," << shape[1] << "," << shape[2] << "]\n";
-    for(ssize_t i = 0; i < shape[0]; ++i)
-    {
-        std::cout << "Index " << i << ":\n";
-        for(ssize_t r = 0; r < shape[1]; ++r)
-        {
-            for(ssize_t c = 0; c < shape[2]; ++c)
-                std::cout << static_cast<int>(buf(i, r, c)) << " ";
-            std::cout << "\n";
-        }
-        std::cout << "----------------------\n";
-    }
 }
 
 void NardiEngine::Render()
@@ -327,17 +294,16 @@ std::shared_ptr<LookaheadBatch> NardiEngine::MakeLookaheadBatch()
     return batch;
 }
 
-void NardiEngine::apply_best_lookahead(
-    py::array_t<float, py::array::c_style | py::array::forcecast> values)
+void NardiEngine::apply_best_lookahead(const std::vector<float>& values)
 {
     auto batch = require_lookahead_batch();
-    apply_board(batch->children.at(static_cast<size_t>(batch->best_index(values))).board);
+    // Copy out before apply_board() invalidates batch/_last_children.
+    const Nardi::BoardConfig board =
+        batch->children.at(static_cast<size_t>(batch->best_index_values(values))).board;
+    apply_board(board);
 }
 
-void NardiEngine::apply_noisy_board(
-    py::array_t<float, py::array::c_style | py::array::forcecast> values,
-    float eps,
-    float temperature)
+void NardiEngine::apply_noisy_board(const std::vector<float>& values, float eps, float temperature)
 {
     const auto& children = require_children();
     if(const auto terminal_idx = terminal_child_index(children); terminal_idx.has_value())
@@ -346,13 +312,11 @@ void NardiEngine::apply_noisy_board(
         return;
     }
 
-    std::vector<float> parsed_values = parse_1d_values(values, children.size());
-    const int idx = sample_noisy_index(parsed_values, eps, temperature, _rng);
+    const int idx = sample_noisy_index(values, eps, temperature, _rng);
     apply_board(children.at(static_cast<size_t>(idx)).raw_data);
 }
 
-void NardiEngine::apply_greedy_board(
-    py::array_t<float, py::array::c_style | py::array::forcecast> values)
+void NardiEngine::apply_greedy_board(const std::vector<float>& values)
 {
     const auto& children = require_children();
     if(const auto terminal_idx = terminal_child_index(children); terminal_idx.has_value())
@@ -361,10 +325,10 @@ void NardiEngine::apply_greedy_board(
         return;
     }
 
-    std::vector<float> parsed_values = parse_1d_values(values, children.size());
-
-    auto best = std::max_element(parsed_values.begin(), parsed_values.end());
-    const size_t idx = static_cast<size_t>(std::distance(parsed_values.begin(), best));
+    if(values.size() != children.size())
+        throw std::runtime_error("apply_greedy_board: values length does not match children.");
+    auto best = std::max_element(values.begin(), values.end());
+    const size_t idx = static_cast<size_t>(std::distance(values.begin(), best));
     apply_board(children.at(idx).raw_data);
 }
 

@@ -1,6 +1,5 @@
 #include "lookahead_batch.h"
 
-#include <algorithm>
 #include <limits>
 #include <stdexcept>
 
@@ -17,28 +16,15 @@ int LookaheadBatch::num_eval_features() const
     return static_cast<int>(eval_features.size());
 }
 
-py::array_t<float> LookaheadBatch::tensor(const std::string& kind, bool flatten) const
+std::vector<float> LookaheadBatch::child_values_vec(const std::vector<float>& values) const
 {
-    return feature_batch_to_tensor(eval_features, kind, flatten);
-}
+    if(values.size() != eval_features.size())
+        throw std::runtime_error("Lookahead values length does not match eval feature count.");
 
-py::array_t<float> LookaheadBatch::child_values(
-    py::array_t<float, py::array::c_style | py::array::forcecast> values) const
-{
-    std::vector<float> parsed_values = parse_values(values);
-    py::array_t<float> arr(py::ssize_t(children.size()));
-    auto out = arr.mutable_unchecked<1>();
-
+    std::vector<float> out(children.size());
     for(size_t i = 0; i < children.size(); ++i)
-        out(static_cast<py::ssize_t>(i)) = child_value(children[i], parsed_values);
-
-    return arr;
-}
-
-int LookaheadBatch::best_index(
-    py::array_t<float, py::array::c_style | py::array::forcecast> values) const
-{
-    return best_index_values(parse_values(values));
+        out[i] = child_value(children[i], values);
+    return out;
 }
 
 int LookaheadBatch::best_index_values(const std::vector<float>& values) const
@@ -69,27 +55,6 @@ int LookaheadBatch::best_index_values(const std::vector<float>& values) const
     }
 
     return best;
-}
-
-py::array_t<int8_t> LookaheadBatch::best_board(
-    py::array_t<float, py::array::c_style | py::array::forcecast> values) const
-{
-    return board_to_array(children.at(static_cast<size_t>(best_index(values))).board);
-}
-
-std::vector<float> LookaheadBatch::parse_values(
-    py::array_t<float, py::array::c_style | py::array::forcecast> values) const
-{
-    if(values.ndim() != 1)
-        throw std::runtime_error("Lookahead values must be a 1D array.");
-    if(values.shape(0) != static_cast<py::ssize_t>(eval_features.size()))
-        throw std::runtime_error("Lookahead values length does not match eval feature count.");
-
-    auto buf = values.unchecked<1>();
-    std::vector<float> parsed(static_cast<size_t>(values.shape(0)));
-    for(py::ssize_t i = 0; i < values.shape(0); ++i)
-        parsed[static_cast<size_t>(i)] = buf(i);
-    return parsed;
 }
 
 float LookaheadBatch::child_value(const ChildChoice& child, const std::vector<float>& values)

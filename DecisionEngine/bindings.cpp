@@ -36,6 +36,56 @@ private:
     std::unique_ptr<InferenceNet> _net;
 };
 
+using FloatArray = py::array_t<float, py::array::c_style | py::array::forcecast>;
+
+// Parse a 1D float numpy array into a std::vector (the engine/batch validate the
+// length against their own expectations).
+std::vector<float> to_float_vector(const FloatArray& values)
+{
+    if(values.ndim() != 1)
+        throw std::runtime_error("Expected a 1D float array.");
+    auto buf = values.unchecked<1>();
+    std::vector<float> out(static_cast<size_t>(values.shape(0)));
+    for(py::ssize_t i = 0; i < values.shape(0); ++i)
+        out[static_cast<size_t>(i)] = buf(i);
+    return out;
+}
+
+// numpy [2,12] int8 board -> BoardConfig.
+Nardi::BoardConfig array_to_board(
+    py::array_t<int8_t, py::array::c_style | py::array::forcecast> board)
+{
+    if(board.ndim() != 2 || board.shape(0) != Nardi::ROWS || board.shape(1) != Nardi::COLS)
+        throw std::runtime_error("BoardConfig must be shape (2, 12)");
+    Nardi::BoardConfig cfg;
+    auto buf = board.unchecked<2>();
+    for(size_t r = 0; r < Nardi::ROWS; ++r)
+        for(size_t c = 0; c < Nardi::COLS; ++c)
+            cfg[r][c] = buf(r, c);
+    return cfg;
+}
+
+py::array_t<float> lb_child_values(const LookaheadBatch& b, const FloatArray& values)
+{
+    const std::vector<float> cv = b.child_values_vec(to_float_vector(values));
+    py::array_t<float> arr(static_cast<py::ssize_t>(cv.size()));
+    auto buf = arr.mutable_unchecked<1>();
+    for(size_t i = 0; i < cv.size(); ++i)
+        buf(static_cast<py::ssize_t>(i)) = cv[i];
+    return arr;
+}
+
+int lb_best_index(const LookaheadBatch& b, const FloatArray& values)
+{
+    return b.best_index_values(to_float_vector(values));
+}
+
+py::array_t<int8_t> lb_best_board(const LookaheadBatch& b, const FloatArray& values)
+{
+    return board_to_array(b.children.at(static_cast<size_t>(
+        b.best_index_values(to_float_vector(values)))).board);
+}
+
 } // namespace
 
 PYBIND11_MODULE(nardi, m)
@@ -82,7 +132,16 @@ PYBIND11_MODULE(nardi, m)
         .def("player_turn_num",     &NardiEngine::player_turn_num,
              py::arg("player"),
              R"(Return completed turns for one player.)")
-        .def("dice",                &NardiEngine::dice,
+        .def("dice",
+             [](const NardiEngine& eng)
+             {
+                 const auto d = eng.dice_values();
+                 py::array_t<uint8_t> arr(py::ssize_t(2));
+                 auto buf = arr.mutable_unchecked<1>();
+                 buf(0) = static_cast<uint8_t>(d[0]);
+                 buf(1) = static_cast<uint8_t>(d[1]);
+                 return arr;
+             },
              R"(Return 1x2 uint8 dice values.)")
         .def("dice_as_idx",         &NardiEngine::dice_as_idx,
              R"(Get dice pair as a flattened idx corresponding to DICE_COMBOS)")
@@ -103,15 +162,21 @@ PYBIND11_MODULE(nardi, m)
                  return eng.MakeLookaheadBatch();
              },
              R"(Build a batched one-ply lookahead frontier for model evaluation.)")
-        .def("apply_best_lookahead",&NardiEngine::apply_best_lookahead,
+        .def("apply_best_lookahead",
+             [](NardiEngine& eng, const FloatArray& values)
+             { eng.apply_best_lookahead(to_float_vector(values)); },
              py::arg("values"),
              R"(Apply the best child from the last lookahead batch.)")
-        .def("apply_noisy_board",   &NardiEngine::apply_noisy_board,
+        .def("apply_noisy_board",
+             [](NardiEngine& eng, const FloatArray& values, float eps, float temperature)
+             { eng.apply_noisy_board(to_float_vector(values), eps, temperature); },
              py::arg("values"),
              py::arg("eps"),
              py::arg("temperature"),
              R"(Sample and apply a cached child board using softmax(values / temperature) plus Dirichlet noise.)")
-        .def("apply_greedy_board",  &NardiEngine::apply_greedy_board,
+        .def("apply_greedy_board",
+             [](NardiEngine& eng, const FloatArray& values)
+             { eng.apply_greedy_board(to_float_vector(values)); },
              py::arg("values"),
              R"(Apply the highest-valued cached child board.)")
         .def("apply_random_board",  &NardiEngine::apply_random_board,
@@ -201,11 +266,10 @@ move (model-informed UCT); exploratory=True (train) samples Boltzmann+Dirichlet.
 
     py::class_<ScenarioConfig>(m, "ScenarioConfig")
         .def("withScenario",
-            static_cast<Nardi::status_codes (ScenarioConfig::*)(
-                bool,
-                py::array_t<int8_t, py::array::c_style | py::array::forcecast>,
-                int, int, int, int
-            )>(&ScenarioConfig::withScenario),
+            [](ScenarioConfig& cfg, bool p_idx,
+               py::array_t<int8_t, py::array::c_style | py::array::forcecast> board,
+               int d1, int d2, int d1u, int d2u)
+            { return cfg.withScenario(p_idx, array_to_board(board), d1, d2, d1u, d2u); },
             py::arg("p_idx"),
             py::arg("board"),
             py::arg("d1"),
@@ -287,17 +351,19 @@ nardi_net.export_weights. Torch-free; mirrors model(features) in Python.)")
         .def_property_readonly("eval_features",
              [](const LookaheadBatch& b) { return b.eval_features; },
              R"(The re-featured grandchild positions (list of Features) the model scores.)")
-        .def("tensor",                              &LookaheadBatch::tensor,
+        .def("tensor",
+             [](const LookaheadBatch& b, const std::string& kind, bool flatten)
+             { return feature_batch_to_tensor(b.eval_features, kind, flatten); },
              py::arg("kind") = "conv",
              py::arg("flatten") = false,
              R"(Return model-ready eval features as [N,6,25] or [N,150].)")
-        .def("child_values",                        &LookaheadBatch::child_values,
+        .def("child_values",                        &lb_child_values,
              py::arg("values"),
              R"(Aggregate leaf values into one value per legal child move.)")
-        .def("best_index",                          &LookaheadBatch::best_index,
+        .def("best_index",                          &lb_best_index,
              py::arg("values"),
              R"(Return the argmax child move index after value aggregation.)")
-        .def("best_board",                          &LookaheadBatch::best_board,
+        .def("best_board",                          &lb_best_board,
              py::arg("values"),
              R"(Return the raw board for the argmax child move.)");
 }

@@ -1,7 +1,5 @@
 #pragma once
 
-#include <pybind11/numpy.h>
-
 #include <array>
 #include <memory>
 #include <optional>
@@ -24,8 +22,6 @@
 
 namespace nardi_py
 {
-
-namespace py = pybind11;
 
 // Per-player move strategy used by the in-C++ match orchestrator (advance()).
 enum class Strategy
@@ -59,11 +55,9 @@ public:
     void AttachNewSFMLRW();
     void DetachRW();
 
-    py::array_t<uint8_t> dice() const;
-    std::array<int, 2> dice_values() const; // pybind-free dice accessor (for the C API)
+    std::array<int, 2> dice_values() const; // dice as {d0, d1}
     int dice_as_idx() const;
     Nardi::Board::Features board_features() const;
-    void PrintArray3D(py::array_t<uint8_t>& arr);
     void Render();
 
     bool roll_has_children();
@@ -97,12 +91,11 @@ public:
 
     std::shared_ptr<LookaheadBatch> MakeLookaheadBatch();
 
-    void apply_best_lookahead(py::array_t<float, py::array::c_style | py::array::forcecast> values);
-    void apply_noisy_board(
-        py::array_t<float, py::array::c_style | py::array::forcecast> values,
-        float eps,
-        float temperature);
-    void apply_greedy_board(py::array_t<float, py::array::c_style | py::array::forcecast> values);
+    // values are per-eval-feature / per-child side-to-move evaluations from the
+    // Python model; the numpy parsing happens in the binding layer.
+    void apply_best_lookahead(const std::vector<float>& values);
+    void apply_noisy_board(const std::vector<float>& values, float eps, float temperature);
+    void apply_greedy_board(const std::vector<float>& values);
     void apply_random_board();
     void apply_heuristic_board();
 
