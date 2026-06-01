@@ -133,6 +133,19 @@ public:
     int legal_move_count() const;
     void apply_human_move(int idx);
 
+    // --- Incremental human move interface (mirrors SFMLRW): after advance()
+    // returns AwaitingHuman (dice rolled), the UI selects a source point then
+    // "clicks" a die to move; on a successful sub-move the destination auto-
+    // selects so dice can be chained. The turn ends automatically when no legal
+    // moves remain (the controller switches players); detect via turn_in_progress.
+    bool human_select(int row, int col);   // returns true if a source was selected
+    bool human_move_die(int die_idx);      // true if a sub-move was applied
+    bool human_undo();                     // undo the last sub-move this turn
+    bool can_use_die(int die_idx);         // die still playable this turn
+    bool start_is_selected() const;
+    std::array<int, 2> selected_start() const; // {row,col} or {-1,-1}
+    bool turn_in_progress() const;         // dice rolled and game not over
+
     void human_turn(bool dice_rolled = false);
     void restart_or_quit();
     bool is_terminal() const;

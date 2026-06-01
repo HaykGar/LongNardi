@@ -171,6 +171,61 @@ NardiStatus nardi_apply_human_move(NardiHandle* h, int idx)
     });
 }
 
+NardiStatus nardi_human_select(NardiHandle* h, int row, int col)
+{
+    NARDI_GUARD(h, NARDI_ERR, {
+        if(!h->engine.human_select(row, col))
+        {
+            h->last_error = "cannot select that point";
+            return NARDI_ERR;
+        }
+        return NARDI_OK;
+    });
+}
+
+NardiStatus nardi_human_move_die(NardiHandle* h, int die_idx)
+{
+    NARDI_GUARD(h, NARDI_ERR, {
+        if(!h->engine.human_move_die(die_idx))
+        {
+            h->last_error = "illegal move for that die";
+            return NARDI_ERR;
+        }
+        return NARDI_OK;
+    });
+}
+
+NardiStatus nardi_human_undo(NardiHandle* h)
+{
+    NARDI_GUARD(h, NARDI_ERR, { h->engine.human_undo(); return NARDI_OK; });
+}
+
+int nardi_can_use_die(NardiHandle* h, int die_idx)
+{
+    NARDI_GUARD(h, -1, { return h->engine.can_use_die(die_idx) ? 1 : 0; });
+}
+
+int nardi_start_selected(NardiHandle* h)
+{
+    NARDI_GUARD(h, -1, { return h->engine.start_is_selected() ? 1 : 0; });
+}
+
+NardiStatus nardi_selected_start(NardiHandle* h, int out_rc[2])
+{
+    NARDI_GUARD(h, NARDI_ERR, {
+        if(out_rc == nullptr) { h->last_error = "nardi_selected_start: null out"; return NARDI_ERR; }
+        const auto rc = h->engine.selected_start();
+        out_rc[0] = rc[0];
+        out_rc[1] = rc[1];
+        return NARDI_OK;
+    });
+}
+
+int nardi_turn_in_progress(NardiHandle* h)
+{
+    NARDI_GUARD(h, -1, { return h->engine.turn_in_progress() ? 1 : 0; });
+}
+
 const char* nardi_last_error(NardiHandle* h)
 {
     if(h == nullptr)

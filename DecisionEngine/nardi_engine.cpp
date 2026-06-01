@@ -486,6 +486,53 @@ void NardiEngine::apply_human_move(int idx)
     apply_board(board);
 }
 
+bool NardiEngine::human_select(int row, int col)
+{
+    _builder.ReceiveCommand(Nardi::Command(Nardi::Actions::RELEASE_SELECTED));
+    const auto status = _builder.ReceiveCommand(Nardi::Command(row, col));
+    return status == Nardi::status_codes::SUCCESS;
+}
+
+bool NardiEngine::human_move_die(int die_idx)
+{
+    const auto status = _builder.ReceiveCommand(Nardi::Command(static_cast<bool>(die_idx)));
+    // SUCCESS: moved, turn continues (dest auto-selected). NO_LEGAL_MOVES_LEFT:
+    // moved and that completed the turn (controller switched players).
+    return status == Nardi::status_codes::SUCCESS
+        || status == Nardi::status_codes::NO_LEGAL_MOVES_LEFT;
+}
+
+bool NardiEngine::human_undo()
+{
+    return _builder.ReceiveCommand(Nardi::Command(Nardi::Actions::UNDO))
+        == Nardi::status_codes::SUCCESS;
+}
+
+bool NardiEngine::can_use_die(int die_idx)
+{
+    if(_builder.GetCtrl().AwaitingRoll())
+        return false;
+    return _builder.GetGame().CanUseDice(static_cast<bool>(die_idx));
+}
+
+bool NardiEngine::start_is_selected() const
+{
+    return _builder.GetCtrl().StartIsSelected();
+}
+
+std::array<int, 2> NardiEngine::selected_start() const
+{
+    if(!_builder.GetCtrl().StartIsSelected())
+        return {-1, -1};
+    const auto& s = _builder.GetCtrl().GetStart();
+    return {s.row, s.col};
+}
+
+bool NardiEngine::turn_in_progress() const
+{
+    return !_builder.GetCtrl().AwaitingRoll() && !_builder.GetGame().GameIsOver();
+}
+
 void NardiEngine::apply_random_board()
 {
     const auto& children = require_children();

@@ -212,6 +212,16 @@ forced pass (TurnPassed), or report the game is over (GameOver).)")
         .def("apply_human_move",      &NardiEngine::apply_human_move,
              py::arg("idx"),
              R"(Apply the human-chosen legal option by index into current_options().)")
+        .def("human_select",          &NardiEngine::human_select, py::arg("row"), py::arg("col"),
+             R"(Select a source point (engine coords) for an incremental human move.)")
+        .def("human_move_die",        &NardiEngine::human_move_die, py::arg("die_idx"),
+             R"(Move the selected piece by die 0/1; True if applied.)")
+        .def("human_undo",            &NardiEngine::human_undo,
+             R"(Undo the last sub-move in the current turn.)")
+        .def("can_use_die",           &NardiEngine::can_use_die, py::arg("die_idx"))
+        .def("start_is_selected",     &NardiEngine::start_is_selected)
+        .def("selected_start",        &NardiEngine::selected_start)
+        .def("turn_in_progress",      &NardiEngine::turn_in_progress)
         .def("status_report",       &NardiEngine::status_report)
         .def("status_str",          &NardiEngine::status_str)
         .def("is_terminal",         &NardiEngine::is_terminal)

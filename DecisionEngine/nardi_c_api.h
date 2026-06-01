@@ -83,12 +83,25 @@ NardiStatus nardi_dice(NardiHandle* h, int out_dice[2]);
 /* Write the current board (NARDI_BOARD_CELLS signed bytes, row-major) into out. */
 NardiStatus nardi_board(NardiHandle* h, signed char* out /* [NARDI_BOARD_CELLS] */);
 
-/* Human move interface (valid after nardi_advance returns AWAITING_HUMAN). */
+/* Human move interface — whole-end-board style (valid after AWAITING_HUMAN). */
 int nardi_legal_move_count(NardiHandle* h); /* >=0; -1 on error */
 /* Write the board that legal option `idx` would produce into out. */
 NardiStatus nardi_option_board(NardiHandle* h, int idx, signed char* out /* [NARDI_BOARD_CELLS] */);
 /* Play legal option `idx`. */
 NardiStatus nardi_apply_human_move(NardiHandle* h, int idx);
+
+/* Human move interface — incremental (select a source point, then a die),
+ * mirroring the desktop UI. Coordinates are engine (logical) coords: row 0/1,
+ * col 0..11. A sub-move that uses the last die ends the turn (the engine switches
+ * players); poll nardi_turn_in_progress to detect that. */
+NardiStatus nardi_human_select(NardiHandle* h, int row, int col); /* select source point */
+NardiStatus nardi_human_move_die(NardiHandle* h, int die_idx);    /* 0 or 1; OK if applied */
+NardiStatus nardi_human_undo(NardiHandle* h);                     /* undo last sub-move */
+int nardi_can_use_die(NardiHandle* h, int die_idx);  /* 1/0; -1 on error */
+int nardi_start_selected(NardiHandle* h);            /* 1/0; -1 on error */
+/* Write the currently selected source as {row,col} (or {-1,-1}) into out_rc. */
+NardiStatus nardi_selected_start(NardiHandle* h, int out_rc[2]);
+int nardi_turn_in_progress(NardiHandle* h);          /* 1/0; -1 on error */
 
 /* Most recent error message for this handle (never NULL; "" if none). */
 const char* nardi_last_error(NardiHandle* h);
