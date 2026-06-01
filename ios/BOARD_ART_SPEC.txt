@@ -19,17 +19,22 @@ BOARD LAYOUT
 ------------
 24 points = 2 rows x 12 columns. The image is shown aspect-fit; the *playable*
 region is an inset rectangle inside the image, split into two 6-column halves
-separated by a center bar. Default inset fractions (of the displayed image),
-tunable in BoardGeometry.swift:
+separated by a center bar. Inset fractions (of the displayed image), tunable in
+BoardGeometry.swift -- measured from BoardImg.jpg by detecting the cream points
+(point centers run 0.084..0.419 left half / 0.581..0.916 right half):
 
-  borderPadXFrac = 0.140   left/right border (wood frame)
-  borderPadYFrac = 0.050   top/bottom border
-  centerGapFrac  = 0.070   width of the center bar between the two halves
+  padXFrac = 0.050   left/right border (wood frame)
+  padYFrac = 0.085   top/bottom border (point bases begin ~8.5% down)
+  gapFrac  = 0.095   width of the center bar between the two halves
 
-So: innerWidth  = imgW * (1 - 2*0.14 - 0.07);  each half = innerWidth / 2
-    innerHeight = imgH * (1 - 2*0.05);          each row  = innerHeight / 2
+So: innerWidth  = imgW * (1 - 2*0.050 - 0.095);  each half = innerWidth / 2
+    innerHeight = imgH * (1 - 2*0.085);           each row  = innerHeight / 2
 
 A point cell = (halfWidth / 6) wide by (innerHeight / 2) tall.
+
+When swapping in new art, launch with the `--grid` argument
+(`xcrun simctl launch <udid> com.nardi.app --grid`) to overlay the cell grid in
+red and tune the three fractions until each cell sits on a point.
 
 COORDINATE CONVENTION (engine <-> screen)
 -----------------------------------------

@@ -13,9 +13,13 @@ struct BoardGeometry {
     let board: CGRect          // displayed (aspect-fit) board image frame
 
     // Inset fractions of the displayed board image (tune to match new art).
-    let padXFrac: CGFloat = 0.140
-    let padYFrac: CGFloat = 0.050
-    let gapFrac: CGFloat  = 0.070
+    // Measured from images/BoardImg.jpg (1079x953) by detecting the cream points:
+    // point centers run 0.084..0.419 (left half) / 0.581..0.916 (right half), the
+    // playable region starts ~5% in, the center bar is ~9.5% wide, and the point
+    // bases begin ~8.5% down from the top.
+    let padXFrac: CGFloat = 0.050
+    let padYFrac: CGFloat = 0.085
+    let gapFrac: CGFloat  = 0.095
 
     private var halfWidth: CGFloat { board.width * (1 - 2 * padXFrac - gapFrac) / 2 }
     private var innerHeight: CGFloat { board.height * (1 - 2 * padYFrac) }

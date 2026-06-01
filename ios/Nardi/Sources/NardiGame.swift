@@ -150,7 +150,13 @@ final class NardiGame: ObservableObject {
 
     private func beginHumanTurn() {
         let whiteToMove = (nardi_current_player(handle) == 0)
-        flipped = isPassAndPlay ? whiteToMove : humanIsWhite
+        // The perspective player's head must sit at the TOP-RIGHT. White's head is
+        // already top-right in the base layout (flipped=false); Black's needs the
+        // 180-degree flip (swap rows + reverse the top row). So flip iff the
+        // perspective player is Black. Pass-and-play uses the active player's
+        // perspective (board inverts each turn); vs-computer is fixed to the human.
+        let perspectiveIsBlack = isPassAndPlay ? !whiteToMove : !humanIsWhite
+        flipped = perspectiveIsBlack
         selected = nil
         phase = .awaitingHuman
         let who = isPassAndPlay ? (whiteToMove ? "White" : "Black") : "You"

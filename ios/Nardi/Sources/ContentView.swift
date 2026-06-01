@@ -15,8 +15,10 @@ struct ContentView: View {
             }
         }
         .onAppear {
-            if ProcessInfo.processInfo.arguments.contains("--demo") {
-                game.newGame(mode: .vsComputer, opponent: .greedy, first: .first)
+            let args = ProcessInfo.processInfo.arguments
+            if args.contains("--demo") {
+                game.newGame(mode: .vsComputer, opponent: .greedy,
+                             first: args.contains("--black") ? .second : .first)
             }
         }
     }

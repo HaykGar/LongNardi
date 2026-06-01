@@ -30,6 +30,7 @@ struct BoardView: View {
                 }
                 checkers(geom: geom)
                 selectionHighlight(geom: geom)
+                if ProcessInfo.processInfo.arguments.contains("--grid") { debugGrid(geom: geom) }
             }
             .contentShape(Rectangle())
             .gesture(DragGesture(minimumDistance: 0).onEnded { v in
@@ -89,6 +90,19 @@ struct BoardView: View {
                 }
             }
             .position(x: cell.midX, y: y)
+        }
+    }
+
+    // Debug: outline every cell (flipped=false base layout) to tune the fractions.
+    @ViewBuilder
+    private func debugGrid(geom: BoardGeometry) -> some View {
+        ForEach(0..<BoardGeometry.rows, id: \.self) { row in
+            ForEach(0..<BoardGeometry.cols, id: \.self) { col in
+                let r = geom.cellRect(row: row, col: col, flipped: false)
+                Rectangle().stroke(Color.red, lineWidth: 1)
+                    .frame(width: r.width, height: r.height)
+                    .position(x: r.midX, y: r.midY)
+            }
         }
     }
 
