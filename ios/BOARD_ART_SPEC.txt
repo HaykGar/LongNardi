@@ -17,24 +17,26 @@ references in ios/project.yml + the image names in BoardGeometry/BoardView).
 
 BOARD LAYOUT
 ------------
-24 points = 2 rows x 12 columns. The image is shown aspect-fit; the *playable*
-region is an inset rectangle inside the image, split into two 6-column halves
-separated by a center bar. Inset fractions (of the displayed image), tunable in
-BoardGeometry.swift -- measured from BoardImg.jpg by detecting the cream points
-(point centers run 0.084..0.419 left half / 0.581..0.916 right half):
+24 points = 2 rows x 12 columns, two 6-column halves per row. BoardImg.jpg is
+drawn in slight PERSPECTIVE (a shallow trapezoid): the bottom points are spread a
+little wider than the top, and the top/bottom borders differ. So instead of one
+rectangular grid, point positions are anchored PER (row, half) by the center
+fractions of the first and last point in that half, with separate top/bottom
+vertical insets. All constants live in BoardGeometry.swift and were measured from
+BoardImg.jpg by detecting the cream points:
 
-  padXFrac = 0.050   left/right border (wood frame)
-  padYFrac = 0.085   top/bottom border (point bases begin ~8.5% down)
-  gapFrac  = 0.095   width of the center bar between the two halves
+  horizontal anchors (col0 center, col5 center) as fraction of board width:
+    top-left  = (0.0839, 0.4189)   top-right  = (0.5816, 0.9161)
+    bot-left  = (0.0769, 0.4194)   bot-right  = (0.5843, 0.9231)
+  vertical (point bases, fraction of board height):
+    padYTopFrac = 0.092            padYBotFrac = 0.076
 
-So: innerWidth  = imgW * (1 - 2*0.050 - 0.095);  each half = innerWidth / 2
-    innerHeight = imgH * (1 - 2*0.085);           each row  = innerHeight / 2
-
-A point cell = (halfWidth / 6) wide by (innerHeight / 2) tall.
+The 6 columns in a half are evenly spaced between c0 and c5. A flat (non-
+perspective) board would simply set top == bottom anchors and equal pads.
 
 When swapping in new art, launch with the `--grid` argument
 (`xcrun simctl launch <udid> com.nardi.app --grid`) to overlay the cell grid in
-red and tune the three fractions until each cell sits on a point.
+red and tune these anchors until each cell sits on a point.
 
 COORDINATE CONVENTION (engine <-> screen)
 -----------------------------------------
