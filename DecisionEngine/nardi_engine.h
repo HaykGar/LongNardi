@@ -60,6 +60,7 @@ public:
     void DetachRW();
 
     py::array_t<uint8_t> dice() const;
+    std::array<int, 2> dice_values() const; // pybind-free dice accessor (for the C API)
     int dice_as_idx() const;
     Nardi::Board::Features board_features() const;
     void PrintArray3D(py::array_t<uint8_t>& arr);

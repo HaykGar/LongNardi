@@ -65,6 +65,11 @@ py::array_t<uint8_t> NardiEngine::dice() const
     return arr;
 }
 
+std::array<int, 2> NardiEngine::dice_values() const
+{
+    return {_builder.GetGame().GetDice(0), _builder.GetGame().GetDice(1)};
+}
+
 int NardiEngine::dice_as_idx() const
 {
     return flat_dice_idx(_builder.GetGame().GetDice(0), _builder.GetGame().GetDice(1));
