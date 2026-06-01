@@ -43,6 +43,11 @@ public:
 
     int best_index(py::array_t<float, py::array::c_style | py::array::forcecast> values) const;
 
+    // Torch-free selector used by the in-C++ lookahead bot: `values` are the
+    // side-to-move evaluations of eval_features (e.g. from TargetModel). Returns
+    // the index of the best child, honoring terminal-win shortcuts.
+    int best_index_values(const std::vector<float>& values) const;
+
     py::array_t<int8_t> best_board(
         py::array_t<float, py::array::c_style | py::array::forcecast> values) const;
 

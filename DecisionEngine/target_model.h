@@ -26,15 +26,15 @@ public:
     TargetModel(const TargetModel&) = delete;
     TargetModel& operator=(const TargetModel&) = delete;
 
-    // Load a TorchScript .pt file (replaces any previously loaded network).
+    // Load a weight blob (replaces any previously loaded network).
     void load(const std::string& path);
     bool is_loaded() const;
 
     // Evaluate one position's features -> side-to-move value.
-    float evaluate(const Nardi::Board::Features& f);
+    float evaluate(const Nardi::Board::Features& f) const;
 
     // Batched evaluation; the workhorse for rollouts and node-prior expansion.
-    std::vector<float> evaluate_batch(const std::vector<Nardi::Board::Features>& features);
+    std::vector<float> evaluate_batch(const std::vector<Nardi::Board::Features>& features) const;
 
 private:
     struct Impl;

@@ -85,6 +85,22 @@ public:
     void apply_random_board();
     void apply_heuristic_board();
 
+    // --- In-C++ bot decisions (model evaluated by the hand-rolled InferenceNet,
+    // no Python eval needed). The *_choice methods return the index of the move
+    // the bot would play without applying it (useful for UI/highlighting and for
+    // parity testing); the apply_* methods choose and play in one step. The
+    // *_with variants take an explicit net so an orchestrator can drive two
+    // different bots; the *_target variants use the loaded target network.
+    int greedy_choice(const TargetModel& net) const;
+    void apply_greedy_with(const TargetModel& net);
+    int lookahead_choice(const TargetModel& net);
+    void apply_lookahead_with(const TargetModel& net);
+
+    int greedy_choice_target() const;
+    void apply_greedy_target();
+    int lookahead_choice_target();
+    void apply_lookahead_target();
+
     void human_turn(bool dice_rolled = false);
     void restart_or_quit();
     bool is_terminal() const;

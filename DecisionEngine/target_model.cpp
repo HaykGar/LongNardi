@@ -25,14 +25,14 @@ void TargetModel::load(const std::string& path)
 
 bool TargetModel::is_loaded() const { return _impl->net != nullptr; }
 
-float TargetModel::evaluate(const Nardi::Board::Features& f)
+float TargetModel::evaluate(const Nardi::Board::Features& f) const
 {
     if(!_impl->net)
         throw std::runtime_error("TargetModel: no network loaded (call load() first).");
     return _impl->net->evaluate(f);
 }
 
-std::vector<float> TargetModel::evaluate_batch(const std::vector<Nardi::Board::Features>& features)
+std::vector<float> TargetModel::evaluate_batch(const std::vector<Nardi::Board::Features>& features) const
 {
     if(!_impl->net)
         throw std::runtime_error("TargetModel: no network loaded (call load() first).");

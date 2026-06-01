@@ -118,6 +118,16 @@ PYBIND11_MODULE(nardi, m)
              R"(Apply a random cached child board.)")
         .def("apply_heuristic_board",&NardiEngine::apply_heuristic_board,
              R"(Apply the cached child board with highest current-player square occupancy.)")
+        .def("greedy_choice_target",  &NardiEngine::greedy_choice_target,
+             R"(Index into the cached children the greedy bot would play, evaluated by the
+loaded target network in C++ (no move applied).)")
+        .def("apply_greedy_target",   &NardiEngine::apply_greedy_target,
+             R"(Play the greedy bot's move using the loaded target network (C++ evaluation).)")
+        .def("lookahead_choice_target", &NardiEngine::lookahead_choice_target,
+             R"(Index into the lookahead batch's children the 1-ply bot would play, evaluated
+by the loaded target network in C++ (no move applied). Requires dice rolled.)")
+        .def("apply_lookahead_target",&NardiEngine::apply_lookahead_target,
+             R"(Play the 1-ply lookahead bot's move using the loaded target network (C++).)")
         .def("status_report",       &NardiEngine::status_report)
         .def("status_str",          &NardiEngine::status_str)
         .def("is_terminal",         &NardiEngine::is_terminal)
@@ -241,6 +251,9 @@ nardi_net.export_weights. Torch-free; mirrors model(features) in Python.)")
     py::class_<LookaheadBatch, std::shared_ptr<LookaheadBatch>>(m, "LookaheadBatch")
         .def_property_readonly("num_children",      &LookaheadBatch::num_children)
         .def_property_readonly("num_eval_features", &LookaheadBatch::num_eval_features)
+        .def_property_readonly("eval_features",
+             [](const LookaheadBatch& b) { return b.eval_features; },
+             R"(The re-featured grandchild positions (list of Features) the model scores.)")
         .def("tensor",                              &LookaheadBatch::tensor,
              py::arg("kind") = "conv",
              py::arg("flatten") = false,

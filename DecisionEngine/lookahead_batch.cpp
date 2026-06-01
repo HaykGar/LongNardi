@@ -38,8 +38,16 @@ py::array_t<float> LookaheadBatch::child_values(
 int LookaheadBatch::best_index(
     py::array_t<float, py::array::c_style | py::array::forcecast> values) const
 {
+    return best_index_values(parse_values(values));
+}
+
+int LookaheadBatch::best_index_values(const std::vector<float>& values) const
+{
     if(children.empty())
         throw std::runtime_error("Cannot select from an empty lookahead batch.");
+
+    if(values.size() != eval_features.size())
+        throw std::runtime_error("Lookahead values length does not match eval feature count.");
 
     // A true winning child is always optimal. Do not compare it against model
     // estimates, because overestimated non-terminal states must not hide a win.
@@ -47,13 +55,12 @@ int LookaheadBatch::best_index(
         if(children[i].terminal_value.has_value())
             return static_cast<int>(i);
 
-    std::vector<float> parsed_values = parse_values(values);
     int best = 0;
-    float best_value = child_value(children[0], parsed_values);
+    float best_value = child_value(children[0], values);
 
     for(size_t i = 1; i < children.size(); ++i)
     {
-        const float candidate = child_value(children[i], parsed_values);
+        const float candidate = child_value(children[i], values);
         if(candidate > best_value)
         {
             best = static_cast<int>(i);

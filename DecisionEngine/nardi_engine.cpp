@@ -363,6 +363,73 @@ void NardiEngine::apply_greedy_board(
     apply_board(children.at(idx).raw_data);
 }
 
+int NardiEngine::greedy_choice(const TargetModel& net) const
+{
+    const auto& children = require_children();
+    if(const auto terminal_idx = terminal_child_index(children); terminal_idx.has_value())
+        return static_cast<int>(terminal_idx.value());
+
+    const std::vector<float> values = net.evaluate_batch(children);
+    return static_cast<int>(
+        std::distance(values.begin(), std::max_element(values.begin(), values.end())));
+}
+
+void NardiEngine::apply_greedy_with(const TargetModel& net)
+{
+    const int idx = greedy_choice(net);
+    // Copy the board out before apply_board() clears _last_children.
+    const Nardi::BoardConfig board = require_children().at(static_cast<size_t>(idx)).raw_data;
+    apply_board(board);
+}
+
+int NardiEngine::lookahead_choice(const TargetModel& net)
+{
+    auto batch = MakeLookaheadBatch(); // also caches _last_lookahead_batch
+    if(batch->children.empty())
+        return -1; // no legal move; the turn passes
+
+    const std::vector<float> values = net.evaluate_batch(batch->eval_features);
+    return batch->best_index_values(values);
+}
+
+void NardiEngine::apply_lookahead_with(const TargetModel& net)
+{
+    const int idx = lookahead_choice(net);
+    if(idx < 0)
+        return; // no legal move; turn already has no children to play
+    const Nardi::BoardConfig board =
+        _last_lookahead_batch->children.at(static_cast<size_t>(idx)).board;
+    apply_board(board);
+}
+
+int NardiEngine::greedy_choice_target() const
+{
+    if(!_target_model.is_loaded())
+        throw std::runtime_error("greedy_choice_target requires load_target_network(path) first.");
+    return greedy_choice(_target_model);
+}
+
+void NardiEngine::apply_greedy_target()
+{
+    if(!_target_model.is_loaded())
+        throw std::runtime_error("apply_greedy_target requires load_target_network(path) first.");
+    apply_greedy_with(_target_model);
+}
+
+int NardiEngine::lookahead_choice_target()
+{
+    if(!_target_model.is_loaded())
+        throw std::runtime_error("lookahead_choice_target requires load_target_network(path) first.");
+    return lookahead_choice(_target_model);
+}
+
+void NardiEngine::apply_lookahead_target()
+{
+    if(!_target_model.is_loaded())
+        throw std::runtime_error("apply_lookahead_target requires load_target_network(path) first.");
+    apply_lookahead_with(_target_model);
+}
+
 void NardiEngine::apply_random_board()
 {
     const auto& children = require_children();
