@@ -41,8 +41,12 @@ void NardiEngine::AttachNewTRW()
 
 void NardiEngine::AttachNewSFMLRW()
 {
+#ifdef NARDI_ENABLE_SFML
     _builder.AttachNewRW(Nardi::SFMLRWFactory());
     _builder.GetView()->PollInput();
+#else
+    throw std::runtime_error("SFML view not available: built without NARDI_ENABLE_SFML.");
+#endif
 }
 
 void NardiEngine::DetachRW()

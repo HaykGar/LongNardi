@@ -43,6 +43,9 @@ ext = Extension(
         "sfml-window",
         "sfml-system",
     ],
+    # The Python/desktop module keeps the SFML graphical view; the iOS build
+    # compiles without it (renders via SwiftUI).
+    define_macros=[("NARDI_ENABLE_SFML", None)],
     language="c++",
     extra_compile_args=["-std=c++23", "-mmacosx-version-min=10.15"],
     extra_link_args=[

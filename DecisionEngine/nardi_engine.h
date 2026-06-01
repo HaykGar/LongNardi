@@ -16,9 +16,13 @@
 #include "../CoreEngine/Controller.h"
 #include "../CoreEngine/Game.h"
 #include "../CoreEngine/ReaderWriter.h"
-#include "../CoreEngine/SFMLRW.h"
 #include "../CoreEngine/ScenarioBuilder.h"
 #include "../CoreEngine/TerminalRW.h"
+// The SFML desktop view is optional: builds that render elsewhere (e.g. iOS via
+// SwiftUI) compile without SFML by leaving NARDI_ENABLE_SFML undefined.
+#ifdef NARDI_ENABLE_SFML
+#include "../CoreEngine/SFMLRW.h"
+#endif
 
 namespace nardi_py
 {

@@ -1,9 +1,8 @@
 #!/usr/bin/env bash
-# Build and run the standalone native C-API test. Compiles the engine core + C
-# API with NO pybind11 / Python include path: if any engine-core header pulls in
-# pybind, this fails -- which is exactly what we want to catch. SFML is linked
-# only because nardi_engine still references the desktop SFMLRW factory; the iOS
-# build will compile that out, but it is harmless here and does not involve Python.
+# Build and run the standalone native C-API test in the same configuration the
+# iOS static lib will use: NO pybind11 / Python AND NO SFML (NARDI_ENABLE_SFML
+# left undefined, SFMLRW.cpp excluded, no -lsfml). If any engine-core header
+# pulls in pybind or SFML, this fails -- exactly what we want to catch.
 set -euo pipefail
 
 HERE="$(cd "$(dirname "$0")" && pwd)"
@@ -25,9 +24,9 @@ export_weights(m, sys.argv[1])
 print("   wrote", sys.argv[1])
 PYEOF
 
-echo "[2/3] compiling native test (no pybind / no Python) ..."
+echo "[2/3] compiling native test (no pybind / no Python / no SFML) ..."
 clang++ -std=c++23 -O2 -Wall -mmacosx-version-min=10.15 \
-    -I"$DE" -I/opt/homebrew/include \
+    -I"$DE" \
     "$HERE/test_c_api_native.cpp" \
     "$DE/nardi_c_api.cpp" \
     "$DE/nardi_engine.cpp" \
@@ -44,10 +43,7 @@ clang++ -std=c++23 -O2 -Wall -mmacosx-version-min=10.15 \
     "$CE/Monitors.cpp" \
     "$CE/ReaderWriter.cpp" \
     "$CE/TerminalRW.cpp" \
-    "$CE/SFMLRW.cpp" \
     "$CE/ScenarioBuilder.cpp" \
-    -L/opt/homebrew/lib -lsfml-graphics -lsfml-window -lsfml-system \
-    -Wl,-rpath,/opt/homebrew/lib \
     -o "$BIN"
 
 echo "[3/3] running ..."
