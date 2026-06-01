@@ -145,6 +145,8 @@ public:
     bool start_is_selected() const;
     std::array<int, 2> selected_start() const; // {row,col} or {-1,-1}
     bool turn_in_progress() const;         // dice rolled and game not over
+    bool turn_is_complete() const;         // no legal moves left, awaiting confirm
+    void confirm_turn();                   // advance to next player (if turn complete)
 
     void human_turn(bool dice_rolled = false);
     void restart_or_quit();

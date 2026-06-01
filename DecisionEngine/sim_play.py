@@ -135,6 +135,12 @@ class Simulator:
             build_pos()
            
     def advance_turn(self):
+        # The engine no longer auto-advances when a turn runs out of legal moves
+        # (so human UIs can undo until they confirm). advance_turn() is called once
+        # at the end of each turn's processing here, so confirm the turn if it's
+        # complete. This is a no-op after whole-board bot moves (apply_*_board /
+        # mcts_apply_move already auto-confirm) and after a move that ended the game.
+        self.eng.confirm_turn()
         time.sleep(self.sleep_time)
 
     def apply_greedy_move(self, model, options=None, eval_only=True):

@@ -226,6 +226,16 @@ int nardi_turn_in_progress(NardiHandle* h)
     NARDI_GUARD(h, -1, { return h->engine.turn_in_progress() ? 1 : 0; });
 }
 
+int nardi_turn_is_complete(NardiHandle* h)
+{
+    NARDI_GUARD(h, -1, { return h->engine.turn_is_complete() ? 1 : 0; });
+}
+
+NardiStatus nardi_confirm_turn(NardiHandle* h)
+{
+    NARDI_GUARD(h, NARDI_ERR, { h->engine.confirm_turn(); return NARDI_OK; });
+}
+
 const char* nardi_last_error(NardiHandle* h)
 {
     if(h == nullptr)

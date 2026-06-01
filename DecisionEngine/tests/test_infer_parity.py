@@ -78,7 +78,9 @@ def _collect_positions(n_positions=1500, seed=0):
         features.append(eng.board_features())
         features.extend(options)
         if options:
-            eng.apply_random_board()
+            eng.apply_random_board()   # whole-board apply auto-confirms the turn
+        else:
+            eng.confirm_turn()         # no moves: pass to the next player
         steps += 1
     return features[:n_positions]
 

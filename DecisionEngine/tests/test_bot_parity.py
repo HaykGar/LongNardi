@@ -64,6 +64,7 @@ def check_greedy(n_turns=800):
                 eng.reset()
             children = eng.roll_and_enumerate()
             if not children:
+                eng.confirm_turn()   # no moves: pass to the next player
                 continue
             t = _terminal_child_index(children)
             if t is not None:
@@ -93,6 +94,7 @@ def check_lookahead(n_turns=500):
                 eng.reset()
             children = eng.roll_and_enumerate()
             if not children:
+                eng.confirm_turn()   # no moves: pass to the next player
                 continue
             batch = eng.make_lookahead_batch()
             if batch.num_children == 0:

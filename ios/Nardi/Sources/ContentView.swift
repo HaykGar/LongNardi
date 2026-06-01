@@ -85,7 +85,7 @@ struct ContentView: View {
             Text(game.status).font(.callout).multilineTextAlignment(.center)
                 .frame(maxWidth: .infinity, minHeight: 24)
 
-            HStack(spacing: 24) {
+            HStack(spacing: 18) {
                 DieButton(value: game.dice.0, usable: game.dieUsable.0) { game.tapDie(0) }
                 DieButton(value: game.dice.1, usable: game.dieUsable.1) { game.tapDie(1) }
                 Button { game.undo() } label: {
@@ -93,6 +93,11 @@ struct ContentView: View {
                 }
                 .buttonStyle(.bordered)
                 .disabled(game.phase != .awaitingHuman)
+                Button { game.confirm() } label: {
+                    Label("Confirm", systemImage: "checkmark")
+                }
+                .buttonStyle(.borderedProminent)
+                .disabled(!game.canConfirm)
             }
             .padding(.bottom, 6)
 

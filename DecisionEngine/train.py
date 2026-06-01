@@ -166,6 +166,8 @@ class LookaheadGameEnv(GameEnv):
         if not sim.eng.roll_has_children():
             with torch.inference_mode():
                 target = float(sim.sign * target_model(sim.eng.board_features()).item())
+            # The turn no longer auto-advances on a no-move roll; confirm the pass.
+            sim.eng.confirm_turn()
             return target, False, {}
 
         batch = sim.eng.make_lookahead_batch()
@@ -597,14 +599,22 @@ if __name__ == "__main__":
         "--directory", 
         type=valid_dir, 
         help="Optional path to an existing directory to store figures", 
-        default=None)
+        default=None
+    )
     
     parser.add_argument(
         "-f", 
         "--file", 
         type=valid_file, 
         help="Optional filename for loading network weights", 
-        default=None)
+        default=None
+    )
+    
+    parser.add_argument(
+        "--res-baseline",
+        action="store_true",
+        help="Optional flag to use res2.pt as the baseline",
+    )
     
     parser.add_argument(
         "--architecture",
@@ -682,6 +692,13 @@ if __name__ == "__main__":
         model = nardi_net.ResNardiNet()
 
     trainer_cls = LookaheadTDTrainer if args.lookahead else TDTrainer
+    
+    if args.res_baseline:
+        import models
+        baseline = (models.res_v2, "greedy")
+    else:
+        baseline = (None, "heuristic")
+        
     trainer = trainer_cls(model, weights_file=args.file, output_dir=args.directory,
-                          endgame_finetune=args.endgame, num_envs=args.envs)
+                          endgame_finetune=args.endgame, num_envs=args.envs, baseline_args=baseline)
     trainer.train(n_stages=args.stages, games_per_stage=args.games)

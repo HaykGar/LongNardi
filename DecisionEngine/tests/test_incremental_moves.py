@@ -60,6 +60,10 @@ def play_human_turn_incrementally(eng):
                 break
         if not moved:
             break
+    # The turn no longer auto-advances: once no legal moves remain, confirm it
+    # (a human would tap a Confirm button here; bots confirm automatically).
+    if eng.turn_is_complete():
+        eng.confirm_turn()
     return not eng.turn_in_progress()
 
 

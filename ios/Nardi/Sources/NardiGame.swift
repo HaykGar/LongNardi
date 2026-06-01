@@ -50,6 +50,7 @@ final class NardiGame: ObservableObject {
     @Published private(set) var status = ""
     @Published private(set) var whiteOff = 0
     @Published private(set) var blackOff = 0
+    @Published private(set) var canConfirm = false   // turn complete, awaiting confirm
 
     private let handle: OpaquePointer
     private let modelLoaded: Bool
@@ -107,12 +108,24 @@ final class NardiGame: ObservableObject {
             return
         }
         refresh()
-        if nardi_turn_in_progress(handle) == 1 {
-            updateSelection()                 // more dice to play; dest auto-selected
-        } else {
-            selected = nil
-            advanceLoop()                     // turn complete -> next player / bot
+        // A move that ends the game finalizes immediately (no confirm needed).
+        if nardi_is_terminal(handle) == 1 {
+            phase = .gameOver(message: outcomeMessage())
+            return
         }
+        // The turn does NOT auto-advance. Keep the destination selected so dice can
+        // be chained; once no legal moves remain, enable Confirm (the player may
+        // still Undo before confirming).
+        updateSelection()
+        updateConfirmState()
+    }
+
+    func confirm() {
+        guard phase == .awaitingHuman, canConfirm else { return }
+        nardi_confirm_turn(handle)
+        canConfirm = false
+        selected = nil
+        advanceLoop()   // advance to the next player / bot
     }
 
     func undo() {
@@ -120,6 +133,12 @@ final class NardiGame: ObservableObject {
         nardi_human_undo(handle)
         refresh()
         updateSelection()
+        updateConfirmState()
+    }
+
+    private func updateConfirmState() {
+        canConfirm = (nardi_turn_is_complete(handle) == 1)
+        if canConfirm { status = "Turn complete — tap Confirm (or Undo to revise)." }
     }
 
     // MARK: - Engine loop
@@ -158,6 +177,7 @@ final class NardiGame: ObservableObject {
         let perspectiveIsBlack = isPassAndPlay ? !whiteToMove : !humanIsWhite
         flipped = perspectiveIsBlack
         selected = nil
+        canConfirm = false
         phase = .awaitingHuman
         let who = isPassAndPlay ? (whiteToMove ? "White" : "Black") : "You"
         status = "\(who) to move — dice \(dice.0)-\(dice.1)."

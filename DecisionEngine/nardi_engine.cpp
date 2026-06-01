@@ -105,6 +105,12 @@ void NardiEngine::apply_board(const Nardi::BoardConfig& brd)
         Nardi::DispErrorCode(status);
         throw std::runtime_error("Autoplay failed to complete");
     }
+    // A whole-board apply is a complete bot/auto turn, so confirm it here (advance
+    // to the next player) -- preserving the old auto-advance behavior for bots and
+    // the Python training/benchmark code. Human incremental moves go through
+    // MOVE_BY_DICE and require an explicit confirm_turn() so they can be undone
+    // first. (No-op when the move ended the game, which finalizes immediately.)
+    _builder.ReceiveCommand(Nardi::Command(Nardi::Actions::CONFIRM_TURN_OVER));
     _last_children.clear();
     _last_lookahead_batch.reset();
 }
@@ -430,16 +436,21 @@ StepResult NardiEngine::advance()
     // index 0 == white (player idx false), 1 == black (player idx true)
     const Strategy strat = _player_strats[static_cast<size_t>(current_player())];
 
-    // Roll once for the current player. A roll with no legal moves switches the
-    // turn (non-sim NO_LEGAL_MOVES_LEFT handling) and leaves no cached children.
-    if(_builder.GetCtrl().AwaitingRoll())
+    // Roll once for the current player. Skip if the turn is already complete and
+    // merely awaiting confirmation (e.g. a prior no-move roll), so we don't re-roll.
+    if(_builder.GetCtrl().AwaitingRoll() && !turn_is_complete())
         roll_and_enumerate();
 
     if(_last_children.empty())
+    {
+        // No legal moves: nothing to undo, so confirm the (forced) pass for
+        // everyone -- bot or human -- and advance to the next player.
+        confirm_turn();
         return StepResult::TurnPassed;
+    }
 
     if(strat == Strategy::Human)
-        return StepResult::AwaitingHuman;
+        return StepResult::AwaitingHuman; // UI drives incremental moves + confirm_turn()
 
     switch(strat)
     {
@@ -531,6 +542,18 @@ std::array<int, 2> NardiEngine::selected_start() const
 bool NardiEngine::turn_in_progress() const
 {
     return !_builder.GetCtrl().AwaitingRoll() && !_builder.GetGame().GameIsOver();
+}
+
+bool NardiEngine::turn_is_complete() const
+{
+    return _builder.GetCtrl().TurnIsComplete();
+}
+
+void NardiEngine::confirm_turn()
+{
+    // Advance to the next player. No-op unless the turn is complete (the
+    // controller enforces "all dice used / no legal moves left").
+    _builder.ReceiveCommand(Nardi::Command(Nardi::Actions::CONFIRM_TURN_OVER));
 }
 
 void NardiEngine::apply_random_board()

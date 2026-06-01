@@ -222,6 +222,11 @@ forced pass (TurnPassed), or report the game is over (GameOver).)")
         .def("start_is_selected",     &NardiEngine::start_is_selected)
         .def("selected_start",        &NardiEngine::selected_start)
         .def("turn_in_progress",      &NardiEngine::turn_in_progress)
+        .def("turn_is_complete",      &NardiEngine::turn_is_complete,
+             R"(True when the current turn has no legal moves left and awaits confirm_turn().)")
+        .def("confirm_turn",          &NardiEngine::confirm_turn,
+             R"(Confirm the end of the current turn and advance to the next player
+(no-op unless the turn is complete). Bots/whole-board moves confirm automatically.)")
         .def("status_report",       &NardiEngine::status_report)
         .def("status_str",          &NardiEngine::status_str)
         .def("is_terminal",         &NardiEngine::is_terminal)

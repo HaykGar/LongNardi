@@ -103,6 +103,13 @@ int nardi_start_selected(NardiHandle* h);            /* 1/0; -1 on error */
 NardiStatus nardi_selected_start(NardiHandle* h, int out_rc[2]);
 int nardi_turn_in_progress(NardiHandle* h);          /* 1/0; -1 on error */
 
+/* Turn confirmation. A completed human turn does NOT auto-advance: the player can
+ * keep undoing until they confirm. nardi_turn_is_complete returns 1 once no legal
+ * moves remain; nardi_confirm_turn then advances to the next player (no-op if the
+ * turn is not yet complete). Bot / whole-board moves confirm automatically. */
+int nardi_turn_is_complete(NardiHandle* h);          /* 1/0; -1 on error */
+NardiStatus nardi_confirm_turn(NardiHandle* h);
+
 /* Most recent error message for this handle (never NULL; "" if none). */
 const char* nardi_last_error(NardiHandle* h);
 
