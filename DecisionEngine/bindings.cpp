@@ -7,12 +7,36 @@
 #include "binding_utils.h"
 #include "lookahead_batch.h"
 #include "nardi_engine.h"
+#include "nardi_infer.h"
 #include "python_views.h"
 #include "scenario_config.h"
 #include "../CoreEngine/Auxilaries.h"
 
 namespace py = pybind11;
 using namespace nardi_py;
+
+namespace
+{
+
+// Thin Python-facing wrapper around the hand-rolled C++ inference net. Used to
+// validate parity against the PyTorch models (see tests/test_infer_parity.py).
+class PyInferenceNet
+{
+public:
+    explicit PyInferenceNet(const std::string& path) : _net(load_inference_net(path)) {}
+
+    float evaluate(const Nardi::Board::Features& f) const { return _net->evaluate(f); }
+
+    std::vector<float> evaluate_batch(const std::vector<Nardi::Board::Features>& fs) const
+    {
+        return _net->evaluate_batch(fs);
+    }
+
+private:
+    std::unique_ptr<InferenceNet> _net;
+};
+
+} // namespace
 
 PYBIND11_MODULE(nardi, m)
 {
@@ -104,7 +128,7 @@ PYBIND11_MODULE(nardi, m)
         .def("quit_requested",      &NardiEngine::quit_requested)
         .def("load_target_network", &NardiEngine::load_target_network,
              py::arg("path"),
-             R"(Load a TorchScript value network for C++ MCTS self-play.)")
+             R"(Load a hand-rolled value-network weight blob for C++ MCTS self-play.)")
         .def("debug_target_eval", &NardiEngine::debug_target_eval)
         .def("run_mcts_game",
              [](NardiEngine& eng, int n_sims, float temperature, int max_turns,
@@ -204,6 +228,15 @@ move (model-informed UCT); exploratory=True (train) samples Boltzmann+Dirichlet.
         .def_readonly("result",             &NardiEngine::Node::result)
         .def_readonly("features",           &NardiEngine::Node::features)
         .def_readonly("children_by_dice",   &NardiEngine::Node::children_by_dice);
+
+    py::class_<PyInferenceNet>(m, "InferenceNet")
+        .def(py::init<const std::string&>(), py::arg("path"),
+             R"(Load a hand-rolled value network from a weight blob exported by
+nardi_net.export_weights. Torch-free; mirrors model(features) in Python.)")
+        .def("evaluate", &PyInferenceNet::evaluate, py::arg("features"),
+             R"(Side-to-move value for one Features object.)")
+        .def("evaluate_batch", &PyInferenceNet::evaluate_batch, py::arg("features"),
+             R"(Side-to-move values for a list of Features objects.)");
 
     py::class_<LookaheadBatch, std::shared_ptr<LookaheadBatch>>(m, "LookaheadBatch")
         .def_property_readonly("num_children",      &LookaheadBatch::num_children)

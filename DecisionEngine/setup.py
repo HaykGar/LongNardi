@@ -1,11 +1,10 @@
 from setuptools import setup, Extension
 import pybind11
-import torch
-from torch.utils import cpp_extension
 
-torch_library_dirs = cpp_extension.library_paths()
-torch_libraries = ["torch", "torch_cpu", "c10"]
-torch_rpaths = [f"-Wl,-rpath,{path}" for path in torch_library_dirs]
+# The C++ extension no longer links against LibTorch: model inference is now a
+# hand-rolled, dependency-free implementation (nardi_infer.{h,cpp}) that loads a
+# flat weight blob exported by nardi_net.export_weights. PyTorch remains a pure
+# Python dependency for training and for parity tests, but is not compiled in.
 
 ext = Extension(
     name="nardi",
@@ -15,6 +14,7 @@ ext = Extension(
         "lookahead_batch.cpp",
         "mcts_node.cpp",
         "nardi_engine.cpp",
+        "nardi_infer.cpp",
         "python_views.cpp",
         "scenario_config.cpp",
         "target_model.cpp",
@@ -31,26 +31,22 @@ ext = Extension(
     include_dirs=[
         "/opt/homebrew/include",
         pybind11.get_include(),
-        *cpp_extension.include_paths(),
         ".",  # project root
     ],
     library_dirs=[
         "/opt/homebrew/lib",
-        *torch_library_dirs,
     ],
     libraries=[
         "sfml-graphics",
         "sfml-window",
         "sfml-system",
-        *torch_libraries,
     ],
     language="c++",
     extra_compile_args=["-std=c++23", "-mmacosx-version-min=10.15"],
     extra_link_args=[
-    "-mmacosx-version-min=10.15",
-    "-Wl,-rpath,/opt/homebrew/lib",
-    *torch_rpaths,
-    ]
+        "-mmacosx-version-min=10.15",
+        "-Wl,-rpath,/opt/homebrew/lib",
+    ],
 )
 
 setup(
