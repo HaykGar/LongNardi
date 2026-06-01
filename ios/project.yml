@@ -39,6 +39,13 @@ targets:
       - Nardi/Sources
       - Nardi/Bridge
       - Nardi/Resources
+      # Board + piece art shared with the desktop SFML build (see images/).
+      - path: ../images/BoardImg.jpg
+        buildPhase: resources
+      - path: ../images/WhitePiece.png
+        buildPhase: resources
+      - path: ../images/BlackPiece.png
+        buildPhase: resources
       # --- shared C++ engine core (pybind-free, SFML-free subset) ---
       - path: ../DecisionEngine/nardi_c_api.cpp
       - path: ../DecisionEngine/nardi_engine.cpp

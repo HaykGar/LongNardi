@@ -1,14 +1,12 @@
 import Foundation
 import SwiftUI
 
-/// Opponent options surfaced in the UI, mapped to the C engine's strategies.
 enum Opponent: String, CaseIterable, Identifiable {
     case greedy = "Greedy"
     case lookahead = "1-ply Lookahead"
     case mcts = "MCTS"
     case heuristic = "Heuristic"
     var id: String { rawValue }
-
     var strategy: NardiStrategy {
         switch self {
         case .greedy: return NARDI_GREEDY
@@ -19,28 +17,44 @@ enum Opponent: String, CaseIterable, Identifiable {
     }
 }
 
-enum Phase: Equatable {
-    case idle
-    case botThinking
-    case awaitingHuman
-    case gameOver(winner: Int, margin: Int)
+enum GameMode: String, CaseIterable, Identifiable {
+    case vsComputer = "vs Computer"
+    case passAndPlay = "Pass & Play"
+    var id: String { rawValue }
 }
 
-/// ObservableObject wrapper over the plain-C engine API. All engine calls stay on
-/// the main actor (the C engine is single-threaded / not thread-safe).
+enum FirstMove: String, CaseIterable, Identifiable {
+    case first = "I play first (White)"
+    case second = "I play second (Black)"
+    case random = "Random"
+    var id: String { rawValue }
+}
+
+enum Phase: Equatable {
+    case setup
+    case botThinking
+    case awaitingHuman
+    case gameOver(message: String)
+}
+
 @MainActor
 final class NardiGame: ObservableObject {
-    static let boardCells = Int(NARDI_BOARD_CELLS) // 24 (2 x 12)
+    static let cells = Int(NARDI_BOARD_CELLS)
 
-    @Published private(set) var board: [Int8] = Array(repeating: 0, count: boardCells)
+    @Published private(set) var board: [Int8] = Array(repeating: 0, count: cells)
     @Published private(set) var dice: (Int, Int) = (0, 0)
-    @Published private(set) var phase: Phase = .idle
-    @Published private(set) var options: [[Int8]] = []      // legal end-boards for the human
-    @Published private(set) var humanIsWhite = true
-    @Published private(set) var status = "Tap New Game to start."
+    @Published private(set) var dieUsable: (Bool, Bool) = (false, false)
+    @Published private(set) var selected: (Int, Int)? = nil
+    @Published private(set) var flipped = false
+    @Published private(set) var phase: Phase = .setup
+    @Published private(set) var status = ""
+    @Published private(set) var whiteOff = 0
+    @Published private(set) var blackOff = 0
 
     private let handle: OpaquePointer
     private let modelLoaded: Bool
+    private var mode: GameMode = .vsComputer
+    private var humanIsWhite = true   // vs-computer orientation (fixed)
 
     init() {
         guard let h = nardi_create() else { fatalError("nardi_create failed") }
@@ -51,83 +65,134 @@ final class NardiGame: ObservableObject {
             modelLoaded = false
         }
     }
-
     deinit { nardi_destroy(handle) }
 
-    func newGame(opponent: Opponent, humanIsWhite: Bool = true) {
-        self.humanIsWhite = humanIsWhite
-        let human = NARDI_HUMAN
-        let bot = opponent.strategy
-        nardi_configure_players(handle, humanIsWhite ? human : bot, humanIsWhite ? bot : human)
-        if opponent == .mcts {
-            nardi_set_mcts_params(handle, 120, 1.0, 0, 0.1, 0.25, 0.3, 0)
+    var isPassAndPlay: Bool { mode == .passAndPlay }
+
+    func newGame(mode: GameMode, opponent: Opponent, first: FirstMove) {
+        self.mode = mode
+        switch mode {
+        case .passAndPlay:
+            nardi_configure_players(handle, NARDI_HUMAN, NARDI_HUMAN)
+        case .vsComputer:
+            humanIsWhite = (first == .first) || (first == .random && Bool.random())
+            let bot = opponent.strategy
+            nardi_configure_players(handle,
+                                    humanIsWhite ? NARDI_HUMAN : bot,
+                                    humanIsWhite ? bot : NARDI_HUMAN)
+            if opponent == .mcts { nardi_set_mcts_params(handle, 120, 1.0, 0, 0.1, 0.25, 0.3, 0) }
         }
         nardi_reset(handle)
-        refreshBoard()
-        status = modelLoaded ? "Game on." : "⚠️ model blob missing — bots use no network."
-        pump()
+        selected = nil
+        refresh()
+        advanceLoop()
     }
 
-    /// Apply the human's chosen legal option (index into `options`).
-    func chooseOption(_ idx: Int) {
-        guard case .awaitingHuman = phase else { return }
-        guard nardi_apply_human_move(handle, Int32(idx)) == NARDI_OK else {
-            status = "Move rejected: " + String(cString: nardi_last_error(handle))
+    // MARK: - Human interaction
+
+    func tap(row: Int, col: Int) {
+        guard phase == .awaitingHuman else { return }
+        _ = nardi_human_select(handle, Int32(row), Int32(col))
+        updateSelection()
+    }
+
+    func tapDie(_ idx: Int) {
+        guard phase == .awaitingHuman else { return }
+        guard nardi_start_selected(handle) == 1 else {
+            status = "Select a checker first, then tap a die."
             return
         }
-        options = []
-        refreshBoard()
-        pump()
+        if nardi_human_move_die(handle, Int32(idx)) != NARDI_OK {
+            status = "Illegal move for that die."
+            return
+        }
+        refresh()
+        if nardi_turn_in_progress(handle) == 1 {
+            updateSelection()                 // more dice to play; dest auto-selected
+        } else {
+            selected = nil
+            advanceLoop()                     // turn complete -> next player / bot
+        }
     }
 
-    /// Drive the state machine: play bot moves (with a short delay for legibility)
-    /// until it's the human's turn or the game ends.
-    private func pump() {
+    func undo() {
+        guard phase == .awaitingHuman else { return }
+        nardi_human_undo(handle)
+        refresh()
+        updateSelection()
+    }
+
+    // MARK: - Engine loop
+
+    private func advanceLoop() {
         phase = .botThinking
         Task { @MainActor in
             while true {
                 let step = nardi_advance(handle)
-                refreshBoard()
+                refresh()
                 switch step {
                 case NARDI_STEP_GAME_OVER:
-                    let winnerIsWhite = (nardi_current_player(handle) == 1)
-                    let humanWon = (winnerIsWhite == humanIsWhite)
-                    let margin = Int(nardi_winner_result(handle))
-                    phase = .gameOver(winner: winnerIsWhite ? 1 : 2, margin: margin)
-                    status = humanWon ? (margin == 2 ? "You win — mars! 🎉" : "You win! 🎉")
-                                      : (margin == 2 ? "Bot wins (mars)." : "Bot wins.")
+                    phase = .gameOver(message: outcomeMessage())
                     return
                 case NARDI_STEP_AWAITING_HUMAN:
-                    loadOptions()
-                    phase = .awaitingHuman
-                    status = "Your turn — dice \(dice.0)-\(dice.1). Pick a move."
+                    beginHumanTurn()
                     return
                 case NARDI_STEP_ERROR:
                     status = "Engine error: " + String(cString: nardi_last_error(handle))
-                    phase = .idle
                     return
-                default: // BotMoved / TurnPassed
-                    status = "Bot played \(dice.0)-\(dice.1)…"
-                    try? await Task.sleep(nanoseconds: 450_000_000)
+                default:                       // BotMoved / TurnPassed
+                    status = "Opponent played \(dice.0)-\(dice.1)…"
+                    try? await Task.sleep(nanoseconds: 500_000_000)
                 }
             }
         }
     }
 
-    private func refreshBoard() {
-        var buf = [Int8](repeating: 0, count: Self.boardCells)
+    private func beginHumanTurn() {
+        let whiteToMove = (nardi_current_player(handle) == 0)
+        flipped = isPassAndPlay ? whiteToMove : humanIsWhite
+        selected = nil
+        phase = .awaitingHuman
+        let who = isPassAndPlay ? (whiteToMove ? "White" : "Black") : "You"
+        status = "\(who) to move — dice \(dice.0)-\(dice.1)."
+        if !modelLoaded && mode == .vsComputer {
+            status = "⚠️ model blob missing — rebuild with make_model.sh"
+        }
+    }
+
+    // MARK: - State refresh
+
+    private func refresh() {
+        var buf = [Int8](repeating: 0, count: Self.cells)
         if nardi_board(handle, &buf) == NARDI_OK { board = buf }
         var d = [Int32](repeating: 0, count: 2)
         if nardi_dice(handle, &d) == NARDI_OK { dice = (Int(d[0]), Int(d[1])) }
+        dieUsable = (nardi_can_use_die(handle, 0) == 1, nardi_can_use_die(handle, 1) == 1)
+        let whiteOn = board.reduce(0) { $0 + max(0, Int($1)) }
+        let blackOn = board.reduce(0) { $0 + max(0, -Int($1)) }
+        whiteOff = 15 - whiteOn
+        blackOff = 15 - blackOn
     }
 
-    private func loadOptions() {
-        let n = Int(nardi_legal_move_count(handle))
-        var opts: [[Int8]] = []
-        for i in 0..<max(0, n) {
-            var buf = [Int8](repeating: 0, count: Self.boardCells)
-            if nardi_option_board(handle, Int32(i), &buf) == NARDI_OK { opts.append(buf) }
+    private func updateSelection() {
+        if nardi_start_selected(handle) == 1 {
+            var rc = [Int32](repeating: -1, count: 2)
+            if nardi_selected_start(handle, &rc) == NARDI_OK { selected = (Int(rc[0]), Int(rc[1])) }
+        } else {
+            selected = nil
         }
-        options = opts
     }
+
+    private func outcomeMessage() -> String {
+        // After game end the loser is to move, so winner = !current_player; white = 0.
+        let whiteWon = (nardi_current_player(handle) == 1)
+        let mars = (nardi_winner_result(handle) == 2)
+        let tag = mars ? " (mars!)" : ""
+        if mode == .vsComputer {
+            return (whiteWon == humanIsWhite) ? "You win!\(tag)" : "Computer wins\(tag)."
+        }
+        return (whiteWon ? "White wins\(tag)" : "Black wins\(tag)")
+    }
+
+    func backToSetup() { phase = .setup }
 }

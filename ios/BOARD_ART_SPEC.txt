@@ -1,0 +1,58 @@
+NARDI BOARD / PIECE ART SPECIFICATION
+=====================================
+
+This describes what the iOS app expects of the board and checker images so you
+can later drop in hand-drawn board(s) and pieces. The placement math lives in
+ios/Nardi/Sources/BoardGeometry.swift; the constants below mirror the desktop
+SFML renderer (CoreEngine/SFMLRW.cpp).
+
+CURRENT ASSETS (in images/, shared with the SFML desktop build)
+---------------------------------------------------------------
+  BoardImg.jpg    1079 x 953 px   aspect (w/h) ~= 1.132
+  WhitePiece.png  1024 x 1024 px  (square; transparent background)
+  BlackPiece.png  1024 x 1024 px  (square; transparent background)
+
+To swap art: replace these files (or add new ones and update the resource
+references in ios/project.yml + the image names in BoardGeometry/BoardView).
+
+BOARD LAYOUT
+------------
+24 points = 2 rows x 12 columns. The image is shown aspect-fit; the *playable*
+region is an inset rectangle inside the image, split into two 6-column halves
+separated by a center bar. Default inset fractions (of the displayed image),
+tunable in BoardGeometry.swift:
+
+  borderPadXFrac = 0.140   left/right border (wood frame)
+  borderPadYFrac = 0.050   top/bottom border
+  centerGapFrac  = 0.070   width of the center bar between the two halves
+
+So: innerWidth  = imgW * (1 - 2*0.14 - 0.07);  each half = innerWidth / 2
+    innerHeight = imgH * (1 - 2*0.05);          each row  = innerHeight / 2
+
+A point cell = (halfWidth / 6) wide by (innerHeight / 2) tall.
+
+COORDINATE CONVENTION (engine <-> screen)
+-----------------------------------------
+Engine board is BoardConfig[row][col], row in {0,1}, col in 0..11. White
+checkers are positive, black negative. col 0 is each player's HEAD.
+
+  row 0 = WHITE's row, drawn along the TOP. Columns are REVERSED:
+          engine col 0 -> rightmost, engine col 11 -> leftmost.
+          (visualCol = 11 - col)
+  row 1 = BLACK's row, drawn along the BOTTOM, columns left->right
+          (visualCol = col).
+
+Halves: visualCol 0..5 = left half, 6..11 = right half.
+
+IMPORTANT: the board art should be ~180-degree rotationally symmetric, because
+"pass and play" (two humans) rotates the *piece placement* 180 degrees each turn
+(so the active player's home is at the bottom) while keeping the art static.
+A standard alternating-point backgammon board satisfies this. No inversion is
+applied when playing against the computer.
+
+CHECKERS
+--------
+Drawn centered in the point cell, diameter ~= 0.85 * min(cellW, cellH * 0.4-ish);
+stacked toward the near edge (top row stacks downward, bottom row upward). Up to
+5 are shown; a stack larger than 5 shows the count as text on the base checker.
+Borne-off counts are derived as 15 - (checkers still on board) per color.
