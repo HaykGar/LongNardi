@@ -180,6 +180,14 @@ class Simulator:
             self.advance_turn()
             return
 
+        # Forced move: a single legal board, so skip the one-ply search and just
+        # play it (this is move SELECTION; the TD trainer keeps its full search
+        # because it needs the lookahead value as a bootstrap target).
+        if options is not None and len(options) == 1:
+            self.eng.apply_greedy_board(np.zeros(1, dtype=np.float32))
+            self.advance_turn()
+            return
+
         batch = self.eng.make_lookahead_batch()
         if batch.num_children == 0:
             self.advance_turn()

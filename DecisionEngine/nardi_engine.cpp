@@ -373,9 +373,21 @@ int NardiEngine::lookahead_choice(const TargetModel& net)
 
 void NardiEngine::apply_lookahead_with(const TargetModel& net)
 {
+    // Forced move: with a single legal end-board there is nothing to choose, so
+    // skip the (expensive) one-ply search entirely and just play it.
+    const auto children = enumerate(Nardi::status_codes::SUCCESS);
+    if(children.empty())
+        return; // no legal move; the turn passes
+    if(children.size() == 1)
+    {
+        const Nardi::BoardConfig board = children.front().raw_data;
+        apply_board(board);
+        return;
+    }
+
     const int idx = lookahead_choice(net);
     if(idx < 0)
-        return; // no legal move; turn already has no children to play
+        return;
     const Nardi::BoardConfig board =
         _last_lookahead_batch->children.at(static_cast<size_t>(idx)).board;
     apply_board(board);
@@ -447,6 +459,16 @@ StepResult NardiEngine::advance()
         // everyone -- bot or human -- and advance to the next player.
         confirm_turn();
         return StepResult::TurnPassed;
+    }
+
+    if(_last_children.size() == 1)
+    {
+        // Forced move: a single legal end-board. Auto-play it for everyone
+        // (human or bot) -- no decision to make, so skip any search/selection.
+        // The UI still animates it. apply_board auto-confirms / advances.
+        const Nardi::BoardConfig board = _last_children.front().raw_data;
+        apply_board(board);
+        return StepResult::BotMoved;
     }
 
     if(strat == Strategy::Human)
@@ -811,6 +833,13 @@ void NardiEngine::mcts_apply_move(
     const auto legal_boards = legal_boards_for_current_dice(_builder);
     if(legal_boards.empty())
         throw std::runtime_error("mcts_apply_move called with no legal moves.");
+
+    if(legal_boards.size() == 1)
+    {
+        // Forced move: skip the MCTS search and just play the only legal board.
+        apply_board(legal_boards.front());
+        return;
+    }
 
     MCTSTree tree(_builder.GetGame().GetBoardData(), current_player());
     tree.c_uct = c_uct;
