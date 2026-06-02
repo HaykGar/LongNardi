@@ -236,6 +236,27 @@ NardiStatus nardi_confirm_turn(NardiHandle* h)
     NARDI_GUARD(h, NARDI_ERR, { h->engine.confirm_turn(); return NARDI_OK; });
 }
 
+int nardi_move_count(NardiHandle* h)
+{
+    NARDI_GUARD(h, -1, { return static_cast<int>(h->engine.recent_moves().size()); });
+}
+
+NardiStatus nardi_get_move(NardiHandle* h, int idx, int out_move[4])
+{
+    NARDI_GUARD(h, NARDI_ERR, {
+        if(out_move == nullptr) { h->last_error = "nardi_get_move: null out"; return NARDI_ERR; }
+        const auto moves = h->engine.recent_moves();
+        if(idx < 0 || static_cast<size_t>(idx) >= moves.size())
+        {
+            h->last_error = "nardi_get_move: index out of range";
+            return NARDI_ERR;
+        }
+        for(int k = 0; k < 4; ++k)
+            out_move[k] = moves[static_cast<size_t>(idx)][static_cast<size_t>(k)];
+        return NARDI_OK;
+    });
+}
+
 const char* nardi_last_error(NardiHandle* h)
 {
     if(h == nullptr)

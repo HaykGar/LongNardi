@@ -70,6 +70,15 @@ class Game
         using RemoveData = StartAndDice;
         using EventData = std::variant<std::monostate, MoveData, RemoveData, DieType>;
 
+        // One applied sub-move, recorded for headless animation (no view attached).
+        // `from`/`to` out-of-bounds means off-board: to invalid => borne off,
+        // from invalid => returned from off (undo of a bear-off).
+        struct LoggedMove
+        {
+            Coord from;
+            Coord to;
+        };
+
         enum class EventCode {
             DICE_ROLL,
             MOVE,
@@ -121,6 +130,13 @@ class Game
         const ReaderWriter* GetConstRW() const;
 
         Snapshot GetSnapshot() const;
+
+        // Per-sub-move recording, for animating moves headlessly (no ReaderWriter).
+        // Enable around a real move; the log then holds that move's sub-moves in
+        // application order (e.g. a checker played with both dice logs two hops).
+        void StartRecording();   // clear + enable
+        void StopRecording();    // disable (keeps the log for reading)
+        const std::vector<LoggedMove>& MoveLog() const;
 
         // Friend class for testing
         friend class ScenarioBuilder;
@@ -248,6 +264,9 @@ class Game
         ReaderWriter* rw;
         Arbiter arbiter;
         LegalSeqComputer legal_turns;
+
+        mutable std::vector<LoggedMove> _move_log;  // appended by EmitEvent when recording
+        bool _recording = false;
 
 
         // Getters

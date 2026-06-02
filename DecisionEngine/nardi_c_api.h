@@ -110,6 +110,14 @@ int nardi_turn_in_progress(NardiHandle* h);          /* 1/0; -1 on error */
 int nardi_turn_is_complete(NardiHandle* h);          /* 1/0; -1 on error */
 NardiStatus nardi_confirm_turn(NardiHandle* h);
 
+/* Sub-moves applied by the last move command (a bot/forced turn can be several),
+ * in application order, so the UI can animate each separately. nardi_move_count
+ * returns the count; nardi_get_move writes {fromRow,fromCol,toRow,toCol} into
+ * out_move (a value of -1 means off-board: a bear-off has to=-1,-1; an undone
+ * bear-off has from=-1,-1). */
+int nardi_move_count(NardiHandle* h);                       /* >=0; -1 on error */
+NardiStatus nardi_get_move(NardiHandle* h, int idx, int out_move[4]);
+
 /* Most recent error message for this handle (never NULL; "" if none). */
 const char* nardi_last_error(NardiHandle* h);
 

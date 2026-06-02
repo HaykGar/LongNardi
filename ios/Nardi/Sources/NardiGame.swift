@@ -128,7 +128,7 @@ final class NardiGame: ObservableObject {
         }
         selected = nil   // hide highlight while the checker slides
         Task { @MainActor in
-            await animateTransition()
+            await animateMoves()
             // A move that ends the game finalizes immediately (no confirm needed).
             if nardi_is_terminal(handle) == 1 {
                 phase = .gameOver(message: outcomeMessage())
@@ -155,7 +155,7 @@ final class NardiGame: ObservableObject {
         nardi_human_undo(handle)
         selected = nil
         Task { @MainActor in
-            await animateTransition()   // slide the checker back
+            await animateMoves()   // slide the checker back
             updateSelection()
             updateConfirmState()
         }
@@ -174,13 +174,13 @@ final class NardiGame: ObservableObject {
             while true {
                 let step = nardi_advance(handle)
                 refreshMeta()
+                // Only a BotMoved step applied a move (and recorded sub-moves); the
+                // other steps just rolled / passed / ended, so nothing to animate.
                 switch step {
                 case NARDI_STEP_GAME_OVER:
-                    await animateTransition()
                     phase = .gameOver(message: outcomeMessage())
                     return
                 case NARDI_STEP_AWAITING_HUMAN:
-                    await animateTransition()   // animate any forced move that preceded
                     beginHumanTurn()
                     return
                 case NARDI_STEP_ERROR:
@@ -191,7 +191,7 @@ final class NardiGame: ObservableObject {
                     try? await Task.sleep(nanoseconds: 400_000_000)
                 default:                       // BotMoved (bot or forced auto-play)
                     status = "Opponent played \(dice.0)-\(dice.1)…"
-                    await animateTransition()   // slide the checker(s)
+                    await animateMoves()       // slide each sub-move in sequence
                     try? await Task.sleep(nanoseconds: 200_000_000)
                 }
             }
@@ -236,59 +236,55 @@ final class NardiGame: ObservableObject {
         blackOff = 15 - eb.reduce(0) { $0 + max(0, -Int($1)) }
     }
 
-    /// Animate the board from its current displayed state to the engine's state by
-    /// sliding the moved checker(s). nardi has no hitting, so only the mover's
-    /// checkers change between two states.
-    private func animateTransition() async {
-        refreshMeta()
-        let old = board
-        let new = engineBoard()
-        guard old != new else { return }
-        let fs = computeFlights(old: old, new: new)
-        guard !fs.isEmpty else { board = new; return }
-
-        // Show sources already decremented; the flying checkers carry them across.
-        var mid = old
-        for f in fs {
-            if let (r, c) = f.from {
-                let i = r * Self.cols + c
-                if mid[i] > 0 { mid[i] -= 1 } else if mid[i] < 0 { mid[i] += 1 }
+    /// Read the sub-moves applied by the last move command, in order.
+    private func recentMoves() -> [(from: (Int, Int)?, to: (Int, Int)?)] {
+        let n = Int(nardi_move_count(handle))
+        var out: [(from: (Int, Int)?, to: (Int, Int)?)] = []
+        for i in 0..<max(0, n) {
+            var a = [Int32](repeating: -1, count: 4)
+            if nardi_get_move(handle, Int32(i), &a) == NARDI_OK {
+                let from = a[0] >= 0 ? (Int(a[0]), Int(a[1])) : nil
+                let to = a[2] >= 0 ? (Int(a[2]), Int(a[3])) : nil
+                out.append((from, to))
             }
         }
-        board = mid
-        flights = fs
-        isAnimating = true
-        animProgress = 0
-        withAnimation(.easeOut(duration: animDuration)) { animProgress = 1 }
-        try? await Task.sleep(nanoseconds: UInt64(animDuration * 1_000_000_000))
-        flights = []
-        animProgress = 0
-        isAnimating = false
-        board = new
+        return out
     }
 
-    private func computeFlights(old: [Int8], new: [Int8]) -> [Flight] {
-        var deps: [(Int, Int)] = []   // cells losing checkers (one entry per checker)
-        var arrs: [(Int, Int)] = []
-        var white = true
-        for i in 0..<Self.cells {
-            let o = Int(old[i]); let n = Int(new[i])
-            if o == n { continue }
-            white = (o != 0) ? (o > 0) : (n > 0)
-            let r = i / Self.cols, c = i % Self.cols
-            let delta = abs(n) - abs(o)
-            if delta < 0 { for _ in 0..<(-delta) { deps.append((r, c)) } }
-            else { for _ in 0..<delta { arrs.append((r, c)) } }
+    /// Animate each sub-move of the last command separately, one finishing before
+    /// the next starts (a checker played with both dice slides in two hops). The
+    /// displayed board is advanced sub-move by sub-move so the animation matches
+    /// the engine's true sequence (including intermediate landings / bear-offs).
+    private func animateMoves() async {
+        refreshMeta()
+        let moves = recentMoves()
+        guard !moves.isEmpty else { board = engineBoard(); return }
+
+        // One mover per turn (nardi has no hitting). Take its sign from the first
+        // source cell on the displayed board.
+        var moverSign: Int8 = 0
+        for m in moves {
+            if let (r, c) = m.from { let v = board[r * Self.cols + c]; if v != 0 { moverSign = v > 0 ? 1 : -1; break } }
         }
-        // Pair sorted by column (then row) so slides read as forward motion.
-        let key: ((Int, Int)) -> (Int, Int) = { ($0.1, $0.0) }
-        deps.sort { key($0) < key($1) }
-        arrs.sort { key($0) < key($1) }
-        var fs: [Flight] = []
-        let paired = min(deps.count, arrs.count)
-        for k in 0..<paired { fs.append(Flight(from: deps[k], to: arrs[k], white: white)) }
-        for k in paired..<deps.count { fs.append(Flight(from: deps[k], to: nil, white: white)) }  // borne off
-        return fs
+        if moverSign == 0 { moverSign = (nardi_sign(handle) >= 0) ? 1 : -1 }   // e.g. undone bear-off
+
+        isAnimating = true
+        var disp = board
+        for m in moves {
+            if let (r, c) = m.from { disp[r * Self.cols + c] -= moverSign }   // lift off source
+            board = disp
+            flights = [Flight(from: m.from, to: m.to, white: moverSign > 0)]
+            animProgress = 0
+            withAnimation(.easeOut(duration: animDuration)) { animProgress = 1 }
+            try? await Task.sleep(nanoseconds: UInt64(animDuration * 1_000_000_000))
+            if let (r, c) = m.to { disp[r * Self.cols + c] += moverSign }      // land on dest
+            flights = []
+            animProgress = 0
+            board = disp
+            try? await Task.sleep(nanoseconds: 70_000_000)                     // brief gap between hops
+        }
+        isAnimating = false
+        board = engineBoard()   // safety sync
     }
 
     private func updateSelection() {

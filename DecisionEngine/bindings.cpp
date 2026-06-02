@@ -227,6 +227,9 @@ forced pass (TurnPassed), or report the game is over (GameOver).)")
         .def("confirm_turn",          &NardiEngine::confirm_turn,
              R"(Confirm the end of the current turn and advance to the next player
 (no-op unless the turn is complete). Bots/whole-board moves confirm automatically.)")
+        .def("recent_moves",          &NardiEngine::recent_moves,
+             R"(Sub-moves of the last move command as [fromRow,fromCol,toRow,toCol]
+lists, in order; -1 marks off-board (bear-off / replace).)")
         .def("status_report",       &NardiEngine::status_report)
         .def("status_str",          &NardiEngine::status_str)
         .def("is_terminal",         &NardiEngine::is_terminal)

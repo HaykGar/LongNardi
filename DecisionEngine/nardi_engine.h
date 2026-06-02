@@ -148,6 +148,11 @@ public:
     bool turn_is_complete() const;         // no legal moves left, awaiting confirm
     void confirm_turn();                   // advance to next player (if turn complete)
 
+    // Sub-moves applied by the last move command (apply_board / human_move_die /
+    // human_undo), in order, as {fromRow, fromCol, toRow, toCol}; -1 = off-board.
+    // Lets the UI animate each sub-move separately (a forced/bot turn can be many).
+    std::vector<std::array<int, 4>> recent_moves() const;
+
     void human_turn(bool dice_rolled = false);
     void restart_or_quit();
     bool is_terminal() const;

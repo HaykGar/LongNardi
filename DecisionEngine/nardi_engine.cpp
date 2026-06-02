@@ -99,7 +99,10 @@ std::vector<Nardi::Board::Features> NardiEngine::set_and_enumerate(int d1, int d
 
 void NardiEngine::apply_board(const Nardi::BoardConfig& brd)
 {
+    // Record the individual sub-moves (for the UI to animate each separately).
+    _builder.GetGame().StartRecording();
     auto status = _builder.ReceiveCommand(Nardi::Command(brd));
+    _builder.GetGame().StopRecording();
     if(status != Nardi::status_codes::NO_LEGAL_MOVES_LEFT)
     {
         Nardi::DispErrorCode(status);
@@ -528,7 +531,9 @@ bool NardiEngine::human_select(int row, int col)
 
 bool NardiEngine::human_move_die(int die_idx)
 {
+    _builder.GetGame().StartRecording();
     const auto status = _builder.ReceiveCommand(Nardi::Command(static_cast<bool>(die_idx)));
+    _builder.GetGame().StopRecording();
     // SUCCESS: moved, turn continues (dest auto-selected). NO_LEGAL_MOVES_LEFT:
     // moved and that completed the turn (controller switched players).
     return status == Nardi::status_codes::SUCCESS
@@ -537,8 +542,20 @@ bool NardiEngine::human_move_die(int die_idx)
 
 bool NardiEngine::human_undo()
 {
-    return _builder.ReceiveCommand(Nardi::Command(Nardi::Actions::UNDO))
-        == Nardi::status_codes::SUCCESS;
+    _builder.GetGame().StartRecording();
+    const auto status = _builder.ReceiveCommand(Nardi::Command(Nardi::Actions::UNDO));
+    _builder.GetGame().StopRecording();
+    return status == Nardi::status_codes::SUCCESS;
+}
+
+std::vector<std::array<int, 4>> NardiEngine::recent_moves() const
+{
+    // Sub-moves of the last recorded command, in application order, as
+    // {fromRow, fromCol, toRow, toCol}; -1 marks off-board (bear-off / replace).
+    std::vector<std::array<int, 4>> out;
+    for(const auto& m : _builder.GetGame().MoveLog())
+        out.push_back({m.from.row, m.from.col, m.to.row, m.to.col});
+    return out;
 }
 
 bool NardiEngine::can_use_die(int die_idx)

@@ -420,8 +420,51 @@ void Game::IncrementTurnNumber()
 
 void Game::EmitEvent(const Event& e) const
 {
+    if(_recording)
+    {
+        switch(e.code)
+        {
+        case EventCode::MOVE:
+        {
+            const auto& md = std::get<MoveData>(e.data);
+            _move_log.push_back({md.from, md.to});
+            break;
+        }
+        case EventCode::REMOVE:   // borne off: destination is off-board
+        {
+            const auto& rd = std::get<RemoveData>(e.data);
+            _move_log.push_back({rd._from, Coord{}});
+            break;
+        }
+        case EventCode::REPLACE:  // undo of a bear-off: checker returns from off
+        {
+            const auto& rd = std::get<RemoveData>(e.data);
+            _move_log.push_back({Coord{}, rd._from});
+            break;
+        }
+        default:
+            break;
+        }
+    }
+
     if(rw)
         rw->ReceiveGameEvent(e);
+}
+
+void Game::StartRecording()
+{
+    _recording = true;
+    _move_log.clear();
+}
+
+void Game::StopRecording()
+{
+    _recording = false;
+}
+
+const std::vector<Game::LoggedMove>& Game::MoveLog() const
+{
+    return _move_log;
 }
 
 /////////////////////////////

@@ -104,29 +104,32 @@ struct BoardView: View {
     }
 
     // Checkers sliding during a move, interpolated by game.animProgress (0->1).
+    // A bear-off (to == nil) slides off-board and fades out; an undone bear-off
+    // (from == nil) slides in from off-board and fades in.
     @ViewBuilder
     private func flightsLayer(geom: BoardGeometry) -> some View {
         let p = game.animProgress
         ForEach(game.flights) { f in
-            if let from = f.from {
-                let a = anchor(geom, from.0, from.1)
+            let aFrom = f.from.map { anchor(geom, $0.0, $0.1) }
+            let aTo = f.to.map { anchor(geom, $0.0, $0.1) }
+            if let known = aFrom ?? aTo {
+                let d = known.d
+                let off = CGPoint(x: known.pt.x, y: known.pt.y + (known.down ? -d * 2.2 : d * 2.2))
+                let start = aFrom?.pt ?? off
+                let end = aTo?.pt ?? off
+                let pos = CGPoint(x: start.x + (end.x - start.x) * p,
+                                  y: start.y + (end.y - start.y) * p)
+                let opacity: Double = f.to == nil ? Double(1 - p) : (f.from == nil ? Double(p) : 1)
                 let img = f.white ? Self.whitePiece : Self.blackPiece
-                // Destination point: an arrival cell, or off-board for a bear-off.
-                let dest: CGPoint = {
-                    if let to = f.to { return anchor(geom, to.0, to.1).pt }
-                    return CGPoint(x: a.pt.x, y: a.pt.y + (a.down ? -a.d * 2.2 : a.d * 2.2))
-                }()
-                let pos = CGPoint(x: a.pt.x + (dest.x - a.pt.x) * p,
-                                  y: a.pt.y + (dest.y - a.pt.y) * p)
                 Group {
                     if let img {
-                        Image(uiImage: img).resizable().frame(width: a.d, height: a.d)
+                        Image(uiImage: img).resizable().frame(width: d, height: d)
                     } else {
                         Circle().fill(f.white ? Color.white : Color.black)
-                            .overlay(Circle().stroke(Color.gray)).frame(width: a.d, height: a.d)
+                            .overlay(Circle().stroke(Color.gray)).frame(width: d, height: d)
                     }
                 }
-                .opacity(f.to == nil ? Double(1 - p) : 1)   // fade out a borne-off checker
+                .opacity(opacity)
                 .position(pos)
             }
         }
