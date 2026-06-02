@@ -29,6 +29,7 @@ struct BoardView: View {
                         .position(x: rect.midX, y: rect.midY)
                 }
                 checkers(geom: geom)
+                flightsLayer(geom: geom)
                 selectionHighlight(geom: geom)
                 if ProcessInfo.processInfo.arguments.contains("--grid") { debugGrid(geom: geom) }
             }
@@ -90,6 +91,44 @@ struct BoardView: View {
                 }
             }
             .position(x: cell.midX, y: y)
+        }
+    }
+
+    // The point where checker index 0 sits in a cell (stack base), plus its size.
+    private func anchor(_ geom: BoardGeometry, _ row: Int, _ col: Int) -> (pt: CGPoint, d: CGFloat, down: Bool) {
+        let cell = geom.cellRect(row: row, col: col, flipped: game.flipped)
+        let d = min(cell.width * 0.86, cell.height * 0.42)
+        let down = geom.stacksDownward(row: row, col: col, flipped: game.flipped)
+        let y = down ? cell.minY + d / 2 + 2 : cell.maxY - d / 2 - 2
+        return (CGPoint(x: cell.midX, y: y), d, down)
+    }
+
+    // Checkers sliding during a move, interpolated by game.animProgress (0->1).
+    @ViewBuilder
+    private func flightsLayer(geom: BoardGeometry) -> some View {
+        let p = game.animProgress
+        ForEach(game.flights) { f in
+            if let from = f.from {
+                let a = anchor(geom, from.0, from.1)
+                let img = f.white ? Self.whitePiece : Self.blackPiece
+                // Destination point: an arrival cell, or off-board for a bear-off.
+                let dest: CGPoint = {
+                    if let to = f.to { return anchor(geom, to.0, to.1).pt }
+                    return CGPoint(x: a.pt.x, y: a.pt.y + (a.down ? -a.d * 2.2 : a.d * 2.2))
+                }()
+                let pos = CGPoint(x: a.pt.x + (dest.x - a.pt.x) * p,
+                                  y: a.pt.y + (dest.y - a.pt.y) * p)
+                Group {
+                    if let img {
+                        Image(uiImage: img).resizable().frame(width: a.d, height: a.d)
+                    } else {
+                        Circle().fill(f.white ? Color.white : Color.black)
+                            .overlay(Circle().stroke(Color.gray)).frame(width: a.d, height: a.d)
+                    }
+                }
+                .opacity(f.to == nil ? Double(1 - p) : 1)   // fade out a borne-off checker
+                .position(pos)
+            }
         }
     }
 
