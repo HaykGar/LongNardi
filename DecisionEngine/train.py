@@ -496,7 +496,13 @@ class TDTrainer:
             
             self.eval_traces.append(evals)
             if self.weights_file is not None:
-                torch.save(self.model.state_dict(), self.weights_file)    # save weights to file after each stage
+                # Save each stage as its own checkpoint in the same parent dir,
+                # e.g. weights/filenam.pt -> weights/chkpt{stage}filenam.pt,
+                # instead of overwriting the original weights file.
+                parent = os.path.dirname(self.weights_file)
+                base = os.path.basename(self.weights_file)
+                chkpt_file = os.path.join(parent, f"chkpt{stage}{base}")
+                torch.save(self.model.state_dict(), chkpt_file)    # save weights to file after each stage
 
             self.after_stage(stage)
             ################################ end stage report + actions ################################
@@ -673,7 +679,14 @@ if __name__ == "__main__":
         action='store_true',
         help='Optional flag to enable training only in endgame scenarios'
     )
-    
+
+    parser.add_argument(
+        "--baseline-res",
+        action='store_true',
+        help="Benchmark against weights/res2.pt (a ResNardiNet) playing greedily, "
+             "instead of the default heuristic baseline."
+    )
+
     args = parser.parse_args()
     
     if args.architecture == "Conv":
@@ -683,7 +696,17 @@ if __name__ == "__main__":
     elif args.architecture == "ResNet":
         model = nardi_net.ResNardiNet()
 
+    # Default baseline: no model, heuristic play. With --baseline-res, benchmark
+    # against weights/res2.pt (a ResNardiNet) playing greedily.
+    baseline_args = (None, "heuristic")
+    if args.baseline_res:
+        baseline_model = nardi_net.ResNardiNet()
+        baseline_model.load_state_dict(torch.load("weights/res2.pt"))
+        baseline_model.eval()
+        baseline_args = (baseline_model, "greedy")
+
     trainer_cls = LookaheadTDTrainer if args.lookahead else TDTrainer
     trainer = trainer_cls(model, weights_file=args.file, output_dir=args.directory,
-                          endgame_finetune=args.endgame, num_envs=args.envs)
+                          endgame_finetune=args.endgame, num_envs=args.envs,
+                          baseline_args=baseline_args)
     trainer.train(n_stages=args.stages, games_per_stage=args.games)
