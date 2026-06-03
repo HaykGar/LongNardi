@@ -14,6 +14,9 @@ ext = Extension(
         "binding_utils.cpp",
         "lookahead_batch.cpp",
         "mcts_node.cpp",
+        "nardi_c_api.cpp",    # plain-C API symbols (for tests/test_c_api.py via ctypes)
+        "nardi_core.cpp",     # hand-rolled net (for the test_infer_parity binding)
+        "nardi_infer.cpp",
         "nardi_engine.cpp",
         "python_views.cpp",
         "scenario_config.cpp",
@@ -44,6 +47,10 @@ ext = Extension(
         "sfml-system",
         *torch_libraries,
     ],
+    # NARDI_ENABLE_TORCH -> target_model.cpp uses the LibTorch backend (the iOS
+    # build omits it for the hand-rolled net). NARDI_ENABLE_SFML -> the SFML
+    # desktop view path compiles (iOS leaves it out).
+    define_macros=[("NARDI_ENABLE_TORCH", None), ("NARDI_ENABLE_SFML", None)],
     language="c++",
     extra_compile_args=["-std=c++23", "-mmacosx-version-min=10.15"],
     extra_link_args=[

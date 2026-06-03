@@ -22,6 +22,13 @@ class Controller
         bool StartIsSelected() const;
         const Coord& GetStart() const;
 
+        // True once the current turn has no legal moves left (dice used up or
+        // blocked) but has NOT yet been confirmed. The turn advances to the next
+        // player only on a CONFIRM_TURN_OVER command, so a human can undo their
+        // moves until they confirm. A game-ending move finalizes immediately and
+        // never enters this state.
+        bool TurnIsComplete() const;
+
         void SwitchTurns();
         void OnTurnSwitch();
 
@@ -40,6 +47,7 @@ class Controller
         bool quit_requested;
         bool restart_requested;
         bool sim_mode;
+        bool turn_complete;   // turn has no legal moves left, awaiting CONFIRM_TURN_OVER
 };
 
 
@@ -58,6 +66,10 @@ bool Controller::RestartRequested() const
 inline
 bool Controller::AwaitingRoll() const
 { return !dice_rolled; }
+
+inline
+bool Controller::TurnIsComplete() const
+{ return turn_complete; }
 
 inline bool Controller::StartIsSelected() const
 { return start_selected; }

@@ -1,0 +1,65 @@
+NARDI BOARD / PIECE ART SPECIFICATION
+=====================================
+
+This describes what the iOS app expects of the board and checker images so you
+can later drop in hand-drawn board(s) and pieces. The placement math lives in
+ios/Nardi/Sources/BoardGeometry.swift; the constants below mirror the desktop
+SFML renderer (CoreEngine/SFMLRW.cpp).
+
+CURRENT ASSETS (in images/, shared with the SFML desktop build)
+---------------------------------------------------------------
+  BoardImg.jpg    1079 x 953 px   aspect (w/h) ~= 1.132
+  WhitePiece.png  1024 x 1024 px  (square; transparent background)
+  BlackPiece.png  1024 x 1024 px  (square; transparent background)
+
+To swap art: replace these files (or add new ones and update the resource
+references in ios/project.yml + the image names in BoardGeometry/BoardView).
+
+BOARD LAYOUT
+------------
+24 points = 2 rows x 12 columns, two 6-column halves per row. BoardImg.jpg is
+drawn in slight PERSPECTIVE (a shallow trapezoid): the bottom points are spread a
+little wider than the top, and the top/bottom borders differ. So instead of one
+rectangular grid, point positions are anchored PER (row, half) by the center
+fractions of the first and last point in that half, with separate top/bottom
+vertical insets. All constants live in BoardGeometry.swift and were measured from
+BoardImg.jpg by detecting the cream points:
+
+  horizontal anchors (col0 center, col5 center) as fraction of board width:
+    top-left  = (0.0839, 0.4189)   top-right  = (0.5816, 0.9161)
+    bot-left  = (0.0769, 0.4194)   bot-right  = (0.5843, 0.9231)
+  vertical (point bases, fraction of board height):
+    padYTopFrac = 0.092            padYBotFrac = 0.076
+
+The 6 columns in a half are evenly spaced between c0 and c5. A flat (non-
+perspective) board would simply set top == bottom anchors and equal pads.
+
+When swapping in new art, launch with the `--grid` argument
+(`xcrun simctl launch <udid> com.nardi.app --grid`) to overlay the cell grid in
+red and tune these anchors until each cell sits on a point.
+
+COORDINATE CONVENTION (engine <-> screen)
+-----------------------------------------
+Engine board is BoardConfig[row][col], row in {0,1}, col in 0..11. White
+checkers are positive, black negative. col 0 is each player's HEAD.
+
+  row 0 = WHITE's row, drawn along the TOP. Columns are REVERSED:
+          engine col 0 -> rightmost, engine col 11 -> leftmost.
+          (visualCol = 11 - col)
+  row 1 = BLACK's row, drawn along the BOTTOM, columns left->right
+          (visualCol = col).
+
+Halves: visualCol 0..5 = left half, 6..11 = right half.
+
+IMPORTANT: the board art should be ~180-degree rotationally symmetric, because
+"pass and play" (two humans) rotates the *piece placement* 180 degrees each turn
+(so the active player's home is at the bottom) while keeping the art static.
+A standard alternating-point backgammon board satisfies this. No inversion is
+applied when playing against the computer.
+
+CHECKERS
+--------
+Drawn centered in the point cell, diameter ~= 0.85 * min(cellW, cellH * 0.4-ish);
+stacked toward the near edge (top row stacks downward, bottom row upward). Up to
+5 are shown; a stack larger than 5 shows the count as text on the base checker.
+Borne-off counts are derived as 15 - (checkers still on board) per color.

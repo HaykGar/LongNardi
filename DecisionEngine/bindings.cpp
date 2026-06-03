@@ -7,6 +7,7 @@
 #include "binding_utils.h"
 #include "lookahead_batch.h"
 #include "nardi_engine.h"
+#include "nardi_infer.h"
 #include "python_views.h"
 #include "scenario_config.h"
 #include "../CoreEngine/Auxilaries.h"
@@ -14,9 +15,91 @@
 namespace py = pybind11;
 using namespace nardi_py;
 
+namespace
+{
+
+// Thin Python-facing wrapper around the hand-rolled C++ inference net. Used to
+// validate parity against the PyTorch models (see tests/test_infer_parity.py).
+class PyInferenceNet
+{
+public:
+    explicit PyInferenceNet(const std::string& path) : _net(load_inference_net(path)) {}
+
+    float evaluate(const Nardi::Board::Features& f) const { return _net->evaluate(f); }
+
+    std::vector<float> evaluate_batch(const std::vector<Nardi::Board::Features>& fs) const
+    {
+        return _net->evaluate_batch(fs);
+    }
+
+private:
+    std::unique_ptr<InferenceNet> _net;
+};
+
+using FloatArray = py::array_t<float, py::array::c_style | py::array::forcecast>;
+
+// Parse a 1D float numpy array into a std::vector (the engine/batch validate the
+// length against their own expectations).
+std::vector<float> to_float_vector(const FloatArray& values)
+{
+    if(values.ndim() != 1)
+        throw std::runtime_error("Expected a 1D float array.");
+    auto buf = values.unchecked<1>();
+    std::vector<float> out(static_cast<size_t>(values.shape(0)));
+    for(py::ssize_t i = 0; i < values.shape(0); ++i)
+        out[static_cast<size_t>(i)] = buf(i);
+    return out;
+}
+
+// numpy [2,12] int8 board -> BoardConfig.
+Nardi::BoardConfig array_to_board(
+    py::array_t<int8_t, py::array::c_style | py::array::forcecast> board)
+{
+    if(board.ndim() != 2 || board.shape(0) != Nardi::ROWS || board.shape(1) != Nardi::COLS)
+        throw std::runtime_error("BoardConfig must be shape (2, 12)");
+    Nardi::BoardConfig cfg;
+    auto buf = board.unchecked<2>();
+    for(size_t r = 0; r < Nardi::ROWS; ++r)
+        for(size_t c = 0; c < Nardi::COLS; ++c)
+            cfg[r][c] = buf(r, c);
+    return cfg;
+}
+
+py::array_t<float> lb_child_values(const LookaheadBatch& b, const FloatArray& values)
+{
+    const std::vector<float> cv = b.child_values_vec(to_float_vector(values));
+    py::array_t<float> arr(static_cast<py::ssize_t>(cv.size()));
+    auto buf = arr.mutable_unchecked<1>();
+    for(size_t i = 0; i < cv.size(); ++i)
+        buf(static_cast<py::ssize_t>(i)) = cv[i];
+    return arr;
+}
+
+int lb_best_index(const LookaheadBatch& b, const FloatArray& values)
+{
+    return b.best_index_values(to_float_vector(values));
+}
+
+py::array_t<int8_t> lb_best_board(const LookaheadBatch& b, const FloatArray& values)
+{
+    return board_to_array(b.children.at(static_cast<size_t>(
+        b.best_index_values(to_float_vector(values)))).board);
+}
+
+} // namespace
+
 PYBIND11_MODULE(nardi, m)
 {
     m.doc() = "Py bindings for Nardi C++ engine (Python owns the loop) and scenario config object for easier manipulation";
+
+    // Which inference backend this build's TargetModel uses: True = LibTorch
+    // (load_target_network expects a TorchScript blob), False = hand-rolled net
+    // (expects a .nardiw blob). nardi_net.export_for_engine reads this.
+#ifdef NARDI_ENABLE_TORCH
+    m.attr("USES_TORCH") = true;
+#else
+    m.attr("USES_TORCH") = false;
+#endif
 
     m.def("features_to_tensor",     &features_to_tensor,
           py::arg("features"),
@@ -58,7 +141,16 @@ PYBIND11_MODULE(nardi, m)
         .def("player_turn_num",     &NardiEngine::player_turn_num,
              py::arg("player"),
              R"(Return completed turns for one player.)")
-        .def("dice",                &NardiEngine::dice,
+        .def("dice",
+             [](const NardiEngine& eng)
+             {
+                 const auto d = eng.dice_values();
+                 py::array_t<uint8_t> arr(py::ssize_t(2));
+                 auto buf = arr.mutable_unchecked<1>();
+                 buf(0) = static_cast<uint8_t>(d[0]);
+                 buf(1) = static_cast<uint8_t>(d[1]);
+                 return arr;
+             },
              R"(Return 1x2 uint8 dice values.)")
         .def("dice_as_idx",         &NardiEngine::dice_as_idx,
              R"(Get dice pair as a flattened idx corresponding to DICE_COMBOS)")
@@ -79,21 +171,74 @@ PYBIND11_MODULE(nardi, m)
                  return eng.MakeLookaheadBatch();
              },
              R"(Build a batched one-ply lookahead frontier for model evaluation.)")
-        .def("apply_best_lookahead",&NardiEngine::apply_best_lookahead,
+        .def("apply_best_lookahead",
+             [](NardiEngine& eng, const FloatArray& values)
+             { eng.apply_best_lookahead(to_float_vector(values)); },
              py::arg("values"),
              R"(Apply the best child from the last lookahead batch.)")
-        .def("apply_noisy_board",   &NardiEngine::apply_noisy_board,
+        .def("apply_noisy_board",
+             [](NardiEngine& eng, const FloatArray& values, float eps, float temperature)
+             { eng.apply_noisy_board(to_float_vector(values), eps, temperature); },
              py::arg("values"),
              py::arg("eps"),
              py::arg("temperature"),
              R"(Sample and apply a cached child board using softmax(values / temperature) plus Dirichlet noise.)")
-        .def("apply_greedy_board",  &NardiEngine::apply_greedy_board,
+        .def("apply_greedy_board",
+             [](NardiEngine& eng, const FloatArray& values)
+             { eng.apply_greedy_board(to_float_vector(values)); },
              py::arg("values"),
              R"(Apply the highest-valued cached child board.)")
         .def("apply_random_board",  &NardiEngine::apply_random_board,
              R"(Apply a random cached child board.)")
         .def("apply_heuristic_board",&NardiEngine::apply_heuristic_board,
              R"(Apply the cached child board with highest current-player square occupancy.)")
+        .def("greedy_choice_target",  &NardiEngine::greedy_choice_target,
+             R"(Index into the cached children the greedy bot would play, evaluated by the
+loaded target network in C++ (no move applied).)")
+        .def("apply_greedy_target",   &NardiEngine::apply_greedy_target,
+             R"(Play the greedy bot's move using the loaded target network (C++ evaluation).)")
+        .def("lookahead_choice_target", &NardiEngine::lookahead_choice_target,
+             R"(Index into the lookahead batch's children the 1-ply bot would play, evaluated
+by the loaded target network in C++ (no move applied). Requires dice rolled.)")
+        .def("apply_lookahead_target",&NardiEngine::apply_lookahead_target,
+             R"(Play the 1-ply lookahead bot's move using the loaded target network (C++).)")
+        .def("configure_players",     &NardiEngine::configure_players,
+             py::arg("white"), py::arg("black"),
+             R"(Set the per-player move Strategy (white = player idx 0, black = idx 1).)")
+        .def("set_mcts_params",       &NardiEngine::set_mcts_params,
+             py::arg("n_sims"), py::arg("temperature") = 1.0f, py::arg("exploratory") = false,
+             py::arg("c_uct") = 0.1f, py::arg("dirichlet_eps") = 0.25f,
+             py::arg("dirichlet_alpha") = 0.3f, py::arg("rollouts_per_leaf") = 0,
+             R"(Configure MCTS search tunables used by the Mcts strategy in advance().)")
+        .def("advance",               &NardiEngine::advance,
+             R"(Advance the match one step: roll for the current player and either play a
+bot move (BotMoved), report a human move is awaited (AwaitingHuman), report a
+forced pass (TurnPassed), or report the game is over (GameOver).)")
+        .def("current_options",       &NardiEngine::current_options,
+             R"(The cached legal end-of-turn options (Features) for the current player.)")
+        .def("legal_move_count",      &NardiEngine::legal_move_count,
+             R"(Number of cached legal options for the current player.)")
+        .def("apply_human_move",      &NardiEngine::apply_human_move,
+             py::arg("idx"),
+             R"(Apply the human-chosen legal option by index into current_options().)")
+        .def("human_select",          &NardiEngine::human_select, py::arg("row"), py::arg("col"),
+             R"(Select a source point (engine coords) for an incremental human move.)")
+        .def("human_move_die",        &NardiEngine::human_move_die, py::arg("die_idx"),
+             R"(Move the selected piece by die 0/1; True if applied.)")
+        .def("human_undo",            &NardiEngine::human_undo,
+             R"(Undo the last sub-move in the current turn.)")
+        .def("can_use_die",           &NardiEngine::can_use_die, py::arg("die_idx"))
+        .def("start_is_selected",     &NardiEngine::start_is_selected)
+        .def("selected_start",        &NardiEngine::selected_start)
+        .def("turn_in_progress",      &NardiEngine::turn_in_progress)
+        .def("turn_is_complete",      &NardiEngine::turn_is_complete,
+             R"(True when the current turn has no legal moves left and awaits confirm_turn().)")
+        .def("confirm_turn",          &NardiEngine::confirm_turn,
+             R"(Confirm the end of the current turn and advance to the next player
+(no-op unless the turn is complete). Bots/whole-board moves confirm automatically.)")
+        .def("recent_moves",          &NardiEngine::recent_moves,
+             R"(Sub-moves of the last move command as [fromRow,fromCol,toRow,toCol]
+lists, in order; -1 marks off-board (bear-off / replace).)")
         .def("status_report",       &NardiEngine::status_report)
         .def("status_str",          &NardiEngine::status_str)
         .def("is_terminal",         &NardiEngine::is_terminal)
@@ -104,8 +249,22 @@ PYBIND11_MODULE(nardi, m)
         .def("quit_requested",      &NardiEngine::quit_requested)
         .def("load_target_network", &NardiEngine::load_target_network,
              py::arg("path"),
-             R"(Load a TorchScript value network for C++ MCTS self-play.)")
+             R"(Load a hand-rolled value-network weight blob for C++ MCTS self-play.)")
         .def("debug_target_eval", &NardiEngine::debug_target_eval)
+        .def("set_position",
+             [](NardiEngine& eng, py::array_t<int8_t, py::array::c_style | py::array::forcecast> board, bool side)
+             { eng.set_position(array_to_board(board), side); },
+             py::arg("board"), py::arg("side"),
+             R"(Analysis: set an arbitrary [2,12] int8 board with `side` to move (0 white, 1 black).)")
+        .def("evaluate_position", &NardiEngine::evaluate_position,
+             R"(Analysis: loaded value network's side-to-move value of the current board.)")
+        .def("analyze_dice", &NardiEngine::analyze_dice,
+             py::arg("d1"), py::arg("d2"),
+             R"(Analysis: rank legal moves for dice {d1,d2} by one-ply lookahead; returns
+[(end_board[2,12], value)] best-first, value in the side-to-move frame.)")
+        .def("apply_analyzed_move", &NardiEngine::apply_analyzed_move,
+             py::arg("idx"),
+             R"(Analysis: play ranked move idx from the last analyze_dice (switches side).)")
         .def("run_mcts_game",
              [](NardiEngine& eng, int n_sims, float temperature, int max_turns,
                 float c_uct, float dirichlet_eps, float dirichlet_alpha, int rollouts_per_leaf)
@@ -148,11 +307,10 @@ move (model-informed UCT); exploratory=True (train) samples Boltzmann+Dirichlet.
 
     py::class_<ScenarioConfig>(m, "ScenarioConfig")
         .def("withScenario",
-            static_cast<Nardi::status_codes (ScenarioConfig::*)(
-                bool,
-                py::array_t<int8_t, py::array::c_style | py::array::forcecast>,
-                int, int, int, int
-            )>(&ScenarioConfig::withScenario),
+            [](ScenarioConfig& cfg, bool p_idx,
+               py::array_t<int8_t, py::array::c_style | py::array::forcecast> board,
+               int d1, int d2, int d1u, int d2u)
+            { return cfg.withScenario(p_idx, array_to_board(board), d1, d2, d1u, d2u); },
             py::arg("p_idx"),
             py::arg("board"),
             py::arg("d1"),
@@ -166,6 +324,20 @@ move (model-informed UCT); exploratory=True (train) samples Boltzmann+Dirichlet.
              py::arg("d2_used") = 0)
         .def("withRandomEndgame",   &ScenarioConfig::withRandomEndgame,
              py::arg("p_idx") = false);
+
+    py::enum_<Strategy>(m, "Strategy")
+        .value("Human",     Strategy::Human)
+        .value("Greedy",    Strategy::Greedy)
+        .value("Lookahead", Strategy::Lookahead)
+        .value("Mcts",      Strategy::Mcts)
+        .value("Heuristic", Strategy::Heuristic)
+        .value("Random",    Strategy::Random);
+
+    py::enum_<StepResult>(m, "StepResult")
+        .value("GameOver",      StepResult::GameOver)
+        .value("AwaitingHuman", StepResult::AwaitingHuman)
+        .value("BotMoved",      StepResult::BotMoved)
+        .value("TurnPassed",    StepResult::TurnPassed);
 
     py::enum_<Nardi::status_codes>(m, "status_codes")
         .value("SUCCESS",               Nardi::status_codes::SUCCESS)
@@ -205,20 +377,34 @@ move (model-informed UCT); exploratory=True (train) samples Boltzmann+Dirichlet.
         .def_readonly("features",           &NardiEngine::Node::features)
         .def_readonly("children_by_dice",   &NardiEngine::Node::children_by_dice);
 
+    py::class_<PyInferenceNet>(m, "InferenceNet")
+        .def(py::init<const std::string&>(), py::arg("path"),
+             R"(Load a hand-rolled value network from a weight blob exported by
+nardi_net.export_weights. Torch-free; mirrors model(features) in Python.)")
+        .def("evaluate", &PyInferenceNet::evaluate, py::arg("features"),
+             R"(Side-to-move value for one Features object.)")
+        .def("evaluate_batch", &PyInferenceNet::evaluate_batch, py::arg("features"),
+             R"(Side-to-move values for a list of Features objects.)");
+
     py::class_<LookaheadBatch, std::shared_ptr<LookaheadBatch>>(m, "LookaheadBatch")
         .def_property_readonly("num_children",      &LookaheadBatch::num_children)
         .def_property_readonly("num_eval_features", &LookaheadBatch::num_eval_features)
-        .def("tensor",                              &LookaheadBatch::tensor,
+        .def_property_readonly("eval_features",
+             [](const LookaheadBatch& b) { return b.eval_features; },
+             R"(The re-featured grandchild positions (list of Features) the model scores.)")
+        .def("tensor",
+             [](const LookaheadBatch& b, const std::string& kind, bool flatten)
+             { return feature_batch_to_tensor(b.eval_features, kind, flatten); },
              py::arg("kind") = "conv",
              py::arg("flatten") = false,
              R"(Return model-ready eval features as [N,6,25] or [N,150].)")
-        .def("child_values",                        &LookaheadBatch::child_values,
+        .def("child_values",                        &lb_child_values,
              py::arg("values"),
              R"(Aggregate leaf values into one value per legal child move.)")
-        .def("best_index",                          &LookaheadBatch::best_index,
+        .def("best_index",                          &lb_best_index,
              py::arg("values"),
              R"(Return the argmax child move index after value aggregation.)")
-        .def("best_board",                          &LookaheadBatch::best_board,
+        .def("best_board",                          &lb_best_board,
              py::arg("values"),
              R"(Return the raw board for the argmax child move.)");
 }

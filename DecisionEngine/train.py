@@ -166,6 +166,8 @@ class LookaheadGameEnv(GameEnv):
         if not sim.eng.roll_has_children():
             with torch.inference_mode():
                 target = float(sim.sign * target_model(sim.eng.board_features()).item())
+            # The Controller no longer auto-advances on a no-move roll; confirm the pass.
+            sim.eng.confirm_turn()
             return target, False, {}
 
         batch = sim.eng.make_lookahead_batch()

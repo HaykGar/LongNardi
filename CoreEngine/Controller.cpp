@@ -2,7 +2,7 @@
 
 using namespace Nardi;
 
-Controller::Controller(Game& game) : g(game), start(), start_selected(false), dice_rolled(false), quit_requested(false), restart_requested(false), sim_mode(false) {}
+Controller::Controller(Game& game) : g(game), start(), start_selected(false), dice_rolled(false), quit_requested(false), restart_requested(false), sim_mode(false), turn_complete(false) {}
 
 Controller::~Controller()
 {}
@@ -35,6 +35,7 @@ void Controller::OnTurnSwitch()
 {
     dice_rolled = false;
     start_selected = false;
+    turn_complete = false;
 }
 
 status_codes Controller::ReceiveCommand(const Command& cmd)
@@ -59,8 +60,27 @@ status_codes Controller::ReceiveCommand(const Command& cmd)
         break;
         
     case Actions::UNDO:
-        g.UndoLast();
+        // Undoing a sub-move means the turn is no longer complete (a die/move was
+        // restored), so re-open it for further play / confirmation. The prior
+        // destination was auto-selected; clear that selection since the checker
+        // moved back (otherwise a stale start_selected lingers on an empty point).
+        if(g.UndoLast())
+        {
+            turn_complete = false;
+            start_selected = false;
+        }
         outcome = status_codes::SUCCESS;
+        break;
+
+    case Actions::CONFIRM_TURN_OVER:
+        // Advance to the next player only once the turn has no legal moves left.
+        if(turn_complete)
+        {
+            SwitchTurns();   // OnTurnSwitch() clears turn_complete
+            outcome = status_codes::SUCCESS;
+        }
+        else
+            outcome = status_codes::MISC_FAILURE;   // dice not used up yet
         break;
 
     case Actions::UNDO_TURN:
@@ -167,8 +187,21 @@ status_codes Controller::ReceiveCommand(const Command& cmd)
         break;
     }
 
-    if(outcome == status_codes::NO_LEGAL_MOVES_LEFT && !sim_mode)
-        SwitchTurns();
+    // A roll/move that leaves no legal moves ends the turn. Previously this
+    // auto-advanced to the next player; now it only marks the turn complete and
+    // waits for an explicit CONFIRM_TURN_OVER (so humans can undo until they
+    // confirm). Control actions (quit/restart/confirm) are excluded. A
+    // game-ending move still finalizes immediately so winner == !current_player.
+    if(outcome == status_codes::NO_LEGAL_MOVES_LEFT && !sim_mode
+       && cmd.action != Actions::QUIT
+       && cmd.action != Actions::REQUEST_RESTART
+       && cmd.action != Actions::CONFIRM_TURN_OVER)
+    {
+        if(g.GameIsOver())
+            SwitchTurns();
+        else
+            turn_complete = true;
+    }
 
     return outcome;
 }

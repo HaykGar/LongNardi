@@ -196,6 +196,69 @@ def export_target_network(model, path, device="cpu"):
         model.train()
     return path
 
+import struct
+
+# Flat weight-blob format consumed by the hand-rolled, torch-free C++ inference
+# net (nardi_infer.{h,cpp}) used by the iOS build and tests/test_infer_parity.py.
+# Layout (all little-endian):
+#   magic "NRDW" | version u32 | kind u32 | n_tensors u32
+#   then per tensor: name_len u32 | name bytes | ndim u32 | dims u32... | float32 data
+# `kind` selects the C++ architecture: 0 = NardiNet (MLP), 1 = ConvNardiNet,
+# 2 = ResNardiNet.
+_WEIGHT_MAGIC = b"NRDW"
+_WEIGHT_VERSION = 1
+
+
+def _model_kind(model):
+    # ResNardiNet / ConvNardiNet both subclass NardiNet, so check most-derived first.
+    if isinstance(model, ResNardiNet):
+        return 2
+    if isinstance(model, ConvNardiNet):
+        return 1
+    if isinstance(model, NardiNet):
+        return 0
+    raise TypeError(f"export_weights: unsupported model type {type(model).__name__}")
+
+
+def export_weights(model, path):
+    """Serialize a model's parameters + buffers to a flat .nardiw blob for the
+    hand-rolled, torch-free C++ inference net (iOS / parity test). State-dict keys
+    (e.g. trunk.0.weight, res_block.conv1.weight, scores) are written verbatim so
+    the C++ side can look them up by name. Returns `path`. NOTE: the TorchScript
+    export_target_network above remains the path for the LibTorch C++ target
+    network used in training; this is the separate torch-free blob for iOS."""
+    was_training = model.training
+    model.eval()
+    kind = _model_kind(model)
+    state = model.state_dict()
+    with open(path, "wb") as fh:
+        fh.write(_WEIGHT_MAGIC)
+        fh.write(struct.pack("<III", _WEIGHT_VERSION, kind, len(state)))
+        for name, tensor in state.items():
+            arr = tensor.detach().to("cpu").contiguous().float().numpy()
+            name_b = name.encode("utf-8")
+            fh.write(struct.pack("<I", len(name_b)))
+            fh.write(name_b)
+            fh.write(struct.pack("<I", arr.ndim))
+            for dim in arr.shape:
+                fh.write(struct.pack("<I", int(dim)))
+            fh.write(arr.astype("<f4", copy=False).tobytes())
+    if was_training:
+        model.train()
+    return path
+
+
+def export_for_engine(model, path):
+    """Export `model` in whatever format the compiled C++ engine's
+    load_target_network expects: TorchScript when the build links LibTorch
+    (nardi.USES_TORCH), else the torch-free .nardiw blob. Lets tests load a model
+    into the engine regardless of which inference backend the module was built
+    with. Returns `path`."""
+    import nardi
+    if getattr(nardi, "USES_TORCH", False):
+        return export_target_network(model, path)
+    return export_weights(model, path)
+
 class NardiSemble(ConvNardiNet):
     def __init__(self, models : list[NardiNet], freeze_models = True):
         super().__init__(out_dim=len(models))

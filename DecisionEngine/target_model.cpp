@@ -1,9 +1,18 @@
 #include "target_model.h"
 
+#include <stdexcept>
+
+// Two interchangeable inference backends behind the same TargetModel interface,
+// selected at compile time:
+//   * NARDI_ENABLE_TORCH (Python/training build): TorchScript via LibTorch.
+//   * otherwise (iOS / torch-free build): the hand-rolled, dependency-free
+//     InferenceNet (nardi_infer.{h,cpp}) loading a .nardiw blob.
+// The two are kept numerically in lockstep by tests/test_infer_parity.py.
+
+#ifdef NARDI_ENABLE_TORCH
+
 #include <ATen/Parallel.h>
 #include <torch/script.h>
-
-#include <stdexcept>
 
 #include "../CoreEngine/Auxilaries.h"
 
@@ -68,12 +77,12 @@ void TargetModel::load(const std::string& path)
 
 bool TargetModel::is_loaded() const { return _impl->loaded; }
 
-float TargetModel::evaluate(const Nardi::Board::Features& f)
+float TargetModel::evaluate(const Nardi::Board::Features& f) const
 {
     return evaluate_batch({f}).front();
 }
 
-std::vector<float> TargetModel::evaluate_batch(const std::vector<Nardi::Board::Features>& features)
+std::vector<float> TargetModel::evaluate_batch(const std::vector<Nardi::Board::Features>& features) const
 {
     if(!_impl->loaded)
         throw std::runtime_error("TargetModel: no network loaded (call load() first).");
@@ -99,3 +108,45 @@ std::vector<float> TargetModel::evaluate_batch(const std::vector<Nardi::Board::F
 }
 
 } // namespace nardi_py
+
+#else // !NARDI_ENABLE_TORCH  -- hand-rolled, dependency-free backend (iOS)
+
+#include "nardi_infer.h"
+
+namespace nardi_py
+{
+
+struct TargetModel::Impl
+{
+    std::unique_ptr<InferenceNet> net;
+};
+
+TargetModel::TargetModel() : _impl(std::make_unique<Impl>()) {}
+TargetModel::~TargetModel() = default;
+
+void TargetModel::load(const std::string& path)
+{
+    // Hand-rolled, dependency-free inference (see nardi_infer.{h,cpp}); the blob
+    // is produced by nardi_net.export_weights.
+    _impl->net = load_inference_net(path);
+}
+
+bool TargetModel::is_loaded() const { return _impl->net != nullptr; }
+
+float TargetModel::evaluate(const Nardi::Board::Features& f) const
+{
+    if(!_impl->net)
+        throw std::runtime_error("TargetModel: no network loaded (call load() first).");
+    return _impl->net->evaluate(f);
+}
+
+std::vector<float> TargetModel::evaluate_batch(const std::vector<Nardi::Board::Features>& features) const
+{
+    if(!_impl->net)
+        throw std::runtime_error("TargetModel: no network loaded (call load() first).");
+    return _impl->net->evaluate_batch(features);
+}
+
+} // namespace nardi_py
+
+#endif // NARDI_ENABLE_TORCH

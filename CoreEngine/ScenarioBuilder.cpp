@@ -91,6 +91,11 @@ void ScenarioBuilder::withRandomEndgame(bool p_idx)
     ResetPreRoll(p_idx, rand_board);        
 }
 
+void ScenarioBuilder::SetTurnNumbers(int white_turns, int black_turns)
+{
+    _game.turn_number = { white_turns, black_turns };
+}
+
 void ScenarioBuilder::ResetControllerState()
 {
     _ctrl.start_selected = false;

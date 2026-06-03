@@ -5,6 +5,7 @@
 #include "Auxilaries.h"
 #include "ReaderWriter.h"
 #include "Board.h"
+#include <memory>
 #include <sstream>
 
 namespace Nardi
@@ -27,6 +28,10 @@ class ScenarioBuilder
 
         // more general scenarios
         void withRandomEndgame(bool p_idx = false);
+
+        // Set completed-turn counts directly ({white, black}). Drives the
+        // first-move head rule (turn_number[mover] == 0); used by analysis setup.
+        void SetTurnNumbers(int white_turns, int black_turns);
 
         // Actions
         status_codes ReceiveCommand(const Command& c);

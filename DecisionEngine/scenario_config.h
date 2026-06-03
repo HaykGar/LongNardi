@@ -1,17 +1,14 @@
 #pragma once
 
-#include <pybind11/numpy.h>
-
 #include "../CoreEngine/ScenarioBuilder.h"
 
 namespace nardi_py
 {
 
-namespace py = pybind11;
-
 /*
 ScenarioConfig exposes the scenario-building subset of ScenarioBuilder without
-exposing reader/writer ownership or other controller internals to Python.
+exposing reader/writer ownership or other controller internals. Pybind-free; the
+numpy (py::array board) overload of withScenario is provided in bindings.cpp.
 */
 class ScenarioConfig
 {
@@ -21,14 +18,6 @@ public:
     Nardi::status_codes withScenario(
         bool p_idx,
         const Nardi::BoardConfig& b,
-        int d1,
-        int d2,
-        int d1u = 0,
-        int d2u = 0);
-
-    Nardi::status_codes withScenario(
-        bool p_idx,
-        py::array_t<int8_t, py::array::c_style | py::array::forcecast> board,
         int d1,
         int d2,
         int d1u = 0,

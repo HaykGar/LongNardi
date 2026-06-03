@@ -1,20 +1,20 @@
 #pragma once
 
-#include <pybind11/numpy.h>
-
 #include <array>
 #include <optional>
 #include <variant>
 #include <vector>
 
-#include "binding_utils.h"
+#include "nardi_core.h"
 #include "../CoreEngine/Board.h"
 
 namespace nardi_py
 {
 
-namespace py = pybind11;
-
+// Pybind-free one-ply lookahead frontier. The numpy/pybind surface
+// (tensor / child_values / best_index / best_board taking py::array) is provided
+// as free functions in bindings.cpp; the engine and C API use only the
+// std::vector-based methods here.
 class LookaheadBatch
 {
 public:
@@ -36,20 +36,14 @@ public:
     int num_children() const;
     int num_eval_features() const;
 
-    py::array_t<float> tensor(const std::string& kind = "conv", bool flatten = false) const;
+    // Aggregate per-eval-feature side-to-move `values` into one value per child.
+    std::vector<float> child_values_vec(const std::vector<float>& values) const;
 
-    py::array_t<float> child_values(
-        py::array_t<float, py::array::c_style | py::array::forcecast> values) const;
-
-    int best_index(py::array_t<float, py::array::c_style | py::array::forcecast> values) const;
-
-    py::array_t<int8_t> best_board(
-        py::array_t<float, py::array::c_style | py::array::forcecast> values) const;
+    // Index of the best child given eval-feature `values`, honoring terminal-win
+    // shortcuts.
+    int best_index_values(const std::vector<float>& values) const;
 
 private:
-    std::vector<float> parse_values(
-        py::array_t<float, py::array::c_style | py::array::forcecast> values) const;
-
     static float child_value(const ChildChoice& child, const std::vector<float>& values);
 };
 

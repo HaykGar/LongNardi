@@ -41,8 +41,12 @@ void NardiEngine::AttachNewTRW()
 
 void NardiEngine::AttachNewSFMLRW()
 {
+#ifdef NARDI_ENABLE_SFML
     _builder.AttachNewRW(Nardi::SFMLRWFactory());
     _builder.GetView()->PollInput();
+#else
+    throw std::runtime_error("SFML view not available: built without NARDI_ENABLE_SFML.");
+#endif
 }
 
 void NardiEngine::DetachRW()
@@ -50,19 +54,9 @@ void NardiEngine::DetachRW()
     _builder.DetachRW();
 }
 
-py::array_t<uint8_t> NardiEngine::dice() const
+std::array<int, 2> NardiEngine::dice_values() const
 {
-    std::array<int, 2> dice = {
-        _builder.GetGame().GetDice(0),
-        _builder.GetGame().GetDice(1)
-    };
-    py::array_t<uint8_t> arr(py::ssize_t(2));
-
-    auto buf = arr.mutable_unchecked<1>();
-    buf(0) = dice[0];
-    buf(1) = dice[1];
-
-    return arr;
+    return {_builder.GetGame().GetDice(0), _builder.GetGame().GetDice(1)};
 }
 
 int NardiEngine::dice_as_idx() const
@@ -73,24 +67,6 @@ int NardiEngine::dice_as_idx() const
 Nardi::Board::Features NardiEngine::board_features() const
 {
     return _builder.GetGame().GetBoardRef().ExtractFeatures();
-}
-
-void NardiEngine::PrintArray3D(py::array_t<uint8_t>& arr)
-{
-    auto buf = arr.unchecked<3>();
-    auto shape = arr.shape();
-    std::cout << "Array shape: [" << shape[0] << "," << shape[1] << "," << shape[2] << "]\n";
-    for(ssize_t i = 0; i < shape[0]; ++i)
-    {
-        std::cout << "Index " << i << ":\n";
-        for(ssize_t r = 0; r < shape[1]; ++r)
-        {
-            for(ssize_t c = 0; c < shape[2]; ++c)
-                std::cout << static_cast<int>(buf(i, r, c)) << " ";
-            std::cout << "\n";
-        }
-        std::cout << "----------------------\n";
-    }
 }
 
 void NardiEngine::Render()
@@ -123,12 +99,21 @@ std::vector<Nardi::Board::Features> NardiEngine::set_and_enumerate(int d1, int d
 
 void NardiEngine::apply_board(const Nardi::BoardConfig& brd)
 {
+    // Record the individual sub-moves (for the UI to animate each separately).
+    _builder.GetGame().StartRecording();
     auto status = _builder.ReceiveCommand(Nardi::Command(brd));
+    _builder.GetGame().StopRecording();
     if(status != Nardi::status_codes::NO_LEGAL_MOVES_LEFT)
     {
         Nardi::DispErrorCode(status);
         throw std::runtime_error("Autoplay failed to complete");
     }
+    // A whole-board apply is a complete bot/auto turn, so confirm it here (advance
+    // to the next player) -- preserving the old auto-advance behavior for bots and
+    // the Python training/benchmark code. Human incremental moves go through
+    // MOVE_BY_DICE and require an explicit confirm_turn() so they can be undone
+    // first. (No-op when the move ended the game, which finalizes immediately.)
+    _builder.ReceiveCommand(Nardi::Command(Nardi::Actions::CONFIRM_TURN_OVER));
     _last_children.clear();
     _last_lookahead_batch.reset();
 }
@@ -322,17 +307,16 @@ std::shared_ptr<LookaheadBatch> NardiEngine::MakeLookaheadBatch()
     return batch;
 }
 
-void NardiEngine::apply_best_lookahead(
-    py::array_t<float, py::array::c_style | py::array::forcecast> values)
+void NardiEngine::apply_best_lookahead(const std::vector<float>& values)
 {
     auto batch = require_lookahead_batch();
-    apply_board(batch->children.at(static_cast<size_t>(batch->best_index(values))).board);
+    // Copy out before apply_board() invalidates batch/_last_children.
+    const Nardi::BoardConfig board =
+        batch->children.at(static_cast<size_t>(batch->best_index_values(values))).board;
+    apply_board(board);
 }
 
-void NardiEngine::apply_noisy_board(
-    py::array_t<float, py::array::c_style | py::array::forcecast> values,
-    float eps,
-    float temperature)
+void NardiEngine::apply_noisy_board(const std::vector<float>& values, float eps, float temperature)
 {
     const auto& children = require_children();
     if(const auto terminal_idx = terminal_child_index(children); terminal_idx.has_value())
@@ -341,13 +325,11 @@ void NardiEngine::apply_noisy_board(
         return;
     }
 
-    std::vector<float> parsed_values = parse_1d_values(values, children.size());
-    const int idx = sample_noisy_index(parsed_values, eps, temperature, _rng);
+    const int idx = sample_noisy_index(values, eps, temperature, _rng);
     apply_board(children.at(static_cast<size_t>(idx)).raw_data);
 }
 
-void NardiEngine::apply_greedy_board(
-    py::array_t<float, py::array::c_style | py::array::forcecast> values)
+void NardiEngine::apply_greedy_board(const std::vector<float>& values)
 {
     const auto& children = require_children();
     if(const auto terminal_idx = terminal_child_index(children); terminal_idx.has_value())
@@ -356,11 +338,261 @@ void NardiEngine::apply_greedy_board(
         return;
     }
 
-    std::vector<float> parsed_values = parse_1d_values(values, children.size());
-
-    auto best = std::max_element(parsed_values.begin(), parsed_values.end());
-    const size_t idx = static_cast<size_t>(std::distance(parsed_values.begin(), best));
+    if(values.size() != children.size())
+        throw std::runtime_error("apply_greedy_board: values length does not match children.");
+    auto best = std::max_element(values.begin(), values.end());
+    const size_t idx = static_cast<size_t>(std::distance(values.begin(), best));
     apply_board(children.at(idx).raw_data);
+}
+
+int NardiEngine::greedy_choice(const TargetModel& net) const
+{
+    const auto& children = require_children();
+    if(const auto terminal_idx = terminal_child_index(children); terminal_idx.has_value())
+        return static_cast<int>(terminal_idx.value());
+
+    const std::vector<float> values = net.evaluate_batch(children);
+    return static_cast<int>(
+        std::distance(values.begin(), std::max_element(values.begin(), values.end())));
+}
+
+void NardiEngine::apply_greedy_with(const TargetModel& net)
+{
+    const int idx = greedy_choice(net);
+    // Copy the board out before apply_board() clears _last_children.
+    const Nardi::BoardConfig board = require_children().at(static_cast<size_t>(idx)).raw_data;
+    apply_board(board);
+}
+
+int NardiEngine::lookahead_choice(const TargetModel& net)
+{
+    auto batch = MakeLookaheadBatch(); // also caches _last_lookahead_batch
+    if(batch->children.empty())
+        return -1; // no legal move; the turn passes
+
+    const std::vector<float> values = net.evaluate_batch(batch->eval_features);
+    return batch->best_index_values(values);
+}
+
+void NardiEngine::apply_lookahead_with(const TargetModel& net)
+{
+    // Forced move: with a single legal end-board there is nothing to choose, so
+    // skip the (expensive) one-ply search entirely and just play it.
+    const auto children = enumerate(Nardi::status_codes::SUCCESS);
+    if(children.empty())
+        return; // no legal move; the turn passes
+    if(children.size() == 1)
+    {
+        const Nardi::BoardConfig board = children.front().raw_data;
+        apply_board(board);
+        return;
+    }
+
+    const int idx = lookahead_choice(net);
+    if(idx < 0)
+        return;
+    const Nardi::BoardConfig board =
+        _last_lookahead_batch->children.at(static_cast<size_t>(idx)).board;
+    apply_board(board);
+}
+
+int NardiEngine::greedy_choice_target() const
+{
+    if(!_target_model.is_loaded())
+        throw std::runtime_error("greedy_choice_target requires load_target_network(path) first.");
+    return greedy_choice(_target_model);
+}
+
+void NardiEngine::apply_greedy_target()
+{
+    if(!_target_model.is_loaded())
+        throw std::runtime_error("apply_greedy_target requires load_target_network(path) first.");
+    apply_greedy_with(_target_model);
+}
+
+int NardiEngine::lookahead_choice_target()
+{
+    if(!_target_model.is_loaded())
+        throw std::runtime_error("lookahead_choice_target requires load_target_network(path) first.");
+    return lookahead_choice(_target_model);
+}
+
+void NardiEngine::apply_lookahead_target()
+{
+    if(!_target_model.is_loaded())
+        throw std::runtime_error("apply_lookahead_target requires load_target_network(path) first.");
+    apply_lookahead_with(_target_model);
+}
+
+void NardiEngine::configure_players(Strategy white, Strategy black)
+{
+    _player_strats[0] = white;
+    _player_strats[1] = black;
+}
+
+void NardiEngine::set_mcts_params(int n_sims, float temperature, bool exploratory,
+                                  float c_uct, float dirichlet_eps, float dirichlet_alpha,
+                                  int rollouts_per_leaf)
+{
+    _mcts_params.n_sims = n_sims;
+    _mcts_params.temperature = temperature;
+    _mcts_params.exploratory = exploratory;
+    _mcts_params.c_uct = c_uct;
+    _mcts_params.dirichlet_eps = dirichlet_eps;
+    _mcts_params.dirichlet_alpha = dirichlet_alpha;
+    _mcts_params.rollouts_per_leaf = rollouts_per_leaf;
+}
+
+StepResult NardiEngine::advance()
+{
+    if(!should_continue_game())
+        return StepResult::GameOver;
+
+    // index 0 == white (player idx false), 1 == black (player idx true)
+    const Strategy strat = _player_strats[static_cast<size_t>(current_player())];
+
+    // Roll once for the current player. Skip if the turn is already complete and
+    // merely awaiting confirmation (e.g. a prior no-move roll), so we don't re-roll.
+    if(_builder.GetCtrl().AwaitingRoll() && !turn_is_complete())
+        roll_and_enumerate();
+
+    if(_last_children.empty())
+    {
+        // No legal moves: nothing to undo, so confirm the (forced) pass for
+        // everyone -- bot or human -- and advance to the next player.
+        confirm_turn();
+        return StepResult::TurnPassed;
+    }
+
+    if(_last_children.size() == 1)
+    {
+        // Forced move: a single legal end-board. Auto-play it for everyone
+        // (human or bot) -- no decision to make, so skip any search/selection.
+        // The UI still animates it. apply_board auto-confirms / advances.
+        const Nardi::BoardConfig board = _last_children.front().raw_data;
+        apply_board(board);
+        return StepResult::BotMoved;
+    }
+
+    if(strat == Strategy::Human)
+        return StepResult::AwaitingHuman; // UI drives incremental moves + confirm_turn()
+
+    switch(strat)
+    {
+    case Strategy::Greedy:
+        apply_greedy_target();
+        break;
+    case Strategy::Lookahead:
+        apply_lookahead_target();
+        break;
+    case Strategy::Mcts:
+        mcts_apply_move(_mcts_params.n_sims, _mcts_params.temperature, _mcts_params.exploratory,
+                        _mcts_params.c_uct, _mcts_params.dirichlet_eps,
+                        _mcts_params.dirichlet_alpha, _mcts_params.rollouts_per_leaf);
+        break;
+    case Strategy::Heuristic:
+        apply_heuristic_board();
+        break;
+    case Strategy::Random:
+        apply_random_board();
+        break;
+    case Strategy::Human:
+        break; // unreachable (handled above)
+    }
+    return StepResult::BotMoved;
+}
+
+std::vector<Nardi::Board::Features> NardiEngine::current_options() const
+{
+    return _last_children;
+}
+
+int NardiEngine::legal_move_count() const
+{
+    return static_cast<int>(_last_children.size());
+}
+
+void NardiEngine::apply_human_move(int idx)
+{
+    const auto& children = require_children();
+    if(idx < 0 || static_cast<size_t>(idx) >= children.size())
+        throw std::runtime_error("apply_human_move: move index out of range.");
+    // Copy out before apply_board() clears _last_children.
+    const Nardi::BoardConfig board = children.at(static_cast<size_t>(idx)).raw_data;
+    apply_board(board);
+}
+
+bool NardiEngine::human_select(int row, int col)
+{
+    _builder.ReceiveCommand(Nardi::Command(Nardi::Actions::RELEASE_SELECTED));
+    const auto status = _builder.ReceiveCommand(Nardi::Command(row, col));
+    return status == Nardi::status_codes::SUCCESS;
+}
+
+bool NardiEngine::human_move_die(int die_idx)
+{
+    _builder.GetGame().StartRecording();
+    const auto status = _builder.ReceiveCommand(Nardi::Command(static_cast<bool>(die_idx)));
+    _builder.GetGame().StopRecording();
+    // SUCCESS: moved, turn continues (dest auto-selected). NO_LEGAL_MOVES_LEFT:
+    // moved and that completed the turn (controller switched players).
+    return status == Nardi::status_codes::SUCCESS
+        || status == Nardi::status_codes::NO_LEGAL_MOVES_LEFT;
+}
+
+bool NardiEngine::human_undo()
+{
+    _builder.GetGame().StartRecording();
+    const auto status = _builder.ReceiveCommand(Nardi::Command(Nardi::Actions::UNDO));
+    _builder.GetGame().StopRecording();
+    return status == Nardi::status_codes::SUCCESS;
+}
+
+std::vector<std::array<int, 4>> NardiEngine::recent_moves() const
+{
+    // Sub-moves of the last recorded command, in application order, as
+    // {fromRow, fromCol, toRow, toCol}; -1 marks off-board (bear-off / replace).
+    std::vector<std::array<int, 4>> out;
+    for(const auto& m : _builder.GetGame().MoveLog())
+        out.push_back({m.from.row, m.from.col, m.to.row, m.to.col});
+    return out;
+}
+
+bool NardiEngine::can_use_die(int die_idx)
+{
+    if(_builder.GetCtrl().AwaitingRoll())
+        return false;
+    return _builder.GetGame().CanUseDice(static_cast<bool>(die_idx));
+}
+
+bool NardiEngine::start_is_selected() const
+{
+    return _builder.GetCtrl().StartIsSelected();
+}
+
+std::array<int, 2> NardiEngine::selected_start() const
+{
+    if(!_builder.GetCtrl().StartIsSelected())
+        return {-1, -1};
+    const auto& s = _builder.GetCtrl().GetStart();
+    return {s.row, s.col};
+}
+
+bool NardiEngine::turn_in_progress() const
+{
+    return !_builder.GetCtrl().AwaitingRoll() && !_builder.GetGame().GameIsOver();
+}
+
+bool NardiEngine::turn_is_complete() const
+{
+    return _builder.GetCtrl().TurnIsComplete();
+}
+
+void NardiEngine::confirm_turn()
+{
+    // Advance to the next player. No-op unless the turn is complete (the
+    // controller enforces "all dice used / no legal moves left").
+    _builder.ReceiveCommand(Nardi::Command(Nardi::Actions::CONFIRM_TURN_OVER));
 }
 
 void NardiEngine::apply_random_board()
@@ -487,6 +719,92 @@ float NardiEngine::debug_target_eval()
     // Evaluate the current board (side-to-move perspective) with the C++ target
     // model. For comparison against the Python model to validate the bridge.
     return _target_model.evaluate(board_features());
+}
+
+void NardiEngine::set_position(const Nardi::BoardConfig& brd, bool side)
+{
+    // Drop an arbitrary position in (board + side to move), pre-roll. Validity of
+    // the static position (piece counts, endgame home restriction) is the caller's
+    // responsibility; the engine accepts whatever board it is given.
+    _builder.ResetPreRoll(side, brd);
+
+    // Turn numbers drive the first-move head rule: the 4-4 / 6-6 "two checkers off
+    // the head" exception fires only when the side to move has turn_number == 0. A
+    // player sitting on the standard opening (all 15 on their head) is genuinely on
+    // their first move, so give them turn_number 0; any other arrangement is past
+    // the opening, so use a count > 1 (no first-move exception). Done per player so
+    // an as-yet-unmoved opponent still gets its own first move handled correctly
+    // once play switches to it.
+    const auto at_start = [&brd](bool p) {
+        return brd[p][0] == (p == Nardi::white ? Nardi::PIECES_PER_PLAYER
+                                               : -Nardi::PIECES_PER_PLAYER);
+    };
+    _builder.SetTurnNumbers(at_start(Nardi::white) ? 0 : 2,
+                            at_start(Nardi::black) ? 0 : 2);
+
+    _last_children.clear();
+    _last_lookahead_batch.reset();
+    _analyzed.clear();
+}
+
+float NardiEngine::evaluate_position() const
+{
+    if(!_target_model.is_loaded())
+        throw std::runtime_error("evaluate_position requires load_target_network(path) first.");
+    return _target_model.evaluate(board_features());
+}
+
+std::vector<std::pair<Nardi::BoardConfig, float>> NardiEngine::analyze_dice(int d1, int d2)
+{
+    if(!_target_model.is_loaded())
+        throw std::runtime_error("analyze_dice requires load_target_network(path) first.");
+
+    set_and_enumerate(d1, d2);       // set the dice on the current position
+    _analyzed.clear();
+
+    auto batch = MakeLookaheadBatch(); // one-ply frontier (caches _last_lookahead_batch)
+    if(batch->children.empty())
+        return _analyzed;            // no legal move for these dice (a forced pass)
+
+    const std::vector<float> values = _target_model.evaluate_batch(batch->eval_features);
+    const std::vector<float> child_vals = batch->child_values_vec(values);
+
+    _analyzed.reserve(batch->children.size());
+    for(size_t i = 0; i < batch->children.size(); ++i)
+        _analyzed.emplace_back(batch->children[i].board, child_vals[static_cast<size_t>(i)]);
+
+    // Best move for the side to move first (child_values are in the mover frame).
+    std::sort(_analyzed.begin(), _analyzed.end(),
+              [](const auto& a, const auto& b) { return a.second > b.second; });
+    return _analyzed;
+}
+
+void NardiEngine::apply_analyzed_move(int idx)
+{
+    if(idx < 0 || static_cast<size_t>(idx) >= _analyzed.size())
+        throw std::runtime_error("apply_analyzed_move: index out of range");
+    const Nardi::BoardConfig board = _analyzed[static_cast<size_t>(idx)].first;
+    apply_board(board);   // applies + confirms (switches side), records sub-moves
+    _analyzed.clear();
+}
+
+int NardiEngine::analyzed_count() const
+{
+    return static_cast<int>(_analyzed.size());
+}
+
+Nardi::BoardConfig NardiEngine::analyzed_board(int idx) const
+{
+    if(idx < 0 || static_cast<size_t>(idx) >= _analyzed.size())
+        throw std::runtime_error("analyzed_board: index out of range");
+    return _analyzed[static_cast<size_t>(idx)].first;
+}
+
+float NardiEngine::analyzed_value(int idx) const
+{
+    if(idx < 0 || static_cast<size_t>(idx) >= _analyzed.size())
+        throw std::runtime_error("analyzed_value: index out of range");
+    return _analyzed[static_cast<size_t>(idx)].second;
 }
 
 std::vector<std::pair<Nardi::Board::Features, float>> NardiEngine::run_mcts_game(
@@ -618,6 +936,13 @@ void NardiEngine::mcts_apply_move(
     const auto legal_boards = legal_boards_for_current_dice(_builder);
     if(legal_boards.empty())
         throw std::runtime_error("mcts_apply_move called with no legal moves.");
+
+    if(legal_boards.size() == 1)
+    {
+        // Forced move: skip the MCTS search and just play the only legal board.
+        apply_board(legal_boards.front());
+        return;
+    }
 
     MCTSTree tree(_builder.GetGame().GetBoardData(), current_player());
     tree.c_uct = c_uct;

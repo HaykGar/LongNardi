@@ -1,0 +1,65 @@
+name: Nardi
+options:
+  bundleIdPrefix: com.nardi
+  deploymentTarget:
+    iOS: "17.0"
+  createIntermediateGroups: true
+
+settings:
+  base:
+    CLANG_CXX_LANGUAGE_STANDARD: "c++23"
+    CLANG_CXX_LIBRARY: "libc++"
+    # Simulator builds need no signing; device builds (Phase 4) will set a team.
+    CODE_SIGNING_ALLOWED: "NO"
+
+targets:
+  Nardi:
+    type: application
+    platform: iOS
+    info:
+      path: Nardi/Info.plist
+      properties:
+        UILaunchScreen: {}
+        CFBundleDisplayName: Nardi
+        UISupportedInterfaceOrientations:
+          - UIInterfaceOrientationPortrait
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.nardi.app
+        SWIFT_OBJC_BRIDGING_HEADER: Nardi/Bridge/Nardi-Bridging-Header.h
+        SWIFT_VERSION: "5.0"
+        # The shared C++ engine core lives outside ios/; expose its headers.
+        HEADER_SEARCH_PATHS:
+          - $(SRCROOT)/../DecisionEngine
+          - $(SRCROOT)/../CoreEngine
+        # Engine core builds without Python (pybind) and without SFML.
+        GCC_PREPROCESSOR_DEFINITIONS:
+          - $(inherited)
+    sources:
+      - Nardi/Sources
+      - Nardi/Bridge
+      - Nardi/Resources
+      # Board + piece art shared with the desktop SFML build (see images/).
+      - path: ../images/BoardImg.jpg
+        buildPhase: resources
+      - path: ../images/WhitePiece.png
+        buildPhase: resources
+      - path: ../images/BlackPiece.png
+        buildPhase: resources
+      # --- shared C++ engine core (pybind-free, SFML-free subset) ---
+      - path: ../DecisionEngine/nardi_c_api.cpp
+      - path: ../DecisionEngine/nardi_engine.cpp
+      - path: ../DecisionEngine/nardi_infer.cpp
+      - path: ../DecisionEngine/nardi_core.cpp
+      - path: ../DecisionEngine/lookahead_batch.cpp
+      - path: ../DecisionEngine/mcts_node.cpp
+      - path: ../DecisionEngine/scenario_config.cpp
+      - path: ../DecisionEngine/target_model.cpp
+      - path: ../CoreEngine/Auxilaries.cpp
+      - path: ../CoreEngine/Board.cpp
+      - path: ../CoreEngine/Controller.cpp
+      - path: ../CoreEngine/Game.cpp
+      - path: ../CoreEngine/Monitors.cpp
+      - path: ../CoreEngine/ReaderWriter.cpp
+      - path: ../CoreEngine/TerminalRW.cpp
+      - path: ../CoreEngine/ScenarioBuilder.cpp
