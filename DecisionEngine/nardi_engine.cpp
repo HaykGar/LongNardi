@@ -3,7 +3,10 @@
 #include <algorithm>
 #include <future>
 #include <iostream>
+#include <limits>
+#include <numeric>
 #include <stdexcept>
+#include <unordered_set>
 
 namespace nardi_py
 {
@@ -422,6 +425,168 @@ void NardiEngine::apply_lookahead_target()
     if(!_target_model.is_loaded())
         throw std::runtime_error("apply_lookahead_target requires load_target_network(path) first.");
     apply_lookahead_with(_target_model);
+}
+
+// ---- Two-ply lookahead -------------------------------------------------- //
+
+float NardiEngine::oneply_value_to_mover(const Nardi::BoardConfig& board, bool mover,
+                                         const TargetModel& net, Nardi::ScenarioBuilder& scratch)
+{
+    // Value to `mover` of a pre-roll position (mover to move): average over the
+    // mover's 21 dice of [best move, static leaf]. After the mover moves it is
+    // the opponent's turn, so a non-terminal reply is evaluated from the
+    // opponent's perspective and negated into the mover's frame; a reply that
+    // bears off the mover's last checker is a terminal win for the mover.
+    const bool opp = !mover;
+    const Nardi::Board& boardref = scratch.GetGame().GetBoardRef();
+    float total = 0.0f;
+
+    for(int d = 0; d < N_DICE_COMB; ++d)
+    {
+        scratch.ResetPreRoll(mover, board);
+        const auto responses = set_and_enumerate(DICE_COMBOS[d][0], DICE_COMBOS[d][1], scratch);
+
+        float best;
+        if(responses.empty())
+        {
+            // Mover cannot move for this roll: it passes to the opponent. Use the
+            // static value of the position in the mover's frame.
+            best = -net.evaluate(boardref.ExtractFeatures(board, opp));
+            ++_last_lookahead2_evals;
+        }
+        else
+        {
+            std::vector<Nardi::Board::Features> leaves;
+            leaves.reserve(responses.size());
+            best = -std::numeric_limits<float>::infinity();
+            for(const auto& f : responses)
+            {
+                // `f` is featured from the mover's perspective, so a terminal
+                // value here is a win for the mover.
+                if(const auto term = terminal_value_for_side_to_move(f); term.has_value())
+                    best = std::max(best, term.value());
+                else
+                    leaves.push_back(boardref.ExtractFeatures(f.raw_data, opp));
+            }
+            if(!leaves.empty())
+            {
+                const auto evals = net.evaluate_batch(leaves);   // value to opponent
+                _last_lookahead2_evals += static_cast<long>(evals.size());
+                for(float e : evals)
+                    best = std::max(best, -e);                    // value to mover
+            }
+        }
+        total += COMBO_PROBS[d] * best;
+    }
+    return total;
+}
+
+std::vector<float> NardiEngine::lookahead2_child_values(const TargetModel& net, int top_k)
+{
+    _last_lookahead2_evals = 0;
+    auto batch = MakeLookaheadBatch();   // root one-ply frontier (caches _last_lookahead_batch)
+    if(batch->children.empty())
+        return {};
+
+    const std::vector<float> values1 = net.evaluate_batch(batch->eval_features);
+    _last_lookahead2_evals += static_cast<long>(values1.size());
+    const std::vector<float> child1 = batch->child_values_vec(values1);   // one-ply per child
+
+    // Which root children to expand to depth two: the top_k by one-ply value
+    // (all of them if top_k <= 0). Terminal children carry no eval features and
+    // are left untouched -- their child_value is already the true terminal value.
+    const int n = static_cast<int>(child1.size());
+    std::unordered_set<int> expand;
+    if(top_k <= 0 || top_k >= n)
+    {
+        for(int i = 0; i < n; ++i) expand.insert(i);
+    }
+    else
+    {
+        std::vector<int> order(static_cast<size_t>(n));
+        std::iota(order.begin(), order.end(), 0);
+        std::partial_sort(order.begin(), order.begin() + top_k, order.end(),
+                          [&](int a, int b) { return child1[static_cast<size_t>(a)] > child1[static_cast<size_t>(b)]; });
+        expand.insert(order.begin(), order.begin() + top_k);
+    }
+
+    // Replace the static leaf of each non-terminal grandchild (opponent reply) of
+    // an expanded child with that grandchild's one-ply value, then re-aggregate.
+    const bool mover = current_player();
+    std::vector<float> values2 = values1;
+    Nardi::ScenarioBuilder scratch(_builder);
+    scratch.SetTurnNumbers(5, 5);   // grandchildren are past the opening; no first-move rule
+    for(int ci = 0; ci < static_cast<int>(batch->children.size()); ++ci)
+    {
+        if(expand.find(ci) == expand.end())
+            continue;
+        for(const auto& group : batch->children[static_cast<size_t>(ci)].dice_groups)
+        {
+            if(!std::holds_alternative<std::vector<int>>(group.data))
+                continue;   // terminal opponent dice group (a float) -- keep as is
+            for(int idx : std::get<std::vector<int>>(group.data))
+            {
+                const Nardi::BoardConfig g = batch->eval_features[static_cast<size_t>(idx)].raw_data;
+                values2[static_cast<size_t>(idx)] = oneply_value_to_mover(g, mover, net, scratch);
+            }
+        }
+    }
+
+    return batch->child_values_vec(values2);
+}
+
+int NardiEngine::lookahead2_choice(const TargetModel& net, int top_k)
+{
+    const auto child_vals = lookahead2_child_values(net, top_k);
+    if(child_vals.empty())
+        return -1;
+    return static_cast<int>(
+        std::distance(child_vals.begin(), std::max_element(child_vals.begin(), child_vals.end())));
+}
+
+void NardiEngine::apply_lookahead2_with(const TargetModel& net, int top_k)
+{
+    // Move selection: short-circuit forced / no-move positions like one-ply.
+    const auto children = enumerate(Nardi::status_codes::SUCCESS);
+    if(children.empty())
+        return;   // no legal move; the turn passes
+    if(children.size() == 1)
+    {
+        apply_board(children.front().raw_data);
+        return;
+    }
+    const int idx = lookahead2_choice(net, top_k);
+    if(idx < 0)
+        return;
+    const Nardi::BoardConfig board =
+        _last_lookahead_batch->children.at(static_cast<size_t>(idx)).board;
+    apply_board(board);
+}
+
+int NardiEngine::lookahead2_choice_target(int top_k)
+{
+    if(!_target_model.is_loaded())
+        throw std::runtime_error("lookahead2_choice_target requires load_target_network(path) first.");
+    return lookahead2_choice(_target_model, top_k);
+}
+
+void NardiEngine::apply_lookahead2_target(int top_k)
+{
+    if(!_target_model.is_loaded())
+        throw std::runtime_error("apply_lookahead2_target requires load_target_network(path) first.");
+    apply_lookahead2_with(_target_model, top_k);
+}
+
+std::vector<float> NardiEngine::lookahead2_child_values_target(int top_k)
+{
+    if(!_target_model.is_loaded())
+        throw std::runtime_error("lookahead2_child_values_target requires load_target_network(path) first.");
+    return lookahead2_child_values(_target_model, top_k);
+}
+
+long NardiEngine::last_lookahead2_evals() const
+{
+    return _last_lookahead2_evals;
 }
 
 void NardiEngine::configure_players(Strategy white, Strategy black)

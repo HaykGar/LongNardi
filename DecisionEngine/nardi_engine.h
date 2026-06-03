@@ -119,6 +119,25 @@ public:
     int lookahead_choice_target();
     void apply_lookahead_target();
 
+    // --- Two-ply lookahead (depth-2 expectiminimax). Where one-ply evaluates
+    // each root move by the opponent's dice-averaged best static reply, two-ply
+    // evaluates that reply by looking one further ply (the mover's own dice-
+    // averaged best move, static leaf). `top_k <= 0` expands every root move to
+    // depth two; `top_k > 0` expands only the K best moves by one-ply value (the
+    // rest keep their one-ply value) -- the cost/strength knob, since full
+    // two-ply is ~21x a one-ply per expanded move. lookahead2_child_values
+    // returns the per-root-child values aligned with the last lookahead batch's
+    // children (root-mover frame); the *_choice methods return the argmax index;
+    // apply_* play it (with the forced/no-move short-circuits, like one-ply).
+    std::vector<float> lookahead2_child_values(const TargetModel& net, int top_k);
+    int lookahead2_choice(const TargetModel& net, int top_k);
+    void apply_lookahead2_with(const TargetModel& net, int top_k);
+    int lookahead2_choice_target(int top_k);
+    void apply_lookahead2_target(int top_k);
+    std::vector<float> lookahead2_child_values_target(int top_k);
+    // Model-evaluation count of the last two-ply computation (for cost analysis).
+    long last_lookahead2_evals() const;
+
     // --- In-C++ match orchestrator (the turn loop, moved out of Python). The
     // caller repeatedly calls advance(); each step rolls for the current player
     // and either plays a bot move, reports that a human move is awaited, reports
@@ -212,6 +231,13 @@ private:
     std::vector<std::pair<Nardi::BoardConfig, float>> _analyzed; // ranked analysis moves
     TargetModel _target_model;
     std::mt19937 _rng{std::random_device{}()};
+    long _last_lookahead2_evals = 0;   // model evals in the last two-ply computation
+
+    // One-ply value to `mover` of a pre-roll position (mover to move): the dice-
+    // averaged best move with a static leaf. Used as the two-ply leaf. `scratch`
+    // is a reusable builder for enumerating the mover's responses.
+    float oneply_value_to_mover(const Nardi::BoardConfig& board, bool mover,
+                                const TargetModel& net, Nardi::ScenarioBuilder& scratch);
 
     // Orchestrator state: per-player strategy (index 0 = white, 1 = black) and
     // MCTS search tunables used when a side plays the Mcts strategy.

@@ -202,6 +202,19 @@ loaded target network in C++ (no move applied).)")
 by the loaded target network in C++ (no move applied). Requires dice rolled.)")
         .def("apply_lookahead_target",&NardiEngine::apply_lookahead_target,
              R"(Play the 1-ply lookahead bot's move using the loaded target network (C++).)")
+        .def("lookahead2_choice_target", &NardiEngine::lookahead2_choice_target,
+             py::arg("top_k") = 0,
+             R"(Index into the lookahead batch's children the 2-ply bot would play (loaded
+target net, C++, no move applied). top_k<=0 expands all root moves to depth 2;
+top_k>0 expands only the K best by 1-ply value. Requires dice rolled.)")
+        .def("apply_lookahead2_target", &NardiEngine::apply_lookahead2_target,
+             py::arg("top_k") = 0,
+             R"(Play the 2-ply lookahead bot's move using the loaded target network (C++).)")
+        .def("lookahead2_child_values_target", &NardiEngine::lookahead2_child_values_target,
+             py::arg("top_k") = 0,
+             R"(Per-root-child 2-ply values (loaded target net), aligned with the last batch.)")
+        .def("last_lookahead2_evals", &NardiEngine::last_lookahead2_evals,
+             R"(Model-evaluation count of the last 2-ply computation (cost analysis).)")
         .def("configure_players",     &NardiEngine::configure_players,
              py::arg("white"), py::arg("black"),
              R"(Set the per-player move Strategy (white = player idx 0, black = idx 1).)")
