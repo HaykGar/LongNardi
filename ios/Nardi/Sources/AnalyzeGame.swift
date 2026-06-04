@@ -6,6 +6,15 @@ import SwiftUI
 /// across confirmed moves too).
 private struct Snapshot { let board: [Int8]; let side: Bool }
 
+/// An engine-recommended move shown in the analyzer: the end-board it reaches,
+/// its eval in the original-side frame, and a human-readable descriptor.
+struct TopMove: Identifiable {
+    let id = UUID()
+    let board: [Int8]
+    let eval: Float
+    let label: String
+}
+
 enum AnalyzePhase: Equatable { case editing, analyzing }
 
 /// Analysis sandbox: build an arbitrary position in the editor, then set the dice
@@ -50,6 +59,9 @@ final class AnalyzeGame: ObservableObject {
     @Published private(set) var canConfirm = false
     @Published private(set) var isTerminal = false
     @Published private(set) var canUndo = false
+    // Up to 3 engine-recommended moves for the current dice (best first), with
+    // their resulting eval in the original-side frame and a move descriptor.
+    @Published private(set) var topMoves: [TopMove] = []
 
     // Move animation (shared BoardCanvas flights)
     @Published private(set) var flights: [Flight] = []
@@ -247,6 +259,52 @@ final class AnalyzeGame: ObservableObject {
         dieUsable = (false, false)
         childValues = [:]
         bestMoverValue = nil
+        topMoves = []
+    }
+
+    /// Play an engine-recommended move (whole turn) and advance to the next side,
+    /// exactly as if the user had played it by hand and confirmed.
+    func applyTopMove(_ i: Int) {
+        guard phase == .analyzing, diceApplied, !movedThisTurn, !isAnimating,
+              !canConfirm, i < topMoves.count else { return }
+        if let ts = turnStart { history.append(ts) }
+        nardi_apply_analyzed_move(handle, Int32(i))   // applies + confirms (switches side)
+        canUndo = true
+        Task { @MainActor in
+            await animateMoves()                      // moverSign uses the pre-switch side
+            currentSide = (nardi_current_player(handle) == 1)
+            flipped = currentSide
+            board = engineBoard()
+            turnStart = nil
+            resetTurnState()
+            relTurn += 1
+            isTerminal = (nardi_is_terminal(handle) == 1)
+            positionEval = staticEval()
+            status = isTerminal ? "Position is terminal. Undo to continue."
+                                : "\(currentSide ? "Black" : "White") to move."
+            autoApplyDice()
+        }
+    }
+
+    /// Net-diff move descriptor (mover's point numbers 1..24), e.g. "13,8 -> 5,2".
+    private func moveLabel(from before: [Int8], to after: [Int8]) -> String {
+        let s = Int(Self.sign(currentSide))
+        var srcs: [Int] = [], dsts: [Int] = []
+        for row in 0..<2 {
+            for col in 0..<Self.cols {
+                let idx = row * Self.cols + col
+                let d = (Int(after[idx]) - Int(before[idx])) * s
+                let onHeadRow = (row == (currentSide ? 1 : 0))
+                let pt = (onHeadRow ? col : Self.cols + col) + 1
+                if d < 0 { srcs += Array(repeating: pt, count: -d) }
+                if d > 0 { dsts += Array(repeating: pt, count: d) }
+            }
+        }
+        let off = srcs.count - dsts.count
+        var dest = dsts.sorted().map(String.init)
+        if off > 0 { dest += Array(repeating: "off", count: off) }
+        let from = srcs.sorted().map(String.init).joined(separator: ",")
+        return from.isEmpty ? "—" : "\(from) → \(dest.joined(separator: ","))"
     }
 
     private func boardKey(_ b: [Int8]) -> Data { Data(b.map { UInt8(bitPattern: $0) }) }
@@ -270,14 +328,21 @@ final class AnalyzeGame: ObservableObject {
 
         childValues = [:]
         var best = -Float.infinity
+        var tops: [TopMove] = []
+        let preBoard = engineBoard()
         for i in 0..<n {
             var b = [Int8](repeating: 0, count: Self.cells)
             var v: Float = 0
             if nardi_analyzed_move(handle, Int32(i), &b, &v) == NARDI_OK {
                 childValues[boardKey(b)] = v
                 best = max(best, v)
+                if i < 3 {   // ranked best-first; show eval in the original-side frame
+                    tops.append(TopMove(board: b, eval: v * frameSign,
+                                        label: moveLabel(from: preBoard, to: b)))
+                }
             }
         }
+        topMoves = tops
         bestMoverValue = n > 0 ? best : nil
         diceApplied = true
         noLegalMoves = (n == 0)

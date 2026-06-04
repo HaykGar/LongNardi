@@ -47,9 +47,8 @@ void HumanVsRand()
                 }
                 else
                 {
-                    status = status_codes::NO_LEGAL_MOVES_LEFT;
-                    ctrl.SwitchTurns();
                     std::cout << "no legal moves for computer\n";
+                    break;   // turn complete (the roll left no legal moves)
                 }
             }
             else    // human player
@@ -63,6 +62,9 @@ void HumanVsRand()
             view.Render();
         }
 
+        // Turn over: confirm to advance (replaces the old auto-switch on
+        // NO_LEGAL_MOVES_LEFT).
+        ctrl.ReceiveCommand(Command(Actions::CONFIRM_TURN_OVER));
         isComputerTurn = !isComputerTurn;
     }
 }
@@ -91,6 +93,10 @@ void GraphicHumanVsHuman()
             if (status == Nardi::status_codes::NO_LEGAL_MOVES_LEFT)
                 break;
         }
+        // The turn no longer auto-advances on NO_LEGAL_MOVES_LEFT; confirm it to
+        // move to the next player. (A graphical confirm/undo button could replace
+        // this auto-confirm to let the desktop player undo at the end of a turn.)
+        _builder.ReceiveCommand(Nardi::Command(Nardi::Actions::CONFIRM_TURN_OVER));
     };
 
     while(running)

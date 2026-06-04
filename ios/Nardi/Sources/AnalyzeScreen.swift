@@ -115,6 +115,8 @@ private struct AnalysisBody: View {
 
             diceControls
 
+            engineMoves
+
             Text(game.status).font(.caption).multilineTextAlignment(.center)
                 .frame(maxWidth: .infinity, minHeight: 16)
 
@@ -129,6 +131,33 @@ private struct AnalysisBody: View {
             }
             .padding(.bottom, 6)
             Spacer(minLength: 0)
+        }
+    }
+
+    // Up to 3 engine-recommended moves for the current roll, best first, with
+    // their resulting eval (original-side frame). Tap one to play it.
+    @ViewBuilder
+    private var engineMoves: some View {
+        if game.diceApplied && !game.movedThisTurn && !game.topMoves.isEmpty {
+            VStack(spacing: 3) {
+                Text("Engine moves").font(.caption2).foregroundStyle(.secondary)
+                ForEach(Array(game.topMoves.enumerated()), id: \.element.id) { i, m in
+                    Button { game.applyTopMove(i) } label: {
+                        HStack {
+                            Text("\(i + 1).").font(.caption2.monospacedDigit()).foregroundStyle(.secondary)
+                            Text(m.label).font(.callout.monospacedDigit())
+                            Spacer()
+                            Text(String(format: "%+.3f", m.eval))
+                                .font(.callout.monospacedDigit().bold())
+                                .foregroundColor(m.eval >= 0 ? .green : .red)
+                        }
+                        .padding(.vertical, 5).padding(.horizontal, 12)
+                        .background(RoundedRectangle(cornerRadius: 6).fill(Color(.systemGray6)))
+                    }
+                    .buttonStyle(.plain).disabled(game.isAnimating)
+                }
+            }
+            .padding(.horizontal, 24)
         }
     }
 

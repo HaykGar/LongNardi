@@ -48,6 +48,18 @@ struct ContentView: View {
                     analyze.startAnalysis()        // auto-applies the default dice
                 }
             }
+            // Dev: open analysis and programmatically play one sub-move (select the
+            // white head, tap die 0) to verify move-playing works without taps.
+            if args.contains("--analyze-move") {
+                section = .analyze
+                analyze.standardStart()
+                analyze.startAnalysis()
+                showAnalyze = true
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.6) {
+                    analyze.tap(row: 0, col: 0)
+                    analyze.tapDie(0)
+                }
+            }
             if args.contains("--review") || args.contains("--review-analyze") {
                 game.devAutoPlayAndReview()
                 review = GameReview(log: game.reviewLog, reviewSide: game.reviewSide)

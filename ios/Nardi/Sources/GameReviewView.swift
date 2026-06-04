@@ -38,9 +38,13 @@ struct GameReviewView: View {
     }
 
     private func openAnalyzer() {
-        guard let pt = review.points[safe: index] else { return }
+        // Analyze the move that PRODUCED the position shown at `index`: open the
+        // position just BEFORE it (points[index-1]) with that turn's actual roll,
+        // so the user can re-decide the move rather than land on its result.
+        let i = max(0, index - 1)
+        guard let pt = review.points[safe: i] else { return }
         analyze.openForReview(board: pt.board, side: pt.sideToMove,
-                              gameDice: review.gameDiceFrom(index))
+                              gameDice: review.gameDiceFrom(i))
         showAnalyzer = true
     }
 
