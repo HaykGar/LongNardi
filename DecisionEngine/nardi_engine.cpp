@@ -924,12 +924,17 @@ std::vector<std::pair<Nardi::BoardConfig, float>> NardiEngine::analyze_dice(int 
     if(!_target_model.is_loaded())
         throw std::runtime_error("analyze_dice requires load_target_network(path) first.");
 
-    set_and_enumerate(d1, d2);       // set the dice on the current position
+    const auto children = set_and_enumerate(d1, d2);   // set the dice on the position
     _analyzed.clear();
+    // No legal move for these dice: it's a forced pass. The controller did NOT
+    // mark the dice rolled, so building a lookahead batch here would throw
+    // ("have not yet rolled dice"); return empty so the caller treats it as a pass.
+    if(children.empty())
+        return _analyzed;
 
     auto batch = MakeLookaheadBatch(); // one-ply frontier (caches _last_lookahead_batch)
     if(batch->children.empty())
-        return _analyzed;            // no legal move for these dice (a forced pass)
+        return _analyzed;
 
     const std::vector<float> values = _target_model.evaluate_batch(batch->eval_features);
     const std::vector<float> child_vals = batch->child_values_vec(values);

@@ -139,15 +139,22 @@ def test_handson_move_after_analyze_lands_on_a_child():
 
 def test_forced_pass_returns_empty():
     eng = loaded_engine()
-    # Black fully borne off is game over, so instead: white jammed behind a full
-    # 6-prime is contrived; simplest forced-pass check is an endgame where a die
-    # cannot be used. Use a tiny endgame: one white checker on its home edge with
-    # a die that overshoots only -- enumerate may still bear off, so just assert
-    # the API returns a list and never raises for a legal position.
-    eng.set_position(midgame_board(), False)
-    ranked = eng.analyze_dice(1, 1)
-    assert isinstance(ranked, list)
-    print(f"analyze_dice tolerates doubles: {len(ranked)} options for 1-1")
+    # Regression: a roll with NO legal move must return [] (forced pass), not
+    # crash. Before the fix, set_and_enumerate left dice_rolled=false on a no-move
+    # roll and analyze_dice then built a lookahead batch -> "have not yet rolled
+    # dice". White's 15 checkers are all on its head (0,0); Black holds a full
+    # 6-prime on (0,1)..(0,6), so every white head move is blocked.
+    b = np.zeros((2, COLS), dtype=np.int8)
+    b[0][0] = 15
+    for c in range(1, 7):
+        b[0][c] = -1            # black 6-prime blocking the white head
+    b[1][0] = -9                # rest of black on its head
+    assert b[b > 0].sum() == 15 and -b[b < 0].sum() == 15
+    eng.set_position(b, False)  # white to move, fully blocked
+    for (d1, d2) in [(3, 4), (1, 2), (5, 6), (2, 2)]:
+        ranked = eng.analyze_dice(d1, d2)
+        assert ranked == [], f"blocked position must yield no moves for {d1}-{d2}, got {len(ranked)}"
+    print("analyze_dice on a fully-blocked position returns [] (no crash on a no-move roll)")
 
 
 def test_first_move_head_exception_by_turn_number():
