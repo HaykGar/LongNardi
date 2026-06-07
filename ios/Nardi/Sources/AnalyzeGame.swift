@@ -244,8 +244,23 @@ final class AnalyzeGame: ObservableObject {
     /// Sign that pins a side-to-move value to the original-side frame.
     private var frameSign: Float { (currentSide == originalSide) ? 1 : -1 }
 
-    /// Static side-to-move value of the current board, in the original frame.
+    /// At a terminal position, the EXACT game result in the original-side frame
+    /// (+/-1 normal, +/-2 mars) -- not the model's estimate. The winner is the
+    /// side with no checkers left on the board, and the margin is mars iff the
+    /// loser bore off none. nil when the position is not terminal.
+    private func terminalResultEval() -> Float? {
+        guard nardi_is_terminal(handle) == 1 else { return nil }
+        let b = engineBoard()
+        let whiteOn = b.reduce(0) { $0 + max(0, Int($1)) }
+        let winnerIsBlack = (whiteOn == 0) ? false : true   // winner = side borne off (0 left)
+        let margin = Float(nardi_winner_result(handle))      // 1 normal, 2 mars
+        return margin * (winnerIsBlack == originalSide ? 1 : -1)
+    }
+
+    /// Side-to-move value of the current board in the original frame -- the exact
+    /// result if terminal, else the model's estimate.
     private func staticEval() -> Float? {
+        if let result = terminalResultEval() { return result }
         guard modelLoaded else { return nil }
         var v: Float = 0
         return nardi_evaluate_position(handle, &v) == NARDI_OK ? v * frameSign : nil
@@ -396,6 +411,7 @@ final class AnalyzeGame: ObservableObject {
     /// the chosen move's lookahead value if the board matches an enumerated child,
     /// else the best-play value, else the static eval.
     private func currentEval() -> Float? {
+        if let result = terminalResultEval() { return result }   // exact result at game end
         if let v = childValues[boardKey(engineBoard())] { return v * frameSign }
         if let best = bestMoverValue { return best * frameSign }
         return staticEval()

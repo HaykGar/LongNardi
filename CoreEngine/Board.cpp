@@ -183,7 +183,12 @@ void Board::SetData(const BoardConfig& b)
 {
     data = b;
     CalcPiecesLeftandReached();
-    pieces_per_player = pieces_left;
+    // Nardi always has 15 checkers per side; any not on the board have been borne
+    // off. Keep the per-player total at the invariant (NOT the on-board count) so
+    // borne-off-derived features (pieces_off) and mars/endgame detection are
+    // correct for set-up positions, matching a played game. CalcPiecesLeftand-
+    // Reached already credited the borne-off checkers to reached_enemy_home.
+    pieces_per_player = {PIECES_PER_PLAYER, PIECES_PER_PLAYER};
 }
 
 void Board::CalcPiecesLeftandReached()
@@ -210,6 +215,17 @@ void Board::CalcPiecesLeftandReached()
 
         pieces_left[at(starts[0]) < 0] += abs(at(starts[0]));   // no-op if 0
         pieces_left[at(starts[1]) < 0] += abs(at(starts[1]));
+    }
+
+    // Borne-off checkers (15 minus those on the board) have already reached home,
+    // so credit them to reached_enemy_home. This matches played-game bookkeeping
+    // (OnMove counts a checker as reached when it enters home and never undoes
+    // that on bear-off), so set-up positions get correct endgame/feature values.
+    for(int p = 0; p < 2; ++p)
+    {
+        int borne_off = PIECES_PER_PLAYER - pieces_left[p];
+        if(borne_off > 0)
+            reached_enemy_home[p] += borne_off;
     }
 }
 

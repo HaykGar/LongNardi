@@ -98,6 +98,15 @@ final class GameReview: ObservableObject {
     private func staticEval(_ board: [Int8], _ side: Bool) -> Float? {
         guard modelLoaded else { return nil }
         board.withUnsafeBufferPointer { _ = nardi_set_position(handle, $0.baseAddress, side ? 1 : 0) }
+        // Terminal positions report the exact game result (+1 normal, +2 mars) in
+        // the winner's frame, not a model estimate. The winner is whoever has no
+        // checkers left on the board (white's are >0, black's <0).
+        if nardi_is_terminal(handle) == 1 {
+            let whiteOn = board.reduce(0) { $0 + max(0, Int($1)) }
+            let winnerIsBlack = (whiteOn != 0)
+            let margin = Float(nardi_winner_result(handle))
+            return margin * (winnerIsBlack == reviewSide ? 1 : -1)
+        }
         var v: Float = 0
         guard nardi_evaluate_position(handle, &v) == NARDI_OK else { return nil }
         return v * (side == reviewSide ? 1 : -1)   // pin to reviewed-player frame
