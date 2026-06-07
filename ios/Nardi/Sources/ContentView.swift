@@ -3,12 +3,14 @@ import SwiftUI
 enum AppSection: String, CaseIterable, Identifiable {
     case play = "Play"
     case analyze = "Analyze"
+    case history = "History"
     var id: String { rawValue }
 }
 
 struct ContentView: View {
     @EnvironmentObject var game: NardiGame
     @EnvironmentObject var analyze: AnalyzeGame
+    @EnvironmentObject var store: MatchStore
     @State private var section: AppSection = .play
     @State private var showAnalyze = false
     @State private var review: GameReview? = nil
@@ -32,7 +34,16 @@ struct ContentView: View {
             }
         }
         .onAppear {
+            game.onGameFinished = { [weak store] in store?.add($0) }
             let args = ProcessInfo.processInfo.arguments
+            if args.contains("--seed-history") || args.contains("--seed-history-review") {
+                game.devSeedHistory()
+            }
+            // Dev: seed history then re-run review on the most recent match.
+            if args.contains("--seed-history-review"), let m = store.matches.first {
+                openReview(m)
+            }
+            if args.contains("--history") || args.contains("--seed-history") { section = .history }
             if args.contains("--demo") {
                 game.newGame(mode: .vsComputer, opponent: .greedy,
                              first: args.contains("--black") ? .second : .first)
@@ -70,49 +81,70 @@ struct ContentView: View {
     // MARK: - Setup
 
     private var setupScreen: some View {
-        VStack(spacing: 22) {
-            Spacer()
-            Text("Nardi").font(.system(size: 44, weight: .bold))
+        VStack(spacing: 18) {
+            Text("Nardi").font(.system(size: 40, weight: .bold)).padding(.top, 14)
 
             Picker("Section", selection: $section) {
                 ForEach(AppSection.allCases) { Text($0.rawValue).tag($0) }
-            }.pickerStyle(.segmented).padding(.horizontal, 40)
+            }.pickerStyle(.segmented).padding(.horizontal, 30)
 
-            if section == .play {
-                Picker("Mode", selection: $mode) {
-                    ForEach(GameMode.allCases) { Text($0.rawValue).tag($0) }
-                }.pickerStyle(.segmented)
-
-                if mode == .vsComputer {
-                    VStack(spacing: 14) {
-                        labeledPicker("Opponent", selection: $opponent, options: Opponent.allCases) { $0.rawValue }
-                        labeledPicker("You", selection: $first, options: FirstMove.allCases) { $0.rawValue }
-                    }
-                } else {
-                    Text("Two players, one device.\nThe board flips each turn.")
-                        .multilineTextAlignment(.center).foregroundStyle(.secondary)
-                }
-
-                Button {
-                    game.newGame(mode: mode, opponent: opponent, first: first)
-                } label: {
-                    Text("Start Game").font(.title3.bold()).frame(maxWidth: .infinity)
-                }
-                .buttonStyle(.borderedProminent).padding(.horizontal, 40)
-            } else {
-                Text("Build any position, set the dice, and play moves by hand while the learned evaluator tracks how the eval swings.")
-                    .multilineTextAlignment(.center).foregroundStyle(.secondary).padding(.horizontal, 30)
-                Button {
-                    analyze.backToEditor()   // always start in the editor (shared model may be mid-analysis)
-                    showAnalyze = true
-                } label: {
-                    Text("Open Analysis").font(.title3.bold()).frame(maxWidth: .infinity)
-                }
-                .buttonStyle(.borderedProminent).padding(.horizontal, 40)
+            switch section {
+            case .play:    playSetup
+            case .analyze: analyzeSetup
+            case .history: MatchHistoryView(store: store, onReview: openReview).padding(.top, 4)
             }
+        }
+    }
+
+    private var playSetup: some View {
+        VStack(spacing: 22) {
+            Spacer()
+            Picker("Mode", selection: $mode) {
+                ForEach(GameMode.allCases) { Text($0.rawValue).tag($0) }
+            }.pickerStyle(.segmented)
+
+            if mode == .vsComputer {
+                VStack(spacing: 14) {
+                    labeledPicker("Opponent", selection: $opponent, options: Opponent.allCases) { $0.rawValue }
+                    labeledPicker("You", selection: $first, options: FirstMove.allCases) { $0.rawValue }
+                }
+            } else {
+                Text("Two players, one device.\nThe board flips each turn.")
+                    .multilineTextAlignment(.center).foregroundStyle(.secondary)
+            }
+
+            Button {
+                game.newGame(mode: mode, opponent: opponent, first: first)
+            } label: {
+                Text("Start Game").font(.title3.bold()).frame(maxWidth: .infinity)
+            }
+            .buttonStyle(.borderedProminent).padding(.horizontal, 40)
             Spacer()
         }
-        .padding()
+        .padding(.horizontal)
+    }
+
+    private var analyzeSetup: some View {
+        VStack(spacing: 22) {
+            Spacer()
+            Text("Build any position, set the dice, and play moves by hand while the learned evaluator tracks how the eval swings.")
+                .multilineTextAlignment(.center).foregroundStyle(.secondary).padding(.horizontal, 30)
+            Button {
+                analyze.backToEditor()   // always start in the editor (shared model may be mid-analysis)
+                showAnalyze = true
+            } label: {
+                Text("Open Analysis").font(.title3.bold()).frame(maxWidth: .infinity)
+            }
+            .buttonStyle(.borderedProminent).padding(.horizontal, 40)
+            Spacer()
+        }
+        .padding(.horizontal)
+    }
+
+    /// Re-run game review on a stored match. Its turn log replays exactly, so the
+    /// review (and its "Open in Analyzer" jump) work just as for a live game.
+    private func openReview(_ match: SavedMatch) {
+        review = GameReview(log: match.reviewTurns, reviewSide: match.reviewSide)
     }
 
     private func labeledPicker<T: Hashable & Identifiable>(

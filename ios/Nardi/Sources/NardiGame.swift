@@ -82,7 +82,13 @@ final class NardiGame: ObservableObject {
     private let handle: OpaquePointer
     private let modelLoaded: Bool
     private var mode: GameMode = .vsComputer
+    private var opponent: Opponent = .greedy   // remembered for the saved record
     private var humanIsWhite = true   // vs-computer orientation (fixed)
+
+    /// Called once when a real (non-dev) game finishes, so the app can archive it
+    /// to the match history. Injected by the app; nil disables archiving.
+    var onGameFinished: ((SavedMatch) -> Void)?
+    private var matchSaved = false   // guards against double-archiving one game
 
     // Post-game review: one record per completed turn, plus a stash for the
     // in-progress human turn (recorded on confirm / game-ending move).
@@ -108,6 +114,8 @@ final class NardiGame: ObservableObject {
 
     func newGame(mode: GameMode, opponent: Opponent, first: FirstMove) {
         self.mode = mode
+        self.opponent = opponent
+        matchSaved = false
         switch mode {
         case .passAndPlay:
             nardi_configure_players(handle, NARDI_HUMAN, NARDI_HUMAN)
@@ -161,6 +169,7 @@ final class NardiGame: ObservableObject {
             // A move that ends the game finalizes immediately (no confirm needed).
             if nardi_is_terminal(handle) == 1 {
                 recordHumanTurn()
+                saveMatchIfNeeded()
                 phase = .gameOver(message: outcomeMessage())
                 return
             }
@@ -220,6 +229,7 @@ final class NardiGame: ObservableObject {
                 // other steps just rolled / passed / ended, so nothing to animate.
                 switch step {
                 case NARDI_STEP_GAME_OVER:
+                    saveMatchIfNeeded()
                     phase = .gameOver(message: outcomeMessage())
                     return
                 case NARDI_STEP_AWAITING_HUMAN:
@@ -355,17 +365,29 @@ final class NardiGame: ObservableObject {
         return (whiteWon ? "White wins\(tag)" : "Black wins\(tag)")
     }
 
+    /// Archive the just-finished game to the match history exactly once. The
+    /// engine is in its terminal state here, so winner/mars read straight off it.
+    private func saveMatchIfNeeded() {
+        guard !matchSaved, !reviewLog.isEmpty, let save = onGameFinished else { return }
+        matchSaved = true
+        let whiteWon = (nardi_current_player(handle) == 1)   // loser is to move at game end
+        let mars = (nardi_winner_result(handle) == 2)
+        save(SavedMatch(id: UUID(), date: Date(),
+                        modeRaw: mode.rawValue,
+                        opponentRaw: mode == .vsComputer ? opponent.rawValue : nil,
+                        reviewSide: reviewSide,
+                        winnerWhite: whiteWon, mars: mars,
+                        turns: reviewLog.map { SavedTurn($0) }))
+    }
+
     func backToSetup() { phase = .setup }
 
-    /// Dev/verification only: synchronously self-play random(white) vs greedy(black)
-    /// to completion, recording the review log, then land on game-over so the
-    /// Review screen can be opened (white = reviewed side, so it has real blunders).
-    func devAutoPlayAndReview() {
-        mode = .passAndPlay   // reviewSide == White
+    /// Synchronously self-play random(white) vs greedy(black) to completion,
+    /// returning the per-turn log. Used by the dev review/history hooks.
+    private func selfPlayLog() -> [ReviewTurn] {
         nardi_configure_players(handle, NARDI_RANDOM, NARDI_GREEDY)
         nardi_reset(handle)
-        reviewLog = []
-        humanTurnPre = nil
+        var log: [ReviewTurn] = []
         var guardCount = 0
         while nardi_should_continue(handle) == 1 && guardCount < 600 {
             guardCount += 1
@@ -375,15 +397,43 @@ final class NardiGame: ObservableObject {
             var d = [Int32](repeating: 0, count: 2); _ = nardi_dice(handle, &d)
             let dv = (Int(d[0]), Int(d[1]))
             if step == NARDI_STEP_TURN_PASSED {
-                reviewLog.append(ReviewTurn(preBoard: preBoard, preSide: preSide, dice: dv, postBoard: preBoard, moved: false))
+                log.append(ReviewTurn(preBoard: preBoard, preSide: preSide, dice: dv, postBoard: preBoard, moved: false))
             } else if step == NARDI_STEP_BOT_MOVED {
-                reviewLog.append(ReviewTurn(preBoard: preBoard, preSide: preSide, dice: dv, postBoard: engineBoard(), moved: true))
+                log.append(ReviewTurn(preBoard: preBoard, preSide: preSide, dice: dv, postBoard: engineBoard(), moved: true))
             } else {
                 break
             }
         }
+        return log
+    }
+
+    /// Dev/verification only: self-play to completion, recording the review log,
+    /// then land on game-over so the Review screen can be opened (white = reviewed
+    /// side, so it has real blunders).
+    func devAutoPlayAndReview() {
+        mode = .passAndPlay   // reviewSide == White
+        humanTurnPre = nil
+        reviewLog = selfPlayLog()
         refreshMeta()
         board = engineBoard()
         phase = .gameOver(message: outcomeMessage())
+    }
+
+    /// Dev/verification only: self-play a few games with varied mode/opponent
+    /// labels and archive them, so the History tab has data to render.
+    func devSeedHistory() {
+        let setups: [(GameMode, Opponent?)] = [
+            (.vsComputer, .lookahead), (.vsComputer, .mcts), (.passAndPlay, nil),
+        ]
+        for (i, (m, opp)) in setups.enumerated() {
+            let log = selfPlayLog()
+            guard !log.isEmpty else { continue }
+            let whiteWon = (nardi_current_player(handle) == 1)
+            let mars = (nardi_winner_result(handle) == 2)
+            onGameFinished?(SavedMatch(
+                id: UUID(), date: Date().addingTimeInterval(Double(-i) * 3600),
+                modeRaw: m.rawValue, opponentRaw: opp?.rawValue, reviewSide: false,
+                winnerWhite: whiteWon, mars: mars, turns: log.map { SavedTurn($0) }))
+        }
     }
 }
