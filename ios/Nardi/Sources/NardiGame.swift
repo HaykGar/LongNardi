@@ -19,7 +19,7 @@ enum Opponent: String, CaseIterable, Identifiable {
         switch self {
         case .easy: return nil
         case .medium: return "mlp"
-        case .hard: return "polavg10"
+        case .hard: return "vzg0"
         }
     }
 }
@@ -111,7 +111,7 @@ final class NardiGame: ObservableObject {
         handle = h
         // Default to the strong network so the dev self-play hooks (which use a
         // model bot) have one loaded; newGame swaps in the chosen opponent's net.
-        modelLoaded = loadModel("polavg10")
+        modelLoaded = loadModel("vzg0")
     }
     deinit { nardi_destroy(handle) }
 

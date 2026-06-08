@@ -7,7 +7,6 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
-		07AC3F6B3B5D3A82E5642C93 /* polavg10.nardiw in Resources */ = {isa = PBXBuildFile; fileRef = C00DA9D010C15920FD6B6EFA /* polavg10.nardiw */; };
 		0A7A739EA56A0B0FEB7D9154 /* BoardGeometry.swift in Sources */ = {isa = PBXBuildFile; fileRef = ED5CD05F09BEC43DA1951CD9 /* BoardGeometry.swift */; };
 		16351C7DBFC15EC385679093 /* target_model.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 3141307AA4FD796A56F53F57 /* target_model.cpp */; };
 		1DF780B0FA834F71D6666C70 /* ScenarioBuilder.cpp in Sources */ = {isa = PBXBuildFile; fileRef = ACCB10D4E4DECFD80073A74F /* ScenarioBuilder.cpp */; };
@@ -35,6 +34,7 @@
 		BD2510785969685B3243D174 /* AnalyzeGame.swift in Sources */ = {isa = PBXBuildFile; fileRef = 79D991F35317B7900EB8CAB9 /* AnalyzeGame.swift */; };
 		CDA183D79EB4AA22AD914A9E /* nardi_core.cpp in Sources */ = {isa = PBXBuildFile; fileRef = ACF72A008F194935A02E07F8 /* nardi_core.cpp */; };
 		CE94EC4C5898AEDE7C00599B /* BlackPiece.png in Resources */ = {isa = PBXBuildFile; fileRef = DB6527A713831457F8C54E76 /* BlackPiece.png */; };
+		D3EDB027171468DA411EB023 /* vzg0.nardiw in Resources */ = {isa = PBXBuildFile; fileRef = 4F7D1F874B6CF52D6FD98338 /* vzg0.nardiw */; };
 		DBA2B353F2B32E38ABAC642D /* lookahead_batch.cpp in Sources */ = {isa = PBXBuildFile; fileRef = BCA0F80054C90B8B2F1A28D3 /* lookahead_batch.cpp */; };
 		DD543C6DBC3280B15AA4D960 /* mcts_node.cpp in Sources */ = {isa = PBXBuildFile; fileRef = FBF1A80B35EA4CCC48ADE398 /* mcts_node.cpp */; };
 		DF2865BCE67CC9694A17C501 /* NardiApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2DA94F4764C4B0F3BB9D042A /* NardiApp.swift */; };
@@ -53,6 +53,7 @@
 		30E44A12FE22DBE48A6E7B6B /* MatchHistoryView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MatchHistoryView.swift; sourceTree = "<group>"; };
 		3141307AA4FD796A56F53F57 /* target_model.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; path = target_model.cpp; sourceTree = "<group>"; };
 		3FF145EB25FA984CE37E574A /* Controller.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; path = Controller.cpp; sourceTree = "<group>"; };
+		4F7D1F874B6CF52D6FD98338 /* vzg0.nardiw */ = {isa = PBXFileReference; path = vzg0.nardiw; sourceTree = "<group>"; };
 		50052D657515F6934953D482 /* mlp.nardiw */ = {isa = PBXFileReference; path = mlp.nardiw; sourceTree = "<group>"; };
 		508E1384769A3A9E5D9C60FE /* scenario_config.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; path = scenario_config.cpp; sourceTree = "<group>"; };
 		5311534EBF6F0A7D4532D35F /* .gitkeep */ = {isa = PBXFileReference; path = .gitkeep; sourceTree = "<group>"; };
@@ -71,7 +72,6 @@
 		ACF72A008F194935A02E07F8 /* nardi_core.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; path = nardi_core.cpp; sourceTree = "<group>"; };
 		B46C3D17F4E832D5E53C7FD9 /* ContentView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContentView.swift; sourceTree = "<group>"; };
 		BCA0F80054C90B8B2F1A28D3 /* lookahead_batch.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; path = lookahead_batch.cpp; sourceTree = "<group>"; };
-		C00DA9D010C15920FD6B6EFA /* polavg10.nardiw */ = {isa = PBXFileReference; path = polavg10.nardiw; sourceTree = "<group>"; };
 		CF06DE970248A41182080633 /* BoardImg.jpg */ = {isa = PBXFileReference; lastKnownFileType = image.jpeg; path = BoardImg.jpg; sourceTree = "<group>"; };
 		D79E60817EC9D8FDF512F41E /* nardi_c_api.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; path = nardi_c_api.cpp; sourceTree = "<group>"; };
 		D9E0B1305AA3E1DA46FBCEB7 /* AnalyzeScreen.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AnalyzeScreen.swift; sourceTree = "<group>"; };
@@ -141,7 +141,7 @@
 				5311534EBF6F0A7D4532D35F /* .gitkeep */,
 				5D2859C5F5ED3E955FE3FC02 /* Assets.xcassets */,
 				50052D657515F6934953D482 /* mlp.nardiw */,
-				C00DA9D010C15920FD6B6EFA /* polavg10.nardiw */,
+				4F7D1F874B6CF52D6FD98338 /* vzg0.nardiw */,
 			);
 			path = Resources;
 			sourceTree = "<group>";
@@ -265,7 +265,7 @@
 				805519EEB44018EA44D5D0B6 /* BoardImg.jpg in Resources */,
 				631E7B3D02058011231C36AC /* WhitePiece.png in Resources */,
 				6F3B9EE7D7AB25991DB6DEDE /* mlp.nardiw in Resources */,
-				07AC3F6B3B5D3A82E5642C93 /* polavg10.nardiw in Resources */,
+				D3EDB027171468DA411EB023 /* vzg0.nardiw in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

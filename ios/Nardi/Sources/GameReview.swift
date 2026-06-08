@@ -40,7 +40,7 @@ final class GameReview: ObservableObject {
         guard let h = nardi_create() else { fatalError("nardi_create failed") }
         handle = h
         // Review uses the strongest network (the Polyak-averaged ResNardiNet).
-        if let path = Bundle.main.path(forResource: "polavg10", ofType: "nardiw") {
+        if let path = Bundle.main.path(forResource: "vzg0", ofType: "nardiw") {
             modelLoaded = (nardi_load_model(h, path) == NARDI_OK)
         } else {
             modelLoaded = false

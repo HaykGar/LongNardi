@@ -14,5 +14,5 @@ res_v2.load_state_dict(torch.load(os.path.join(weights_dir, "res2.pt"), map_loca
 res_v2.eval()
 
 vzgo = ResNardiNet()
-vzgo.load_state_dict(torch.load(os.path.join(weights_dir, "polAvg10_lookahead.pt"), map_location=torch.device('cpu'), weights_only=True))
+vzgo.load_state_dict(torch.load(os.path.join(weights_dir, "vzg0.pt"), map_location=torch.device('cpu'), weights_only=True))
 vzgo.eval()

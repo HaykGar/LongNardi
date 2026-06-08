@@ -37,7 +37,7 @@ retrain or add/rename a blob. `make_model.sh` needs the `DecisionEngine/venv`
   the `@MainActor` wrapper over the C engine.
 - `Nardi/Bridge/` — bridging header exposing `nardi_c_api.h` to Swift.
 - `Nardi/Resources/*.nardiw` — bundled value networks (generated; gitignored):
-  `mlp.nardiw` (Medium / greedy) and `polavg10.nardiw` (Hard / 1-ply lookahead,
+  `mlp.nardiw` (Medium / greedy) and `vzg0.nardiw` (Hard / 1-ply lookahead,
   and the network used for all analysis: game review + analyzer).
 
 `Nardi.xcodeproj` is generated and gitignored — regenerate with `xcodegen`.
@@ -51,10 +51,10 @@ strategy over a value network bundled as a `.nardiw` blob:
 |------------|-----------------|--------------------------|-------------------------|
 | Easy       | heuristic       | none (hand-crafted)      | —                       |
 | Medium     | greedy (1-ply)  | `mlp.nardiw` (MLP)       | `mlp.pt`                |
-| Hard       | 1-ply lookahead | `polavg10.nardiw` (ResNet) | `polAvg10_lookahead.pt` |
+| Hard       | 1-ply lookahead | `vzg0.nardiw` (ResNet) | `vzg0.pt` |
 
 All analysis (game review + the analyzer) uses the strongest network,
-`polavg10.nardiw`. The blobs are produced by `scripts/make_model.sh` from
+`vzg0.nardiw`. The blobs are produced by `scripts/make_model.sh` from
 `../DecisionEngine/weights/`; see `DecisionEngine/nardi_net.export_weights` for
 the torch-free format and `nardi_infer.cpp` for the C++ inference that reads it.
 The engine still carries an (unused) MCTS bot; it's deprecated and not exposed in

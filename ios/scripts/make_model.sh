@@ -6,7 +6,7 @@
 #
 # Produces two blobs in Nardi/Resources:
 #   mlp.nardiw       <- weights/mlp.pt               (NardiNet / MLP) -> Medium (greedy)
-#   polavg10.nardiw  <- weights/polAvg10_lookahead.pt (ResNardiNet)   -> Hard (1-ply
+#   vzg0.nardiw  <- weights/vzg0.pt (ResNardiNet)   -> Hard (1-ply
 #                                                       lookahead) + all analysis
 set -euo pipefail
 
@@ -32,5 +32,5 @@ def export(model, pt, out):
 # Medium = greedy over the small MLP; Hard / analysis = 1-ply lookahead over the
 # Polyak-averaged ResNardiNet.
 export(NardiNet(64, 16), "mlp.pt",                "mlp.nardiw")
-export(ResNardiNet(),    "polAvg10_lookahead.pt", "polavg10.nardiw")
+export(ResNardiNet(),    "vzg0.pt", "vzg0.nardiw")
 PY
