@@ -335,15 +335,21 @@ class Simulator:
 
         for model_first in tqdm(range(2), desc="Outer Loop", leave=False):
             p1_first = bool(model_first)
+            
+            pbar = tqdm(range(num_games), desc="Inner Loop", leave=False)
 
-            for game in tqdm(range(num_games), desc="Inner Loop", leave=False):
+            for game in pbar:
                 result = self.simulate_game(p1_move, p2_move, p1_first, position_setup)
                 
                 scores[0] += result[0]
                 scores[1] += result[1]
+                
+                pbar.set_postfix(score=scores)
                                     
                 if p2_strat == "human":
                     print(f"game {model_first*num_games + game} is over\n\n")   
+                    
+            print("current score: ", scores)
         
         wr = scores[0] / (scores[0] + scores[1])
         print(f"win rate: {wr*100}%")
@@ -389,9 +395,21 @@ class Simulator:
 if __name__ =="__main__":
     import models
     
-    model = models.res_v2
-    sim = Simulator(sleep_time=1)
+    # model = models.vzgo
+    sim = Simulator(sleep_time=0)
     
-    switch = len(input("Press Enter for normal play or input something to switch order ")) > 0
+    print('Vzgo vs res2')
+    scores = sim.benchmark(models.vzgo, "lookahead", models.res_v2, "lookahead")
+    print(scores)
     
-    sim.play_with_graphics(model, "lookahead", manual_dice=True, switch_order=switch)
+    print('vzgo vs vzgo greedy')
+    scores = sim.benchmark(models.vzgo, "lookahead", models.vzgo, "greedy")
+    print(scores)
+    
+    print('vzgo greedy vs res2')
+    scores = sim.benchmark(models.vzgo, "greedy", models.res_v2, "lookahead")
+    print(scores)
+    
+    # switch = len(input("Press Enter for normal play or input something to switch order ")) > 0
+    
+    # sim.play_with_graphics(model, "lookahead", manual_dice=True, switch_order=switch)
