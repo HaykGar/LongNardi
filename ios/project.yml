@@ -72,3 +72,16 @@ targets:
       - path: ../CoreEngine/ReaderWriter.cpp
       - path: ../CoreEngine/TerminalRW.cpp
       - path: ../CoreEngine/ScenarioBuilder.cpp
+
+# A SHARED scheme so CI / Xcode Cloud can find it. Generated projects otherwise
+# only get ephemeral auto-schemes (not written to xcshareddata), which the cloud
+# build can't see. Archive uses the Release configuration.
+schemes:
+  Nardi:
+    build:
+      targets:
+        Nardi: all
+    run:
+      config: Debug
+    archive:
+      config: Release
