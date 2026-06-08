@@ -1,6 +1,6 @@
 name: Nardi
 options:
-  bundleIdPrefix: com.nardi
+  bundleIdPrefix: com.haykg
   deploymentTarget:
     iOS: "17.0"
   createIntermediateGroups: true
@@ -29,15 +29,14 @@ targets:
         ITSAppUsesNonExemptEncryption: false
     settings:
       base:
-        PRODUCT_BUNDLE_IDENTIFIER: com.nardi.app
+        PRODUCT_BUNDLE_IDENTIFIER: com.haykg.nardi
         SWIFT_OBJC_BRIDGING_HEADER: Nardi/Bridge/Nardi-Bridging-Header.h
         SWIFT_VERSION: "5.0"
         # --- Device / TestFlight signing ---
         CODE_SIGN_STYLE: Automatic
-        # Paste your 10-char Apple Developer Team ID here, then re-run
-        # `xcodegen generate`. Find it in Xcode > Settings > Accounts (select the
-        # team -> the ID in parentheses) or developer.apple.com > Membership.
-        DEVELOPMENT_TEAM: ""
+        # Apple Developer Team ID (Xcode > Settings > Accounts, or
+        # developer.apple.com > Membership). Required to archive for device.
+        DEVELOPMENT_TEAM: "74ZWUTSWK8"
         # The shared C++ engine core lives outside ios/; expose its headers.
         HEADER_SEARCH_PATHS:
           - $(SRCROOT)/../DecisionEngine
