@@ -1,0 +1,508 @@
+// !$*UTF8*$!
+{
+	archiveVersion = 1;
+	classes = {
+	};
+	objectVersion = 77;
+	objects = {
+
+/* Begin PBXBuildFile section */
+		07AC3F6B3B5D3A82E5642C93 /* polavg10.nardiw in Resources */ = {isa = PBXBuildFile; fileRef = C00DA9D010C15920FD6B6EFA /* polavg10.nardiw */; };
+		0A7A739EA56A0B0FEB7D9154 /* BoardGeometry.swift in Sources */ = {isa = PBXBuildFile; fileRef = ED5CD05F09BEC43DA1951CD9 /* BoardGeometry.swift */; };
+		16351C7DBFC15EC385679093 /* target_model.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 3141307AA4FD796A56F53F57 /* target_model.cpp */; };
+		1DF780B0FA834F71D6666C70 /* ScenarioBuilder.cpp in Sources */ = {isa = PBXBuildFile; fileRef = ACCB10D4E4DECFD80073A74F /* ScenarioBuilder.cpp */; };
+		2482AC1CF1229D2288203941 /* ContentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B46C3D17F4E832D5E53C7FD9 /* ContentView.swift */; };
+		24C861C2267D14F7F4460BC9 /* Controller.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 3FF145EB25FA984CE37E574A /* Controller.cpp */; };
+		34EE2D5A07CA6848387592E2 /* nardi_engine.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 7642ED3DE5F6029C6C91A269 /* nardi_engine.cpp */; };
+		3634EB00EFA248CAA1DAC779 /* scenario_config.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 508E1384769A3A9E5D9C60FE /* scenario_config.cpp */; };
+		4D65A533426CC78CE42A58ED /* NardiGame.swift in Sources */ = {isa = PBXBuildFile; fileRef = 01F62DB776C36817BE09C8FF /* NardiGame.swift */; };
+		631E7B3D02058011231C36AC /* WhitePiece.png in Resources */ = {isa = PBXBuildFile; fileRef = 0EBEA7F8D52DA4D6377E609B /* WhitePiece.png */; };
+		6595B2B117B6AFE77B298C43 /* MatchHistory.swift in Sources */ = {isa = PBXBuildFile; fileRef = A16C463430F13B031E9A889B /* MatchHistory.swift */; };
+		6F3B9EE7D7AB25991DB6DEDE /* mlp.nardiw in Resources */ = {isa = PBXBuildFile; fileRef = 50052D657515F6934953D482 /* mlp.nardiw */; };
+		7165DA1C25805ACE93942EFB /* Auxilaries.cpp in Sources */ = {isa = PBXBuildFile; fileRef = A009723BB96A897463B1ED77 /* Auxilaries.cpp */; };
+		7D22BA59FF57A63DF1FCCB7F /* nardi_infer.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 7FDA8C8CC2A0304C25076A91 /* nardi_infer.cpp */; };
+		7E123BA56EFCD40CA5F3182B /* Game.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 2AA877872AA3DF84FEEB0231 /* Game.cpp */; };
+		7FF32E95649A63A9AB182BDD /* GameReview.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6CCDE22CC9B53D8AA83E5524 /* GameReview.swift */; };
+		805519EEB44018EA44D5D0B6 /* BoardImg.jpg in Resources */ = {isa = PBXBuildFile; fileRef = CF06DE970248A41182080633 /* BoardImg.jpg */; };
+		81E683B3E3D62AC0CABB24E5 /* TerminalRW.cpp in Sources */ = {isa = PBXBuildFile; fileRef = F62D4F9C54F44AF2A8E3B777 /* TerminalRW.cpp */; };
+		83ABB7E4DB3CDD0242B4937C /* GameReviewView.swift in Sources */ = {isa = PBXBuildFile; fileRef = EA4393CD6F6B1F85374F3426 /* GameReviewView.swift */; };
+		8A3FBD5167E283291B94B160 /* Monitors.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 8F3FB1CA4772F473CC083831 /* Monitors.cpp */; };
+		9EEC878DF19A9625BAD825E8 /* MatchHistoryView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 30E44A12FE22DBE48A6E7B6B /* MatchHistoryView.swift */; };
+		AC61D0B0B87EBC6313D5B35F /* AnalyzeScreen.swift in Sources */ = {isa = PBXBuildFile; fileRef = D9E0B1305AA3E1DA46FBCEB7 /* AnalyzeScreen.swift */; };
+		B4A27E8029C1FF7E68EC084D /* nardi_c_api.cpp in Sources */ = {isa = PBXBuildFile; fileRef = D79E60817EC9D8FDF512F41E /* nardi_c_api.cpp */; };
+		B68FD28F9245275C58336F2D /* BoardCanvas.swift in Sources */ = {isa = PBXBuildFile; fileRef = 624A360BD9F94A4FB19C571D /* BoardCanvas.swift */; };
+		BD2510785969685B3243D174 /* AnalyzeGame.swift in Sources */ = {isa = PBXBuildFile; fileRef = 79D991F35317B7900EB8CAB9 /* AnalyzeGame.swift */; };
+		CDA183D79EB4AA22AD914A9E /* nardi_core.cpp in Sources */ = {isa = PBXBuildFile; fileRef = ACF72A008F194935A02E07F8 /* nardi_core.cpp */; };
+		CE94EC4C5898AEDE7C00599B /* BlackPiece.png in Resources */ = {isa = PBXBuildFile; fileRef = DB6527A713831457F8C54E76 /* BlackPiece.png */; };
+		DBA2B353F2B32E38ABAC642D /* lookahead_batch.cpp in Sources */ = {isa = PBXBuildFile; fileRef = BCA0F80054C90B8B2F1A28D3 /* lookahead_batch.cpp */; };
+		DD543C6DBC3280B15AA4D960 /* mcts_node.cpp in Sources */ = {isa = PBXBuildFile; fileRef = FBF1A80B35EA4CCC48ADE398 /* mcts_node.cpp */; };
+		DF2865BCE67CC9694A17C501 /* NardiApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2DA94F4764C4B0F3BB9D042A /* NardiApp.swift */; };
+		E678D7FDFA6FF7901CCCE71C /* Board.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 0D46AE31262F698E6A983D6D /* Board.cpp */; };
+		E7B4E95EE5D0D15E10F73037 /* ReaderWriter.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 9B46DC8A792B61279CDD99A6 /* ReaderWriter.cpp */; };
+		F7BA79AB83136365A2896925 /* BoardView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 309961F8C6295624ED673353 /* BoardView.swift */; };
+/* End PBXBuildFile section */
+
+/* Begin PBXFileReference section */
+		01F62DB776C36817BE09C8FF /* NardiGame.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NardiGame.swift; sourceTree = "<group>"; };
+		0D46AE31262F698E6A983D6D /* Board.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; path = Board.cpp; sourceTree = "<group>"; };
+		0EBEA7F8D52DA4D6377E609B /* WhitePiece.png */ = {isa = PBXFileReference; lastKnownFileType = image.png; path = WhitePiece.png; sourceTree = "<group>"; };
+		2AA877872AA3DF84FEEB0231 /* Game.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; path = Game.cpp; sourceTree = "<group>"; };
+		2DA94F4764C4B0F3BB9D042A /* NardiApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NardiApp.swift; sourceTree = "<group>"; };
+		309961F8C6295624ED673353 /* BoardView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BoardView.swift; sourceTree = "<group>"; };
+		30E44A12FE22DBE48A6E7B6B /* MatchHistoryView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MatchHistoryView.swift; sourceTree = "<group>"; };
+		3141307AA4FD796A56F53F57 /* target_model.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; path = target_model.cpp; sourceTree = "<group>"; };
+		3FF145EB25FA984CE37E574A /* Controller.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; path = Controller.cpp; sourceTree = "<group>"; };
+		50052D657515F6934953D482 /* mlp.nardiw */ = {isa = PBXFileReference; path = mlp.nardiw; sourceTree = "<group>"; };
+		508E1384769A3A9E5D9C60FE /* scenario_config.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; path = scenario_config.cpp; sourceTree = "<group>"; };
+		5311534EBF6F0A7D4532D35F /* .gitkeep */ = {isa = PBXFileReference; path = .gitkeep; sourceTree = "<group>"; };
+		53BEF0A89F930E01F09AE136 /* Nardi-Bridging-Header.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = "Nardi-Bridging-Header.h"; sourceTree = "<group>"; };
+		624A360BD9F94A4FB19C571D /* BoardCanvas.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BoardCanvas.swift; sourceTree = "<group>"; };
+		6CCDE22CC9B53D8AA83E5524 /* GameReview.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GameReview.swift; sourceTree = "<group>"; };
+		7642ED3DE5F6029C6C91A269 /* nardi_engine.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; path = nardi_engine.cpp; sourceTree = "<group>"; };
+		79D991F35317B7900EB8CAB9 /* AnalyzeGame.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AnalyzeGame.swift; sourceTree = "<group>"; };
+		7FDA8C8CC2A0304C25076A91 /* nardi_infer.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; path = nardi_infer.cpp; sourceTree = "<group>"; };
+		8F3FB1CA4772F473CC083831 /* Monitors.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; path = Monitors.cpp; sourceTree = "<group>"; };
+		9B46DC8A792B61279CDD99A6 /* ReaderWriter.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; path = ReaderWriter.cpp; sourceTree = "<group>"; };
+		A009723BB96A897463B1ED77 /* Auxilaries.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; path = Auxilaries.cpp; sourceTree = "<group>"; };
+		A16C463430F13B031E9A889B /* MatchHistory.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MatchHistory.swift; sourceTree = "<group>"; };
+		ACCB10D4E4DECFD80073A74F /* ScenarioBuilder.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; path = ScenarioBuilder.cpp; sourceTree = "<group>"; };
+		ACF72A008F194935A02E07F8 /* nardi_core.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; path = nardi_core.cpp; sourceTree = "<group>"; };
+		B46C3D17F4E832D5E53C7FD9 /* ContentView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContentView.swift; sourceTree = "<group>"; };
+		BCA0F80054C90B8B2F1A28D3 /* lookahead_batch.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; path = lookahead_batch.cpp; sourceTree = "<group>"; };
+		C00DA9D010C15920FD6B6EFA /* polavg10.nardiw */ = {isa = PBXFileReference; path = polavg10.nardiw; sourceTree = "<group>"; };
+		CF06DE970248A41182080633 /* BoardImg.jpg */ = {isa = PBXFileReference; lastKnownFileType = image.jpeg; path = BoardImg.jpg; sourceTree = "<group>"; };
+		D79E60817EC9D8FDF512F41E /* nardi_c_api.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; path = nardi_c_api.cpp; sourceTree = "<group>"; };
+		D9E0B1305AA3E1DA46FBCEB7 /* AnalyzeScreen.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AnalyzeScreen.swift; sourceTree = "<group>"; };
+		DB6527A713831457F8C54E76 /* BlackPiece.png */ = {isa = PBXFileReference; lastKnownFileType = image.png; path = BlackPiece.png; sourceTree = "<group>"; };
+		E36FAE2739F4EB37BC8F69E4 /* Nardi.app */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.application; path = Nardi.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		EA4393CD6F6B1F85374F3426 /* GameReviewView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GameReviewView.swift; sourceTree = "<group>"; };
+		ED5CD05F09BEC43DA1951CD9 /* BoardGeometry.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BoardGeometry.swift; sourceTree = "<group>"; };
+		F62D4F9C54F44AF2A8E3B777 /* TerminalRW.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; path = TerminalRW.cpp; sourceTree = "<group>"; };
+		FBF1A80B35EA4CCC48ADE398 /* mcts_node.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; path = mcts_node.cpp; sourceTree = "<group>"; };
+/* End PBXFileReference section */
+
+/* Begin PBXGroup section */
+		0CB9F5C72EA9B7B06DA65D4C /* DecisionEngine */ = {
+			isa = PBXGroup;
+			children = (
+				BCA0F80054C90B8B2F1A28D3 /* lookahead_batch.cpp */,
+				FBF1A80B35EA4CCC48ADE398 /* mcts_node.cpp */,
+				D79E60817EC9D8FDF512F41E /* nardi_c_api.cpp */,
+				ACF72A008F194935A02E07F8 /* nardi_core.cpp */,
+				7642ED3DE5F6029C6C91A269 /* nardi_engine.cpp */,
+				7FDA8C8CC2A0304C25076A91 /* nardi_infer.cpp */,
+				508E1384769A3A9E5D9C60FE /* scenario_config.cpp */,
+				3141307AA4FD796A56F53F57 /* target_model.cpp */,
+			);
+			path = DecisionEngine;
+			sourceTree = "<group>";
+		};
+		3407B6BDDC160FF51D15EFC6 /* Nardi */ = {
+			isa = PBXGroup;
+			children = (
+				52F9F51DF556CD8648C769CC /* CoreEngine */,
+				0CB9F5C72EA9B7B06DA65D4C /* DecisionEngine */,
+				C5B1EC8728955E33B8525BA1 /* images */,
+			);
+			name = Nardi;
+			path = ..;
+			sourceTree = "<group>";
+		};
+		4EDDB461396B6F9B6105932B /* Nardi */ = {
+			isa = PBXGroup;
+			children = (
+				8D49C186F5EE9D3870172BBB /* Bridge */,
+				70CCEBCC0E3953BBDBD13930 /* Resources */,
+				8BD27108398534622B8BF134 /* Sources */,
+			);
+			path = Nardi;
+			sourceTree = "<group>";
+		};
+		52F9F51DF556CD8648C769CC /* CoreEngine */ = {
+			isa = PBXGroup;
+			children = (
+				A009723BB96A897463B1ED77 /* Auxilaries.cpp */,
+				0D46AE31262F698E6A983D6D /* Board.cpp */,
+				3FF145EB25FA984CE37E574A /* Controller.cpp */,
+				2AA877872AA3DF84FEEB0231 /* Game.cpp */,
+				8F3FB1CA4772F473CC083831 /* Monitors.cpp */,
+				9B46DC8A792B61279CDD99A6 /* ReaderWriter.cpp */,
+				ACCB10D4E4DECFD80073A74F /* ScenarioBuilder.cpp */,
+				F62D4F9C54F44AF2A8E3B777 /* TerminalRW.cpp */,
+			);
+			path = CoreEngine;
+			sourceTree = "<group>";
+		};
+		70CCEBCC0E3953BBDBD13930 /* Resources */ = {
+			isa = PBXGroup;
+			children = (
+				5311534EBF6F0A7D4532D35F /* .gitkeep */,
+				50052D657515F6934953D482 /* mlp.nardiw */,
+				C00DA9D010C15920FD6B6EFA /* polavg10.nardiw */,
+			);
+			path = Resources;
+			sourceTree = "<group>";
+		};
+		8BD27108398534622B8BF134 /* Sources */ = {
+			isa = PBXGroup;
+			children = (
+				79D991F35317B7900EB8CAB9 /* AnalyzeGame.swift */,
+				D9E0B1305AA3E1DA46FBCEB7 /* AnalyzeScreen.swift */,
+				624A360BD9F94A4FB19C571D /* BoardCanvas.swift */,
+				ED5CD05F09BEC43DA1951CD9 /* BoardGeometry.swift */,
+				309961F8C6295624ED673353 /* BoardView.swift */,
+				B46C3D17F4E832D5E53C7FD9 /* ContentView.swift */,
+				6CCDE22CC9B53D8AA83E5524 /* GameReview.swift */,
+				EA4393CD6F6B1F85374F3426 /* GameReviewView.swift */,
+				A16C463430F13B031E9A889B /* MatchHistory.swift */,
+				30E44A12FE22DBE48A6E7B6B /* MatchHistoryView.swift */,
+				2DA94F4764C4B0F3BB9D042A /* NardiApp.swift */,
+				01F62DB776C36817BE09C8FF /* NardiGame.swift */,
+			);
+			path = Sources;
+			sourceTree = "<group>";
+		};
+		8D49C186F5EE9D3870172BBB /* Bridge */ = {
+			isa = PBXGroup;
+			children = (
+				53BEF0A89F930E01F09AE136 /* Nardi-Bridging-Header.h */,
+			);
+			path = Bridge;
+			sourceTree = "<group>";
+		};
+		9AF4EBD18A68019F55B36236 = {
+			isa = PBXGroup;
+			children = (
+				4EDDB461396B6F9B6105932B /* Nardi */,
+				3407B6BDDC160FF51D15EFC6 /* Nardi */,
+				B8F3B8F03C6B7E9593F28607 /* Products */,
+			);
+			sourceTree = "<group>";
+		};
+		B8F3B8F03C6B7E9593F28607 /* Products */ = {
+			isa = PBXGroup;
+			children = (
+				E36FAE2739F4EB37BC8F69E4 /* Nardi.app */,
+			);
+			name = Products;
+			sourceTree = "<group>";
+		};
+		C5B1EC8728955E33B8525BA1 /* images */ = {
+			isa = PBXGroup;
+			children = (
+				DB6527A713831457F8C54E76 /* BlackPiece.png */,
+				CF06DE970248A41182080633 /* BoardImg.jpg */,
+				0EBEA7F8D52DA4D6377E609B /* WhitePiece.png */,
+			);
+			path = images;
+			sourceTree = "<group>";
+		};
+/* End PBXGroup section */
+
+/* Begin PBXNativeTarget section */
+		70626D7FA207C08CA27DBBD9 /* Nardi */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 3B4E34E0237F7F8A20CA7BF0 /* Build configuration list for PBXNativeTarget "Nardi" */;
+			buildPhases = (
+				9E191DDBA47D1C5341C0A58C /* Sources */,
+				DCCEFBFE925D1BDC2B74C9DC /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			name = Nardi;
+			packageProductDependencies = (
+			);
+			productName = Nardi;
+			productReference = E36FAE2739F4EB37BC8F69E4 /* Nardi.app */;
+			productType = "com.apple.product-type.application";
+		};
+/* End PBXNativeTarget section */
+
+/* Begin PBXProject section */
+		BC2D3871B2D4676873575B5C /* Project object */ = {
+			isa = PBXProject;
+			attributes = {
+				BuildIndependentTargetsInParallel = YES;
+				LastUpgradeCheck = 1430;
+				TargetAttributes = {
+					70626D7FA207C08CA27DBBD9 = {
+						DevelopmentTeam = 74ZWUTSWK8;
+						ProvisioningStyle = Automatic;
+					};
+				};
+			};
+			buildConfigurationList = 4B3454A0840DDE514C413726 /* Build configuration list for PBXProject "Nardi" */;
+			developmentRegion = en;
+			hasScannedForEncodings = 0;
+			knownRegions = (
+				Base,
+				en,
+			);
+			mainGroup = 9AF4EBD18A68019F55B36236;
+			minimizedProjectReferenceProxies = 1;
+			preferredProjectObjectVersion = 77;
+			productRefGroup = B8F3B8F03C6B7E9593F28607 /* Products */;
+			projectDirPath = "";
+			projectRoot = "";
+			targets = (
+				70626D7FA207C08CA27DBBD9 /* Nardi */,
+			);
+		};
+/* End PBXProject section */
+
+/* Begin PBXResourcesBuildPhase section */
+		DCCEFBFE925D1BDC2B74C9DC /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				CE94EC4C5898AEDE7C00599B /* BlackPiece.png in Resources */,
+				805519EEB44018EA44D5D0B6 /* BoardImg.jpg in Resources */,
+				631E7B3D02058011231C36AC /* WhitePiece.png in Resources */,
+				6F3B9EE7D7AB25991DB6DEDE /* mlp.nardiw in Resources */,
+				07AC3F6B3B5D3A82E5642C93 /* polavg10.nardiw in Resources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXResourcesBuildPhase section */
+
+/* Begin PBXSourcesBuildPhase section */
+		9E191DDBA47D1C5341C0A58C /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				BD2510785969685B3243D174 /* AnalyzeGame.swift in Sources */,
+				AC61D0B0B87EBC6313D5B35F /* AnalyzeScreen.swift in Sources */,
+				7165DA1C25805ACE93942EFB /* Auxilaries.cpp in Sources */,
+				E678D7FDFA6FF7901CCCE71C /* Board.cpp in Sources */,
+				B68FD28F9245275C58336F2D /* BoardCanvas.swift in Sources */,
+				0A7A739EA56A0B0FEB7D9154 /* BoardGeometry.swift in Sources */,
+				F7BA79AB83136365A2896925 /* BoardView.swift in Sources */,
+				2482AC1CF1229D2288203941 /* ContentView.swift in Sources */,
+				24C861C2267D14F7F4460BC9 /* Controller.cpp in Sources */,
+				7E123BA56EFCD40CA5F3182B /* Game.cpp in Sources */,
+				7FF32E95649A63A9AB182BDD /* GameReview.swift in Sources */,
+				83ABB7E4DB3CDD0242B4937C /* GameReviewView.swift in Sources */,
+				6595B2B117B6AFE77B298C43 /* MatchHistory.swift in Sources */,
+				9EEC878DF19A9625BAD825E8 /* MatchHistoryView.swift in Sources */,
+				8A3FBD5167E283291B94B160 /* Monitors.cpp in Sources */,
+				DF2865BCE67CC9694A17C501 /* NardiApp.swift in Sources */,
+				4D65A533426CC78CE42A58ED /* NardiGame.swift in Sources */,
+				E7B4E95EE5D0D15E10F73037 /* ReaderWriter.cpp in Sources */,
+				1DF780B0FA834F71D6666C70 /* ScenarioBuilder.cpp in Sources */,
+				81E683B3E3D62AC0CABB24E5 /* TerminalRW.cpp in Sources */,
+				DBA2B353F2B32E38ABAC642D /* lookahead_batch.cpp in Sources */,
+				DD543C6DBC3280B15AA4D960 /* mcts_node.cpp in Sources */,
+				B4A27E8029C1FF7E68EC084D /* nardi_c_api.cpp in Sources */,
+				CDA183D79EB4AA22AD914A9E /* nardi_core.cpp in Sources */,
+				34EE2D5A07CA6848387592E2 /* nardi_engine.cpp in Sources */,
+				7D22BA59FF57A63DF1FCCB7F /* nardi_infer.cpp in Sources */,
+				3634EB00EFA248CAA1DAC779 /* scenario_config.cpp in Sources */,
+				16351C7DBFC15EC385679093 /* target_model.cpp in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXSourcesBuildPhase section */
+
+/* Begin XCBuildConfiguration section */
+		A10B8C93F3336EB517E9C9AF /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				CODE_SIGN_IDENTITY = "iPhone Developer";
+				CODE_SIGN_STYLE = Automatic;
+				DEVELOPMENT_TEAM = 74ZWUTSWK8;
+				GCC_PREPROCESSOR_DEFINITIONS = (
+					"$(inherited)",
+				);
+				HEADER_SEARCH_PATHS = (
+					"$(SRCROOT)/../DecisionEngine",
+					"$(SRCROOT)/../CoreEngine",
+				);
+				INFOPLIST_FILE = Nardi/Info.plist;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = com.haykg.nardi;
+				SDKROOT = iphoneos;
+				SWIFT_OBJC_BRIDGING_HEADER = "Nardi/Bridge/Nardi-Bridging-Header.h";
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Debug;
+		};
+		C843E8E4DD99B3E217870C8B /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				CLANG_ANALYZER_NONNULL = YES;
+				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
+				CLANG_CXX_LANGUAGE_STANDARD = "c++23";
+				CLANG_CXX_LIBRARY = "libc++";
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				CLANG_ENABLE_OBJC_WEAK = YES;
+				CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING = YES;
+				CLANG_WARN_BOOL_CONVERSION = YES;
+				CLANG_WARN_COMMA = YES;
+				CLANG_WARN_CONSTANT_CONVERSION = YES;
+				CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS = YES;
+				CLANG_WARN_DIRECT_OBJC_ISA_USAGE = YES_ERROR;
+				CLANG_WARN_DOCUMENTATION_COMMENTS = YES;
+				CLANG_WARN_EMPTY_BODY = YES;
+				CLANG_WARN_ENUM_CONVERSION = YES;
+				CLANG_WARN_INFINITE_RECURSION = YES;
+				CLANG_WARN_INT_CONVERSION = YES;
+				CLANG_WARN_NON_LITERAL_NULL_CONVERSION = YES;
+				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
+				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
+				CLANG_WARN_OBJC_ROOT_CLASS = YES_ERROR;
+				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
+				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
+				CLANG_WARN_STRICT_PROTOTYPES = YES;
+				CLANG_WARN_SUSPICIOUS_MOVE = YES;
+				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
+				CLANG_WARN_UNREACHABLE_CODE = YES;
+				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
+				"CODE_SIGNING_ALLOWED[sdk=iphonesimulator*]" = NO;
+				COPY_PHASE_STRIP = NO;
+				DEBUG_INFORMATION_FORMAT = dwarf;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				ENABLE_TESTABILITY = YES;
+				GCC_C_LANGUAGE_STANDARD = gnu11;
+				GCC_DYNAMIC_NO_PIC = NO;
+				GCC_NO_COMMON_BLOCKS = YES;
+				GCC_OPTIMIZATION_LEVEL = 0;
+				GCC_PREPROCESSOR_DEFINITIONS = (
+					"$(inherited)",
+					"DEBUG=1",
+				);
+				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
+				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
+				GCC_WARN_UNDECLARED_SELECTOR = YES;
+				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
+				GCC_WARN_UNUSED_FUNCTION = YES;
+				GCC_WARN_UNUSED_VARIABLE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				MTL_ENABLE_DEBUG_INFO = INCLUDE_SOURCE;
+				MTL_FAST_MATH = YES;
+				ONLY_ACTIVE_ARCH = YES;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = iphoneos;
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = DEBUG;
+				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
+				SWIFT_VERSION = 5.0;
+			};
+			name = Debug;
+		};
+		DBF5B787011B722FC32B1596 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				CODE_SIGN_IDENTITY = "iPhone Developer";
+				CODE_SIGN_STYLE = Automatic;
+				DEVELOPMENT_TEAM = 74ZWUTSWK8;
+				GCC_PREPROCESSOR_DEFINITIONS = (
+					"$(inherited)",
+				);
+				HEADER_SEARCH_PATHS = (
+					"$(SRCROOT)/../DecisionEngine",
+					"$(SRCROOT)/../CoreEngine",
+				);
+				INFOPLIST_FILE = Nardi/Info.plist;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = com.haykg.nardi;
+				SDKROOT = iphoneos;
+				SWIFT_OBJC_BRIDGING_HEADER = "Nardi/Bridge/Nardi-Bridging-Header.h";
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Release;
+		};
+		E94E0EAC0FEDD3AABDD5C34B /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				CLANG_ANALYZER_NONNULL = YES;
+				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
+				CLANG_CXX_LANGUAGE_STANDARD = "c++23";
+				CLANG_CXX_LIBRARY = "libc++";
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				CLANG_ENABLE_OBJC_WEAK = YES;
+				CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING = YES;
+				CLANG_WARN_BOOL_CONVERSION = YES;
+				CLANG_WARN_COMMA = YES;
+				CLANG_WARN_CONSTANT_CONVERSION = YES;
+				CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS = YES;
+				CLANG_WARN_DIRECT_OBJC_ISA_USAGE = YES_ERROR;
+				CLANG_WARN_DOCUMENTATION_COMMENTS = YES;
+				CLANG_WARN_EMPTY_BODY = YES;
+				CLANG_WARN_ENUM_CONVERSION = YES;
+				CLANG_WARN_INFINITE_RECURSION = YES;
+				CLANG_WARN_INT_CONVERSION = YES;
+				CLANG_WARN_NON_LITERAL_NULL_CONVERSION = YES;
+				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
+				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
+				CLANG_WARN_OBJC_ROOT_CLASS = YES_ERROR;
+				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
+				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
+				CLANG_WARN_STRICT_PROTOTYPES = YES;
+				CLANG_WARN_SUSPICIOUS_MOVE = YES;
+				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
+				CLANG_WARN_UNREACHABLE_CODE = YES;
+				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
+				"CODE_SIGNING_ALLOWED[sdk=iphonesimulator*]" = NO;
+				COPY_PHASE_STRIP = NO;
+				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
+				ENABLE_NS_ASSERTIONS = NO;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				GCC_C_LANGUAGE_STANDARD = gnu11;
+				GCC_NO_COMMON_BLOCKS = YES;
+				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
+				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
+				GCC_WARN_UNDECLARED_SELECTOR = YES;
+				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
+				GCC_WARN_UNUSED_FUNCTION = YES;
+				GCC_WARN_UNUSED_VARIABLE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				MTL_ENABLE_DEBUG_INFO = NO;
+				MTL_FAST_MATH = YES;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = iphoneos;
+				SWIFT_COMPILATION_MODE = wholemodule;
+				SWIFT_OPTIMIZATION_LEVEL = "-O";
+				SWIFT_VERSION = 5.0;
+			};
+			name = Release;
+		};
+/* End XCBuildConfiguration section */
+
+/* Begin XCConfigurationList section */
+		3B4E34E0237F7F8A20CA7BF0 /* Build configuration list for PBXNativeTarget "Nardi" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				A10B8C93F3336EB517E9C9AF /* Debug */,
+				DBF5B787011B722FC32B1596 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Debug;
+		};
+		4B3454A0840DDE514C413726 /* Build configuration list for PBXProject "Nardi" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				C843E8E4DD99B3E217870C8B /* Debug */,
+				E94E0EAC0FEDD3AABDD5C34B /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Debug;
+		};
+/* End XCConfigurationList section */
+	};
+	rootObject = BC2D3871B2D4676873575B5C /* Project object */;
+}

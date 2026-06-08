@@ -1,0 +1,48 @@
+.vscode
+nardi.dSYM
+test.dSYM
+.DS_Store
+nardi
+.gitignore
+test
+nardi
+build*
+run*
+!run_game_macos.sh
+bazel*
+MODULE*
+*.txt
+!DecisionEngine/requirements-game.txt
+.*
+~*
+nardi.*
+*.pyc
+*.png
+nardi_graphics*
+info.plist
+*.toml
+update_pt.py
+get_elos.py
+playground.py
+Article/
+*.nardiw
+DecisionEngine/cpp_feature_lookahead.md
+DecisionEngine/lookahead_parallelism.md
+DecisionEngine/mcts_design.md
+# The generated Xcode project IS committed (so Xcode Cloud / fresh clones find
+# it); only user-specific state is ignored. project.yml remains the source of
+# truth — regenerate with `xcodegen generate` after editing it.
+ios/Nardi.xcodeproj/xcuserdata/
+ios/Nardi.xcodeproj/project.xcworkspace/xcuserdata/
+ios/build/
+# Required app assets that must ship in the build — re-included past the broad
+# *.png / *.nardiw rules so clean clones (Xcode Cloud) build a working app. The
+# .nardiw blobs are the small exported INFERENCE weights, not the .pt checkpoints.
+!images/WhitePiece.png
+!images/BlackPiece.png
+!ios/Nardi/Resources/mlp.nardiw
+!ios/Nardi/Resources/polavg10.nardiw
+DerivedData/
+!ios/Nardi/
+!ios/BOARD_ART_SPEC.txt
+DecisionEngine/weights/Checkpoints
