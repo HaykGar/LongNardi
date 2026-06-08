@@ -15,7 +15,7 @@ struct ContentView: View {
     @State private var showAnalyze = false
     @State private var review: GameReview? = nil
     @State private var mode: GameMode = .vsComputer
-    @State private var opponent: Opponent = .greedy
+    @State private var opponent: Opponent = .medium
     @State private var first: FirstMove = .first
 
     var body: some View {
@@ -45,7 +45,7 @@ struct ContentView: View {
             }
             if args.contains("--history") || args.contains("--seed-history") { section = .history }
             if args.contains("--demo") {
-                game.newGame(mode: .vsComputer, opponent: .greedy,
+                game.newGame(mode: .vsComputer, opponent: .medium,
                              first: args.contains("--black") ? .second : .first)
             }
             // Dev hooks for verifying the Analyze flow: --analyze opens the editor

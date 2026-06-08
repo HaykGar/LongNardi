@@ -79,7 +79,8 @@ final class AnalyzeGame: ObservableObject {
     init() {
         guard let h = nardi_create() else { fatalError("nardi_create failed") }
         handle = h
-        if let path = Bundle.main.path(forResource: "model", ofType: "nardiw") {
+        // Analysis always uses the strongest network (the Polyak-averaged ResNardiNet).
+        if let path = Bundle.main.path(forResource: "polavg10", ofType: "nardiw") {
             modelLoaded = (nardi_load_model(h, path) == NARDI_OK)
         } else {
             modelLoaded = false

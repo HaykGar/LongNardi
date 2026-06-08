@@ -119,7 +119,7 @@ class ResidualBlock(nn.Module):
     def __init__(self, 
                  in_channels : int, 
                  out_channels : int,
-                 downsample=True):
+                 downsample=False):
         super().__init__()
         if downsample:
             stride=2

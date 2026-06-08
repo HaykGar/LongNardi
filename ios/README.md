@@ -13,12 +13,21 @@ Requires full Xcode (not just Command Line Tools), `xcodegen`, and the iOS
 
 ```sh
 cd ios
-./scripts/make_model.sh          # exports Nardi/Resources/model.nardiw from a .pt
-xcodegen generate                # writes Nardi.xcodeproj from project.yml
+./scripts/make_model.sh          # exports the bundled .nardiw value networks
+xcodegen generate                # writes Nardi.xcodeproj (picks up the new blobs)
 open Nardi.xcodeproj             # or build from CLI:
 xcodebuild -project Nardi.xcodeproj -scheme Nardi \
   -destination 'platform=iOS Simulator,name=iPhone 16' build
 ```
+
+**Order matters on a fresh checkout.** The `.nardiw` value networks are
+generated artifacts and are **gitignored** (`*.nardiw`), so they don't exist
+after a clone. `xcodegen` only adds the blobs that are present on disk when it
+runs, so you must run `make_model.sh` *before* `xcodegen generate` — otherwise
+the project builds without the networks and every bot/analysis falls back to the
+"model blob missing" state. Re-run both (make_model, then xcodegen) whenever you
+retrain or add/rename a blob. `make_model.sh` needs the `DecisionEngine/venv`
+(PyTorch) and reads the `.pt` weights from `../DecisionEngine/weights/`.
 
 ## Layout
 
@@ -27,9 +36,29 @@ xcodebuild -project Nardi.xcodeproj -scheme Nardi \
 - `Nardi/Sources/` — SwiftUI app (`NardiApp`, `ContentView`) and `NardiGame`,
   the `@MainActor` wrapper over the C engine.
 - `Nardi/Bridge/` — bridging header exposing `nardi_c_api.h` to Swift.
-- `Nardi/Resources/model.nardiw` — bundled value network (generated; gitignored).
+- `Nardi/Resources/*.nardiw` — bundled value networks (generated; gitignored):
+  `mlp.nardiw` (Medium / greedy) and `polavg10.nardiw` (Hard / 1-ply lookahead,
+  and the network used for all analysis: game review + analyzer).
 
 `Nardi.xcodeproj` is generated and gitignored — regenerate with `xcodegen`.
+
+## Opponents & models
+
+vs-Computer offers three difficulties (`Opponent` in `NardiGame.swift`), each a
+strategy over a value network bundled as a `.nardiw` blob:
+
+| Difficulty | Strategy        | Network                  | Source `.pt`            |
+|------------|-----------------|--------------------------|-------------------------|
+| Easy       | heuristic       | none (hand-crafted)      | —                       |
+| Medium     | greedy (1-ply)  | `mlp.nardiw` (MLP)       | `mlp.pt`                |
+| Hard       | 1-ply lookahead | `polavg10.nardiw` (ResNet) | `polAvg10_lookahead.pt` |
+
+All analysis (game review + the analyzer) uses the strongest network,
+`polavg10.nardiw`. The blobs are produced by `scripts/make_model.sh` from
+`../DecisionEngine/weights/`; see `DecisionEngine/nardi_net.export_weights` for
+the torch-free format and `nardi_infer.cpp` for the C++ inference that reads it.
+The engine still carries an (unused) MCTS bot; it's deprecated and not exposed in
+the app.
 
 ## Status
 

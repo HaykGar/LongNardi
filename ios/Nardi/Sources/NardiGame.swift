@@ -2,17 +2,24 @@ import Foundation
 import SwiftUI
 
 enum Opponent: String, CaseIterable, Identifiable {
-    case greedy = "Greedy"
-    case lookahead = "1-ply Lookahead"
-    case mcts = "MCTS"
-    case heuristic = "Heuristic"
+    case easy = "Easy"      // hand-crafted heuristic, no network
+    case medium = "Medium"  // greedy over the small MLP value net
+    case hard = "Hard"      // 1-ply lookahead over the Polyak-averaged ResNardiNet
     var id: String { rawValue }
     var strategy: NardiStrategy {
         switch self {
-        case .greedy: return NARDI_GREEDY
-        case .lookahead: return NARDI_LOOKAHEAD
-        case .mcts: return NARDI_MCTS
-        case .heuristic: return NARDI_HEURISTIC
+        case .easy: return NARDI_HEURISTIC
+        case .medium: return NARDI_GREEDY
+        case .hard: return NARDI_LOOKAHEAD
+        }
+    }
+    /// Bundled `.nardiw` value network this opponent plays with (nil = none, the
+    /// heuristic needs no network). See ios/scripts/make_model.sh.
+    var modelResource: String? {
+        switch self {
+        case .easy: return nil
+        case .medium: return "mlp"
+        case .hard: return "polavg10"
         }
     }
 }
@@ -80,9 +87,9 @@ final class NardiGame: ObservableObject {
     private let animDuration: Double = 0.45
 
     private let handle: OpaquePointer
-    private let modelLoaded: Bool
+    private var modelLoaded: Bool = false
     private var mode: GameMode = .vsComputer
-    private var opponent: Opponent = .greedy   // remembered for the saved record
+    private var opponent: Opponent = .medium   // remembered for the saved record
     private var humanIsWhite = true   // vs-computer orientation (fixed)
 
     /// Called once when a real (non-dev) game finishes, so the app can archive it
@@ -102,13 +109,21 @@ final class NardiGame: ObservableObject {
     init() {
         guard let h = nardi_create() else { fatalError("nardi_create failed") }
         handle = h
-        if let path = Bundle.main.path(forResource: "model", ofType: "nardiw") {
-            modelLoaded = (nardi_load_model(h, path) == NARDI_OK)
-        } else {
-            modelLoaded = false
-        }
+        // Default to the strong network so the dev self-play hooks (which use a
+        // model bot) have one loaded; newGame swaps in the chosen opponent's net.
+        modelLoaded = loadModel("polavg10")
     }
     deinit { nardi_destroy(handle) }
+
+    /// Load a bundled `.nardiw` value network into the engine. Returns whether it
+    /// loaded; a missing blob means the project needs `make_model.sh` + xcodegen.
+    @discardableResult
+    private func loadModel(_ resource: String) -> Bool {
+        guard let path = Bundle.main.path(forResource: resource, ofType: "nardiw") else {
+            return false
+        }
+        return nardi_load_model(handle, path) == NARDI_OK
+    }
 
     var isPassAndPlay: Bool { mode == .passAndPlay }
 
@@ -125,7 +140,12 @@ final class NardiGame: ObservableObject {
             nardi_configure_players(handle,
                                     humanIsWhite ? NARDI_HUMAN : bot,
                                     humanIsWhite ? bot : NARDI_HUMAN)
-            if opponent == .mcts { nardi_set_mcts_params(handle, 120, 1.0, 0, 0.1, 0.25, 0.3, 0) }
+            // Load this opponent's value network (the heuristic needs none).
+            if let res = opponent.modelResource {
+                modelLoaded = loadModel(res)
+            } else {
+                modelLoaded = true
+            }
         }
         nardi_reset(handle)
         selected = nil
@@ -423,7 +443,7 @@ final class NardiGame: ObservableObject {
     /// labels and archive them, so the History tab has data to render.
     func devSeedHistory() {
         let setups: [(GameMode, Opponent?)] = [
-            (.vsComputer, .lookahead), (.vsComputer, .mcts), (.passAndPlay, nil),
+            (.vsComputer, .hard), (.vsComputer, .medium), (.passAndPlay, nil),
         ]
         for (i, (m, opp)) in setups.enumerated() {
             let log = selfPlayLog()

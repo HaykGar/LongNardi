@@ -1,23 +1,36 @@
 #!/usr/bin/env bash
-# Export a trained PyTorch model to the flat .nardiw weight blob the app bundles
-# (DecisionEngine/nardi_net.export_weights). Regenerate this whenever you retrain.
+# Export the trained PyTorch value networks to the flat .nardiw blobs the app
+# bundles (DecisionEngine/nardi_net.export_weights). Regenerate whenever you
+# retrain, then run `xcodegen generate` so any new/renamed blob is picked up by
+# the Xcode project (blobs are referenced individually and are gitignored).
 #
-# Usage: ./scripts/make_model.sh [weight_file]   (default: weights/res2.pt)
+# Produces two blobs in Nardi/Resources:
+#   mlp.nardiw       <- weights/mlp.pt               (NardiNet / MLP) -> Medium (greedy)
+#   polavg10.nardiw  <- weights/polAvg10_lookahead.pt (ResNardiNet)   -> Hard (1-ply
+#                                                       lookahead) + all analysis
 set -euo pipefail
 
 HERE="$(cd "$(dirname "$0")" && pwd)"
 IOS="$(cd "$HERE/.." && pwd)"
 DE="$(cd "$IOS/../DecisionEngine" && pwd)"
-WEIGHT="${1:-res2.pt}"
-OUT="$IOS/Nardi/Resources/model.nardiw"
-mkdir -p "$IOS/Nardi/Resources"
+RES="$IOS/Nardi/Resources"
+mkdir -p "$RES"
 
-"$DE/venv/bin/python" - "$DE/weights/$WEIGHT" "$OUT" <<'PY'
-import sys, torch
-from nardi_net import ResNardiNet, export_weights
-m = ResNardiNet()
-m.load_state_dict(torch.load(sys.argv[1], map_location="cpu", weights_only=True))
-m.eval()
-export_weights(m, sys.argv[2])
-print("wrote", sys.argv[2])
+"$DE/venv/bin/python" - "$DE" "$RES" <<'PY'
+import sys, os, torch
+de, res = sys.argv[1], sys.argv[2]
+sys.path.insert(0, de)
+from nardi_net import NardiNet, ResNardiNet, export_weights
+
+def export(model, pt, out):
+    model.load_state_dict(torch.load(os.path.join(de, "weights", pt),
+                                     map_location="cpu", weights_only=True))
+    model.eval()
+    export_weights(model, os.path.join(res, out))
+    print("wrote", os.path.join(res, out))
+
+# Medium = greedy over the small MLP; Hard / analysis = 1-ply lookahead over the
+# Polyak-averaged ResNardiNet.
+export(NardiNet(64, 16), "mlp.pt",                "mlp.nardiw")
+export(ResNardiNet(),    "polAvg10_lookahead.pt", "polavg10.nardiw")
 PY
