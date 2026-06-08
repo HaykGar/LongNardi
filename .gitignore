@@ -42,6 +42,7 @@ ios/build/
 !images/BlackPiece.png
 !ios/Nardi/Resources/mlp.nardiw
 !ios/Nardi/Resources/polavg10.nardiw
+!ios/Nardi/Resources/Assets.xcassets/AppIcon.appiconset/icon-1024.png
 DerivedData/
 !ios/Nardi/
 !ios/BOARD_ART_SPEC.txt

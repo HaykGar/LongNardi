@@ -16,6 +16,7 @@
 		34EE2D5A07CA6848387592E2 /* nardi_engine.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 7642ED3DE5F6029C6C91A269 /* nardi_engine.cpp */; };
 		3634EB00EFA248CAA1DAC779 /* scenario_config.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 508E1384769A3A9E5D9C60FE /* scenario_config.cpp */; };
 		4D65A533426CC78CE42A58ED /* NardiGame.swift in Sources */ = {isa = PBXBuildFile; fileRef = 01F62DB776C36817BE09C8FF /* NardiGame.swift */; };
+		5FC49CF67517D00EF650B383 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 5D2859C5F5ED3E955FE3FC02 /* Assets.xcassets */; };
 		631E7B3D02058011231C36AC /* WhitePiece.png in Resources */ = {isa = PBXBuildFile; fileRef = 0EBEA7F8D52DA4D6377E609B /* WhitePiece.png */; };
 		6595B2B117B6AFE77B298C43 /* MatchHistory.swift in Sources */ = {isa = PBXBuildFile; fileRef = A16C463430F13B031E9A889B /* MatchHistory.swift */; };
 		6F3B9EE7D7AB25991DB6DEDE /* mlp.nardiw in Resources */ = {isa = PBXBuildFile; fileRef = 50052D657515F6934953D482 /* mlp.nardiw */; };
@@ -56,6 +57,7 @@
 		508E1384769A3A9E5D9C60FE /* scenario_config.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; path = scenario_config.cpp; sourceTree = "<group>"; };
 		5311534EBF6F0A7D4532D35F /* .gitkeep */ = {isa = PBXFileReference; path = .gitkeep; sourceTree = "<group>"; };
 		53BEF0A89F930E01F09AE136 /* Nardi-Bridging-Header.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = "Nardi-Bridging-Header.h"; sourceTree = "<group>"; };
+		5D2859C5F5ED3E955FE3FC02 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		624A360BD9F94A4FB19C571D /* BoardCanvas.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BoardCanvas.swift; sourceTree = "<group>"; };
 		6CCDE22CC9B53D8AA83E5524 /* GameReview.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GameReview.swift; sourceTree = "<group>"; };
 		7642ED3DE5F6029C6C91A269 /* nardi_engine.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; path = nardi_engine.cpp; sourceTree = "<group>"; };
@@ -137,6 +139,7 @@
 			isa = PBXGroup;
 			children = (
 				5311534EBF6F0A7D4532D35F /* .gitkeep */,
+				5D2859C5F5ED3E955FE3FC02 /* Assets.xcassets */,
 				50052D657515F6934953D482 /* mlp.nardiw */,
 				C00DA9D010C15920FD6B6EFA /* polavg10.nardiw */,
 			);
@@ -257,6 +260,7 @@
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				5FC49CF67517D00EF650B383 /* Assets.xcassets in Resources */,
 				CE94EC4C5898AEDE7C00599B /* BlackPiece.png in Resources */,
 				805519EEB44018EA44D5D0B6 /* BoardImg.jpg in Resources */,
 				631E7B3D02058011231C36AC /* WhitePiece.png in Resources */,
