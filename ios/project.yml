@@ -9,8 +9,9 @@ settings:
   base:
     CLANG_CXX_LANGUAGE_STANDARD: "c++23"
     CLANG_CXX_LIBRARY: "libc++"
-    # Simulator builds need no signing; device builds (Phase 4) will set a team.
-    CODE_SIGNING_ALLOWED: "NO"
+    # Simulator builds need no signing; device / TestFlight builds sign
+    # automatically with the team set on the target below.
+    CODE_SIGNING_ALLOWED[sdk=iphonesimulator*]: "NO"
 
 targets:
   Nardi:
@@ -23,11 +24,20 @@ targets:
         CFBundleDisplayName: Nardi
         UISupportedInterfaceOrientations:
           - UIInterfaceOrientationPortrait
+        # No non-exempt encryption -> skips the export-compliance prompt on every
+        # TestFlight upload. (Offline app, no custom crypto.)
+        ITSAppUsesNonExemptEncryption: false
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.nardi.app
         SWIFT_OBJC_BRIDGING_HEADER: Nardi/Bridge/Nardi-Bridging-Header.h
         SWIFT_VERSION: "5.0"
+        # --- Device / TestFlight signing ---
+        CODE_SIGN_STYLE: Automatic
+        # Paste your 10-char Apple Developer Team ID here, then re-run
+        # `xcodegen generate`. Find it in Xcode > Settings > Accounts (select the
+        # team -> the ID in parentheses) or developer.apple.com > Membership.
+        DEVELOPMENT_TEAM: ""
         # The shared C++ engine core lives outside ios/; expose its headers.
         HEADER_SEARCH_PATHS:
           - $(SRCROOT)/../DecisionEngine
