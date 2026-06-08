@@ -293,12 +293,15 @@ class TDTrainer:
             
             self.eval_traces.append(evals)
             if self.weights_file is not None:
-                # Save each stage as its own checkpoint in the same parent dir,
-                # e.g. weights/filenam.pt -> weights/chkpt{stage}filenam.pt,
+                # Save each stage as its own checkpoint under a per-run directory
+                # named after the weights file's prefix, e.g.
+                #   weights/myrun.pt -> weights/checkpoints/myrun/chkpt{stage}.pt,
                 # instead of overwriting the original weights file.
                 parent = os.path.dirname(self.weights_file)
-                base = os.path.basename(self.weights_file)
-                chkpt_file = os.path.join(parent, f"chkpt{stage}{base}")
+                prefix = os.path.splitext(os.path.basename(self.weights_file))[0]
+                chkpt_dir = os.path.join(parent, "checkpoints", prefix)
+                os.makedirs(chkpt_dir, exist_ok=True)
+                chkpt_file = os.path.join(chkpt_dir, f"chkpt{stage}.pt")
                 torch.save(self.model.state_dict(), chkpt_file)    # save weights to file after each stage
 
             self.after_stage(stage)

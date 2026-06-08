@@ -439,15 +439,17 @@ point it at a new path.
 
 ### Checkpointing
 
-At the **end of every stage**, the trainer saves a separate checkpoint next to the start
-file rather than overwriting it. Given `-f weights/myrun.pt`, stage `s` is saved as:
+At the **end of every stage**, the trainer saves a separate checkpoint rather than
+overwriting the start file. Checkpoints go in a per-run directory under
+`checkpoints/`, named after the start file's prefix (its basename without `.pt`).
+Given `-f weights/myrun.pt`, stage `s` is saved as:
 
 ```
-weights/chkpt{s}myrun.pt
+weights/checkpoints/myrun/chkpt{s}.pt
 ```
 
-So a 100-stage run leaves `chkpt0myrun.pt … chkpt99myrun.pt` in `weights/`, and your
-original `-f` file is never clobbered. This is what makes the [Polyak / SWA averaging
+So a 100-stage run leaves `chkpt0.pt … chkpt99.pt` in `weights/checkpoints/myrun/`, and
+your original `-f` file is never clobbered. This is what makes the [Polyak / SWA averaging
 step](#supporting-scripts) downstream possible — you average a tail of these per-stage
 checkpoints into a final model.
 
@@ -508,8 +510,9 @@ convenience.
 ### Supporting scripts
 
 - **`polyak_average.py`** — `python polyak_average.py <checkpoint_dir> <out.pt> [--last N]
-  [--ema BETA] [--glob PATTERN]` averages a tail of the per-stage `chkpt*` files into one
-  model (Polyak-Ruppert / SWA). This is how the released averaged checkpoints (e.g.
+  [--ema BETA] [--glob PATTERN]` averages a tail of the per-stage `chkpt*.pt` files in a
+  run's checkpoint directory (e.g. `weights/checkpoints/myres/`) into one model
+  (Polyak-Ruppert / SWA). This is how the released averaged checkpoints (e.g.
   `polAvg20_lookahead.pt`) were produced.
 - **`mcts_train.py`** — AlphaZero-style fitted value iteration: generate MCTS self-play
   targets, then supervised-fit the value net to them (`python mcts_train.py --help`).
@@ -520,8 +523,8 @@ convenience.
 1. `pip install -e .` in `DecisionEngine/`.
 2. Train a model, e.g. `python train.py --arch ResNet -f weights/myres.pt --lookahead
    --envs 8 --stages 200 --games 4000 --directory figures/myres`.
-3. (Optional) average the tail checkpoints: `python polyak_average.py weights
-   weights/myres_avg.pt --last 20 --glob 'chkpt*myres.pt'`.
+3. (Optional) average the tail checkpoints: `python polyak_average.py
+   weights/checkpoints/myres weights/myres_avg.pt --last 20`.
 4. Benchmark: add your model to `get_elos.py`'s `PLAYERS` and run it, or run
    `benchmark.py` / `mcts_benchmark.py` for head-to-heads. The pretrained `weights/*.pt`
    files are the references to beat.
