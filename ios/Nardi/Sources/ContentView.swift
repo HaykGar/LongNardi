@@ -17,6 +17,7 @@ struct ContentView: View {
     @State private var mode: GameMode = .vsComputer
     @State private var opponent: Opponent = .medium
     @State private var first: FirstMove = .first
+    @AppStorage(AnimationSpeed.storageKey) private var animSpeed: AnimationSpeed = .high
 
     var body: some View {
         Group {
@@ -167,7 +168,17 @@ struct ContentView: View {
             HStack {
                 offBadge(label: "White off", count: game.whiteOff, white: true)
                 Spacer()
-                Button("Menu") { game.backToSetup() }.font(.callout)
+                Menu {
+                    Picker("Animation speed", selection: $animSpeed) {
+                        ForEach(AnimationSpeed.allCases) { Text($0.rawValue).tag($0) }
+                    }
+                    Divider()
+                    Button(role: .destructive) { game.backToSetup() } label: {
+                        Label("Quit to main menu", systemImage: "house")
+                    }
+                } label: {
+                    Label("Menu", systemImage: "line.3.horizontal").font(.callout)
+                }
                 Spacer()
                 offBadge(label: "Black off", count: game.blackOff, white: false)
             }

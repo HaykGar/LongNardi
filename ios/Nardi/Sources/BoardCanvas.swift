@@ -1,5 +1,20 @@
 import SwiftUI
 
+/// User-selectable animation speed, persisted in UserDefaults so the board's
+/// FlightView and the game loops read the same value. High = quick slides; Low =
+/// slowed down for clarity.
+enum AnimationSpeed: String, CaseIterable, Identifiable {
+    case high = "High"
+    case low  = "Low"
+    var id: String { rawValue }
+    var flightDuration: Double { self == .low ? 0.95 : 0.4 }
+
+    static let storageKey = "nardi.animationSpeed"
+    static var current: AnimationSpeed {
+        AnimationSpeed(rawValue: UserDefaults.standard.string(forKey: storageKey) ?? "") ?? .high
+    }
+}
+
 /// Renders the board image with checkers placed via BoardGeometry and maps taps
 /// (and optional long-presses, used by the analysis editor) back to engine coords.
 /// Pure presentation: it takes plain values and closures so both the play screen
@@ -21,9 +36,10 @@ struct BoardCanvas: View {
     private static let whitePiece = loadImage("WhitePiece", "png")
     private static let blackPiece = loadImage("BlackPiece", "png")
 
-    /// One checker slide. Game objects sleep for this per hop, so it stays in sync
-    /// with the FlightView's self-animation.
-    static let flightDuration: Double = 0.4
+    /// One checker slide, set by the user's AnimationSpeed (read live so a change
+    /// takes effect on the next move). Game objects sleep for this per hop, so it
+    /// stays in sync with the FlightView's self-animation.
+    static var flightDuration: Double { AnimationSpeed.current.flightDuration }
 
     static func loadImage(_ name: String, _ ext: String) -> UIImage? {
         guard let p = Bundle.main.path(forResource: name, ofType: ext) else { return nil }

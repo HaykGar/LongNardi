@@ -4,11 +4,20 @@ import SwiftUI
 struct AnalyzeScreen: View {
     @EnvironmentObject var game: AnalyzeGame
     var onExit: () -> Void
+    @AppStorage(AnimationSpeed.storageKey) private var animSpeed: AnimationSpeed = .high
 
     var body: some View {
         VStack(spacing: 8) {
             HStack {
-                Button("Menu") { onExit() }.font(.callout)
+                Menu {
+                    Picker("Animation speed", selection: $animSpeed) {
+                        ForEach(AnimationSpeed.allCases) { Text($0.rawValue).tag($0) }
+                    }
+                    Divider()
+                    Button { onExit() } label: { Label("Close analysis", systemImage: "xmark") }
+                } label: {
+                    Label("Menu", systemImage: "line.3.horizontal").font(.callout)
+                }
                 Spacer()
                 Text(game.phase == .editing ? "Set Up Position" : "Analysis")
                     .font(.headline)
