@@ -10,8 +10,12 @@ struct AnalyzeScreen: View {
         VStack(spacing: 8) {
             HStack {
                 Menu {
-                    Picker("Animation speed", selection: $animSpeed) {
-                        ForEach(AnimationSpeed.allCases) { Text($0.rawValue).tag($0) }
+                    Menu {
+                        Picker("Animation Speed", selection: $animSpeed) {
+                            ForEach(AnimationSpeed.allCases) { Text($0.rawValue).tag($0) }
+                        }
+                    } label: {
+                        Label("Animation Speed: \(animSpeed.rawValue)", systemImage: "speedometer")
                     }
                     Divider()
                     Button { onExit() } label: { Label("Close analysis", systemImage: "xmark") }
