@@ -282,7 +282,7 @@ final class NardiGame: ObservableObject {
                     reviewLog.append(ReviewTurn(preBoard: preBoard, preSide: preSide,
                                                 dice: dice, postBoard: engineBoard(), moved: true))
                     status = "Opponent played \(dice.0)-\(dice.1)…"
-                    await animateMoves()       // slide each sub-move in sequence
+                    await animateMoves(recordReplay: true)   // record so it can be replayed
                     try? await Task.sleep(nanoseconds: 200_000_000)
                 }
             }
@@ -342,9 +342,11 @@ final class NardiGame: ObservableObject {
         return out
     }
 
-    /// Animate the last command's sub-moves and stash them so the move can be
-    /// replayed (e.g. to re-watch what the computer did).
-    private func animateMoves() async {
+    /// Animate the last command's sub-moves. When `recordReplay` is set (only the
+    /// opponent's move), stash it so the user can re-watch it — the human's own
+    /// moves and undos are animated but not recorded, so Replay always replays the
+    /// opponent's last move.
+    private func animateMoves(recordReplay: Bool = false) async {
         refreshMeta()
         let moves = recentMoves()
         let before = board
@@ -359,9 +361,9 @@ final class NardiGame: ObservableObject {
         }
         if moverSign == 0 { moverSign = (nardi_sign(handle) >= 0) ? 1 : -1 }   // e.g. undone bear-off
 
-        lastMove = ReplayMove(before: before, subs: moves, moverSign: moverSign, after: after)
-        canReplay = true
-        await runFlights(lastMove!)
+        let move = ReplayMove(before: before, subs: moves, moverSign: moverSign, after: after)
+        if recordReplay { lastMove = move; canReplay = true }
+        await runFlights(move)
     }
 
     /// Slide each sub-move in sequence (pure display; touches no engine state), one
@@ -386,11 +388,13 @@ final class NardiGame: ObservableObject {
         board = move.after
     }
 
-    /// Re-play the most recent move's animation. The displayed board sits at the
-    /// post-move position between animations, so replaying ends right back there.
+    /// Re-watch the opponent's last move. It rewinds to just before that move,
+    /// replays the slide, then settles on the current true board (in case the user
+    /// has already started their own turn since).
     func replayLastMove() {
         guard let lm = lastMove, !isAnimating, phase != .botThinking else { return }
-        Task { @MainActor in await runFlights(lm) }
+        let replay = ReplayMove(before: lm.before, subs: lm.subs, moverSign: lm.moverSign, after: engineBoard())
+        Task { @MainActor in await runFlights(replay) }
     }
 
     private func updateSelection() {
