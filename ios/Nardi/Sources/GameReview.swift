@@ -31,22 +31,22 @@ final class GameReview: ObservableObject {
 
     let reviewSide: Bool
     let modelLoaded: Bool
-    private let handle: OpaquePointer
+    private let handle: OpaquePointer       // vzg0: blunder / best-move selection
+    private let evalHandle: OpaquePointer   // res2: the displayed eval-trajectory graph
     private let log: [ReviewTurn]
 
     init(log: [ReviewTurn], reviewSide: Bool) {
         self.log = log
         self.reviewSide = reviewSide
-        guard let h = nardi_create() else { fatalError("nardi_create failed") }
-        handle = h
-        // Review uses the strongest network (the Polyak-averaged ResNardiNet).
-        if let path = Bundle.main.path(forResource: "vzg0", ofType: "nardiw") {
-            modelLoaded = (nardi_load_model(h, path) == NARDI_OK)
-        } else {
-            modelLoaded = false
-        }
+        guard let h = nardi_create(), let e = nardi_create() else { fatalError("nardi_create failed") }
+        handle = h; evalHandle = e
+        // Strong vzg0 picks the best move (blunder detection); well-calibrated res2
+        // produces the eval graph (vzg0 isn't antisymmetric, so its graph swings).
+        let sel  = Bundle.main.path(forResource: "vzg0", ofType: "nardiw").map { nardi_load_model(h, $0) == NARDI_OK } ?? false
+        let disp = Bundle.main.path(forResource: "res2", ofType: "nardiw").map { nardi_load_model(e, $0) == NARDI_OK } ?? false
+        modelLoaded = sel && disp
     }
-    deinit { nardi_destroy(handle) }
+    deinit { nardi_destroy(handle); nardi_destroy(evalHandle) }
 
     var reviewSideName: String { reviewSide ? "Black" : "White" }
 
@@ -96,20 +96,22 @@ final class GameReview: ObservableObject {
 
     // MARK: - Engine helpers
 
+    /// Graph eval, from the well-calibrated res2 net (on the eval handle), pinned to
+    /// the reviewed-player frame with the side-to-move + sign convention.
     private func staticEval(_ board: [Int8], _ side: Bool) -> Float? {
         guard modelLoaded else { return nil }
-        board.withUnsafeBufferPointer { _ = nardi_set_position(handle, $0.baseAddress, side ? 1 : 0) }
+        board.withUnsafeBufferPointer { _ = nardi_set_position(evalHandle, $0.baseAddress, side ? 1 : 0) }
         // Terminal positions report the exact game result (+1 normal, +2 mars) in
         // the winner's frame, not a model estimate. The winner is whoever has no
         // checkers left on the board (white's are >0, black's <0).
-        if nardi_is_terminal(handle) == 1 {
+        if nardi_is_terminal(evalHandle) == 1 {
             let whiteOn = board.reduce(0) { $0 + max(0, Int($1)) }
             let winnerIsBlack = (whiteOn != 0)
-            let margin = Float(nardi_winner_result(handle))
+            let margin = Float(nardi_winner_result(evalHandle))
             return margin * (winnerIsBlack == reviewSide ? 1 : -1)
         }
         var v: Float = 0
-        guard nardi_evaluate_position(handle, &v) == NARDI_OK else { return nil }
+        guard nardi_evaluate_position(evalHandle, &v) == NARDI_OK else { return nil }
         return v * (side == reviewSide ? 1 : -1)   // pin to reviewed-player frame
     }
 

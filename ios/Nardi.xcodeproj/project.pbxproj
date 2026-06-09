@@ -28,6 +28,7 @@
 		83ABB7E4DB3CDD0242B4937C /* GameReviewView.swift in Sources */ = {isa = PBXBuildFile; fileRef = EA4393CD6F6B1F85374F3426 /* GameReviewView.swift */; };
 		8A3FBD5167E283291B94B160 /* Monitors.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 8F3FB1CA4772F473CC083831 /* Monitors.cpp */; };
 		9EEC878DF19A9625BAD825E8 /* MatchHistoryView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 30E44A12FE22DBE48A6E7B6B /* MatchHistoryView.swift */; };
+		A2388A8107A937A1589BB3C1 /* res2.nardiw in Resources */ = {isa = PBXBuildFile; fileRef = 1FDF08E60073280F52765E18 /* res2.nardiw */; };
 		AC61D0B0B87EBC6313D5B35F /* AnalyzeScreen.swift in Sources */ = {isa = PBXBuildFile; fileRef = D9E0B1305AA3E1DA46FBCEB7 /* AnalyzeScreen.swift */; };
 		B4A27E8029C1FF7E68EC084D /* nardi_c_api.cpp in Sources */ = {isa = PBXBuildFile; fileRef = D79E60817EC9D8FDF512F41E /* nardi_c_api.cpp */; };
 		B68FD28F9245275C58336F2D /* BoardCanvas.swift in Sources */ = {isa = PBXBuildFile; fileRef = 624A360BD9F94A4FB19C571D /* BoardCanvas.swift */; };
@@ -47,6 +48,7 @@
 		01F62DB776C36817BE09C8FF /* NardiGame.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NardiGame.swift; sourceTree = "<group>"; };
 		0D46AE31262F698E6A983D6D /* Board.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; path = Board.cpp; sourceTree = "<group>"; };
 		0EBEA7F8D52DA4D6377E609B /* WhitePiece.png */ = {isa = PBXFileReference; lastKnownFileType = image.png; path = WhitePiece.png; sourceTree = "<group>"; };
+		1FDF08E60073280F52765E18 /* res2.nardiw */ = {isa = PBXFileReference; path = res2.nardiw; sourceTree = "<group>"; };
 		2AA877872AA3DF84FEEB0231 /* Game.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; path = Game.cpp; sourceTree = "<group>"; };
 		2DA94F4764C4B0F3BB9D042A /* NardiApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NardiApp.swift; sourceTree = "<group>"; };
 		309961F8C6295624ED673353 /* BoardView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BoardView.swift; sourceTree = "<group>"; };
@@ -141,6 +143,7 @@
 				5311534EBF6F0A7D4532D35F /* .gitkeep */,
 				5D2859C5F5ED3E955FE3FC02 /* Assets.xcassets */,
 				50052D657515F6934953D482 /* mlp.nardiw */,
+				1FDF08E60073280F52765E18 /* res2.nardiw */,
 				4F7D1F874B6CF52D6FD98338 /* vzg0.nardiw */,
 			);
 			path = Resources;
@@ -265,6 +268,7 @@
 				805519EEB44018EA44D5D0B6 /* BoardImg.jpg in Resources */,
 				631E7B3D02058011231C36AC /* WhitePiece.png in Resources */,
 				6F3B9EE7D7AB25991DB6DEDE /* mlp.nardiw in Resources */,
+				A2388A8107A937A1589BB3C1 /* res2.nardiw in Resources */,
 				D3EDB027171468DA411EB023 /* vzg0.nardiw in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;

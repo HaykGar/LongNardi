@@ -43,7 +43,7 @@ struct GameReviewView: View {
         // so the user can re-decide the move rather than land on its result.
         let i = max(0, index - 1)
         guard let pt = review.points[safe: i] else { return }
-        analyze.openForReview(board: pt.board, side: pt.sideToMove,
+        analyze.openForReview(board: pt.board, side: pt.sideToMove, anchor: review.reviewSide,
                               gameDice: review.gameDiceFrom(i))
         showAnalyzer = true
     }
@@ -72,7 +72,7 @@ struct GameReviewView: View {
         }
 
         BoardCanvas(board: pt?.board ?? [], flipped: review.reviewSide, selected: nil,
-                    flights: [], animProgress: 0, onTap: { _, _ in })
+                    flights: [], onTap: { _, _ in })
             .padding(.horizontal, 6)
 
         moveCaption(pt)

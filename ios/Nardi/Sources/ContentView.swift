@@ -178,6 +178,16 @@ struct ContentView: View {
             Text(game.status).font(.callout).multilineTextAlignment(.center)
                 .frame(maxWidth: .infinity, minHeight: 24)
 
+            // Re-watch the last move's animation (e.g. to see what the computer did).
+            if game.canReplay {
+                Button { game.replayLastMove() } label: {
+                    Label("Replay move", systemImage: "arrow.counterclockwise")
+                        .font(.caption)
+                }
+                .buttonStyle(.bordered)
+                .disabled(game.isAnimating)
+            }
+
             HStack(spacing: 18) {
                 DieButton(value: game.dice.0, usable: game.dieUsable.0) { game.tapDie(0) }
                 DieButton(value: game.dice.1, usable: game.dieUsable.1) { game.tapDie(1) }

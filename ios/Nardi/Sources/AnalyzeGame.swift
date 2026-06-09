@@ -6,12 +6,12 @@ import SwiftUI
 /// across confirmed moves too).
 private struct Snapshot { let board: [Int8]; let side: Bool }
 
-/// An engine-recommended move shown in the analyzer: the end-board it reaches,
-/// its eval in the original-side frame, and a human-readable descriptor.
+/// An engine-recommended move shown in the analyzer: the end-board it reaches and a
+/// per-checker descriptor (e.g. "1 → 7, 12 → 17"). No eval is shown — these are
+/// ranked by vzg0 lookahead, whose absolute numbers we don't surface.
 struct TopMove: Identifiable {
     let id = UUID()
     let board: [Int8]
-    let eval: Float
     let label: String
 }
 
@@ -63,30 +63,29 @@ final class AnalyzeGame: ObservableObject {
     // their resulting eval in the original-side frame and a move descriptor.
     @Published private(set) var topMoves: [TopMove] = []
 
-    // Move animation (shared BoardCanvas flights)
+    // Move animation (shared BoardCanvas flights; each FlightView self-animates).
     @Published private(set) var flights: [Flight] = []
-    @Published private(set) var animProgress: CGFloat = 0
     @Published private(set) var isAnimating = false
-    private let animDuration: Double = 0.4
 
     let modelLoaded: Bool
     private let handle: OpaquePointer
+    // Move selection (top-3 ranking, the line the engine recommends) uses the strong
+    // vzg0 net on `handle`. The DISPLAYED eval uses the well-calibrated res2 net on a
+    // separate handle: vzg0 isn't antisymmetric so its absolute evals are biased and
+    // swingy, while res2 reads ~0 at the symmetric start. The eval handle also serves
+    // as scratch for decoding a suggestion's sub-moves without touching live state.
+    private let evalHandle: OpaquePointer
     private var history: [Snapshot] = []
     private var turnStart: Snapshot? = nil          // position at the start of the current turn
-    private var childValues: [Data: Float] = [:]    // end-board -> mover-frame lookahead value
-    private var bestMoverValue: Float? = nil         // best (max) mover-frame value this turn
 
     init() {
-        guard let h = nardi_create() else { fatalError("nardi_create failed") }
-        handle = h
-        // Analysis always uses the strongest network (the Polyak-averaged ResNardiNet).
-        if let path = Bundle.main.path(forResource: "vzg0", ofType: "nardiw") {
-            modelLoaded = (nardi_load_model(h, path) == NARDI_OK)
-        } else {
-            modelLoaded = false
-        }
+        guard let h = nardi_create(), let e = nardi_create() else { fatalError("nardi_create failed") }
+        handle = h; evalHandle = e
+        let sel  = Bundle.main.path(forResource: "vzg0", ofType: "nardiw").map { nardi_load_model(h, $0) == NARDI_OK } ?? false
+        let disp = Bundle.main.path(forResource: "res2", ofType: "nardiw").map { nardi_load_model(e, $0) == NARDI_OK } ?? false
+        modelLoaded = sel && disp
     }
-    deinit { nardi_destroy(handle) }
+    deinit { nardi_destroy(handle); nardi_destroy(evalHandle) }
 
     // MARK: - Geometry / counts helpers
 
@@ -208,14 +207,16 @@ final class AnalyzeGame: ObservableObject {
     }
 
     /// Open the analyzer directly on a position (from game review), skipping the
-    /// editor. The eval is pinned to `side` (the position's side to move). When
-    /// `gameDice` is supplied (the reviewed game's rolls from this point on), the
-    /// dice default to following the game and can be unlocked to explore freely.
-    func openForReview(board b: [Int8], side: Bool, gameDice: [(Int, Int)] = []) {
+    /// editor. `side` is the position's side to move (so moves play correctly);
+    /// `anchor` is the frame the eval is pinned to — the reviewed player — so the
+    /// eval stays from their perspective even when it's the opponent's turn here.
+    /// When `gameDice` is supplied (the reviewed game's rolls from this point on),
+    /// the dice default to following the game and can be unlocked to explore freely.
+    func openForReview(board b: [Int8], side: Bool, anchor: Bool, gameDice: [(Int, Int)] = []) {
         editorBoard = b
         board = b
-        originalSide = side
-        currentSide = side
+        originalSide = anchor          // eval frame = reviewed player
+        currentSide = side             // who actually moves here
         flipped = side
         b.withUnsafeBufferPointer { _ = nardi_set_position(handle, $0.baseAddress, side ? 1 : 0) }
         history = []
@@ -258,13 +259,17 @@ final class AnalyzeGame: ObservableObject {
         return margin * (winnerIsBlack == originalSide ? 1 : -1)
     }
 
-    /// Side-to-move value of the current board in the original frame -- the exact
-    /// result if terminal, else the model's estimate.
+    /// Displayed value of the current board in the original frame: the exact result
+    /// if terminal, else the well-calibrated res2 net's side-to-move estimate
+    /// (mirrored onto the eval handle so the live state is untouched), pinned with
+    /// the same sign convention as before.
     private func staticEval() -> Float? {
         if let result = terminalResultEval() { return result }
         guard modelLoaded else { return nil }
+        let b = engineBoard()
+        b.withUnsafeBufferPointer { _ = nardi_set_position(evalHandle, $0.baseAddress, currentSide ? 1 : 0) }
         var v: Float = 0
-        return nardi_evaluate_position(handle, &v) == NARDI_OK ? v * frameSign : nil
+        return nardi_evaluate_position(evalHandle, &v) == NARDI_OK ? v * frameSign : nil
     }
 
     private func resetTurnState() {
@@ -273,8 +278,6 @@ final class AnalyzeGame: ObservableObject {
         selected = nil
         canConfirm = false
         dieUsable = (false, false)
-        childValues = [:]
-        bestMoverValue = nil
         topMoves = []
     }
 
@@ -302,33 +305,41 @@ final class AnalyzeGame: ObservableObject {
         }
     }
 
-    /// Net-diff move descriptor (mover's point numbers 1..24), e.g. "13,8 -> 5,2".
-    private func moveLabel(from before: [Int8], to after: [Int8]) -> String {
-        let s = Int(Self.sign(currentSide))
-        var srcs: [Int] = [], dsts: [Int] = []
-        for row in 0..<2 {
-            for col in 0..<Self.cols {
-                let idx = row * Self.cols + col
-                let d = (Int(after[idx]) - Int(before[idx])) * s
-                let onHeadRow = (row == (currentSide ? 1 : 0))
-                let pt = (onHeadRow ? col : Self.cols + col) + 1
-                if d < 0 { srcs += Array(repeating: pt, count: -d) }
-                if d > 0 { dsts += Array(repeating: pt, count: d) }
-            }
-        }
-        let off = srcs.count - dsts.count
-        var dest = dsts.sorted().map(String.init)
-        if off > 0 { dest += Array(repeating: "off", count: off) }
-        let from = srcs.sorted().map(String.init).joined(separator: ",")
-        return from.isEmpty ? "—" : "\(from) → \(dest.joined(separator: ","))"
+    /// Point number 1..24 along the mover's path for an engine (row, col).
+    private func pointNumber(_ row: Int, _ col: Int, black: Bool) -> Int {
+        let onHeadRow = (row == (black ? 1 : 0))
+        return (onHeadRow ? col : Self.cols + col) + 1
     }
 
-    private func boardKey(_ b: [Int8]) -> Data { Data(b.map { UInt8(bitPattern: $0) }) }
+    /// Describe an engine suggestion as the actual per-checker hops, e.g.
+    /// "1 → 7, 12 → 17" (a checker chaining both dice shows both hops). The engine
+    /// only records sub-moves when a move is applied, so replay the suggestion on
+    /// the eval handle -- found by matching its end board, so the model/ranking is
+    /// irrelevant -- and read the recorded {from→to} of each checker.
+    private func subMoveLabel(preBoard: [Int8], side: Bool, end: [Int8], _ d1: Int, _ d2: Int) -> String {
+        preBoard.withUnsafeBufferPointer { _ = nardi_set_position(evalHandle, $0.baseAddress, side ? 1 : 0) }
+        let m = Int(nardi_analyze_dice(evalHandle, Int32(d1), Int32(d2)))
+        var idx = -1
+        for j in 0..<max(0, m) {
+            var b = [Int8](repeating: 0, count: Self.cells); var v: Float = 0
+            if nardi_analyzed_move(evalHandle, Int32(j), &b, &v) == NARDI_OK, b == end { idx = j; break }
+        }
+        guard idx >= 0, nardi_apply_analyzed_move(evalHandle, Int32(idx)) == NARDI_OK else { return "—" }
+        var parts: [String] = []
+        for k in 0..<max(0, Int(nardi_move_count(evalHandle))) {
+            var a = [Int32](repeating: -1, count: 4)
+            if nardi_get_move(evalHandle, Int32(k), &a) == NARDI_OK {
+                let from = pointNumber(Int(a[0]), Int(a[1]), black: side)
+                let to = a[2] < 0 ? "off" : "\(pointNumber(Int(a[2]), Int(a[3]), black: side))"
+                parts.append("\(from) → \(to)")
+            }
+        }
+        return parts.isEmpty ? "—" : parts.joined(separator: ", ")
+    }
 
-    /// Apply the chosen dice to the current position and rank the legal moves by
-    /// one-ply lookahead (kept internally, not shown). The eval bar then reads the
-    /// best-play value; once a move is completed it reads that move's value, so a
-    /// weaker move visibly swings the bar. Only allowed at the start of a turn.
+    /// Apply the chosen dice to the current position. vzg0 ranks the legal moves
+    /// (best first) to populate the top-3 suggestions; the eval bar shows the res2
+    /// value of the current position. Only allowed at the start of a turn.
     func setDice() {
         guard phase == .analyzing, !isAnimating, !isTerminal, !movedThisTurn else { return }
         guard let (d1, d2) = effectiveDice() else {
@@ -342,31 +353,24 @@ final class AnalyzeGame: ObservableObject {
         let n = Int(nardi_analyze_dice(handle, Int32(d1), Int32(d2)))
         guard n >= 0 else { status = "Analyze failed: " + String(cString: nardi_last_error(handle)); return }
 
-        childValues = [:]
-        var best = -Float.infinity
-        var tops: [TopMove] = []
         let preBoard = engineBoard()
-        for i in 0..<n {
+        var tops: [TopMove] = []
+        for i in 0..<min(n, 3) {   // vzg0's best-first ranking; labels only (no eval shown)
             var b = [Int8](repeating: 0, count: Self.cells)
             var v: Float = 0
             if nardi_analyzed_move(handle, Int32(i), &b, &v) == NARDI_OK {
-                childValues[boardKey(b)] = v
-                best = max(best, v)
-                if i < 3 {   // ranked best-first; show eval in the original-side frame
-                    tops.append(TopMove(board: b, eval: v * frameSign,
-                                        label: moveLabel(from: preBoard, to: b)))
-                }
+                tops.append(TopMove(board: b,
+                                    label: subMoveLabel(preBoard: preBoard, side: currentSide, end: b, d1, d2)))
             }
         }
         topMoves = tops
-        bestMoverValue = n > 0 ? best : nil
         diceApplied = true
         noLegalMoves = (n == 0)
         selected = nil
         canConfirm = false
         dieUsable = (nardi_can_use_die(handle, 0) == 1, nardi_can_use_die(handle, 1) == 1)
-        positionEval = n > 0 ? best * frameSign : staticEval()
-        status = n > 0 ? "Best line for \(currentSide ? "Black" : "White") shown — make your move."
+        positionEval = staticEval()   // res2 display eval of the current position
+        status = n > 0 ? "Top engine moves for \(currentSide ? "Black" : "White") shown — make your move."
                        : "No legal move for \(die1)-\(die2). Tap Pass."
     }
 
@@ -408,15 +412,8 @@ final class AnalyzeGame: ObservableObject {
         if modelLoaded && !isTerminal { setDice() }
     }
 
-    /// Eval of the current (possibly mid/after-move) board in the original frame:
-    /// the chosen move's lookahead value if the board matches an enumerated child,
-    /// else the best-play value, else the static eval.
-    private func currentEval() -> Float? {
-        if let result = terminalResultEval() { return result }   // exact result at game end
-        if let v = childValues[boardKey(engineBoard())] { return v * frameSign }
-        if let best = bestMoverValue { return best * frameSign }
-        return staticEval()
-    }
+    /// Eval of the current (possibly mid/after-move) board — the res2 display eval.
+    private func currentEval() -> Float? { staticEval() }
 
     // MARK: - Analysis: hands-on moves
 
@@ -540,16 +537,14 @@ final class AnalyzeGame: ObservableObject {
         let moverSign = Self.sign(currentSide)   // the side making the move (turn not switched yet)
         isAnimating = true
         var disp = board
+        let dur = UInt64(BoardCanvas.flightDuration * 1_000_000_000)
         for m in subs {
             if let (r, c) = m.from { disp[r * Self.cols + c] -= moverSign }
             board = disp
-            flights = [Flight(from: m.from, to: m.to, white: moverSign > 0)]
-            animProgress = 0
-            withAnimation(.easeOut(duration: animDuration)) { animProgress = 1 }
-            try? await Task.sleep(nanoseconds: UInt64(animDuration * 1_000_000_000))
+            flights = [Flight(from: m.from, to: m.to, white: moverSign > 0)]   // FlightView self-animates
+            try? await Task.sleep(nanoseconds: dur)
             if let (r, c) = m.to { disp[r * Self.cols + c] += moverSign }
             flights = []
-            animProgress = 0
             board = disp
             try? await Task.sleep(nanoseconds: 60_000_000)
         }

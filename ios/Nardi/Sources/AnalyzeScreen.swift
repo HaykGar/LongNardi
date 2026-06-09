@@ -41,7 +41,7 @@ private struct EditorBody: View {
             }.padding(.horizontal)
 
             BoardCanvas(board: game.board, flipped: false, selected: nil,
-                        flights: [], animProgress: 0,
+                        flights: [],
                         onTap: { r, c in game.tapCellEditor(row: r, col: c) },
                         onLongPress: { r, c in game.longPressCellEditor(row: r, col: c) })
                 .padding(.horizontal, 6)
@@ -109,7 +109,7 @@ private struct AnalysisBody: View {
                 .padding(.horizontal)
 
             BoardCanvas(board: game.board, flipped: game.flipped, selected: game.selected,
-                        flights: game.flights, animProgress: game.animProgress,
+                        flights: game.flights,
                         onTap: { r, c in game.tap(row: r, col: c) })
                 .padding(.horizontal, 6)
 
@@ -134,8 +134,8 @@ private struct AnalysisBody: View {
         }
     }
 
-    // Up to 3 engine-recommended moves for the current roll, best first, with
-    // their resulting eval (original-side frame). Tap one to play it.
+    // Up to 3 engine-recommended moves for the current roll (vzg0, best first),
+    // shown as per-checker hops. Tap one to play it.
     @ViewBuilder
     private var engineMoves: some View {
         if game.diceApplied && !game.movedThisTurn && !game.topMoves.isEmpty {
@@ -147,9 +147,7 @@ private struct AnalysisBody: View {
                             Text("\(i + 1).").font(.caption2.monospacedDigit()).foregroundStyle(.secondary)
                             Text(m.label).font(.callout.monospacedDigit())
                             Spacer()
-                            Text(String(format: "%+.3f", m.eval))
-                                .font(.callout.monospacedDigit().bold())
-                                .foregroundColor(m.eval >= 0 ? .green : .red)
+                            Image(systemName: "play.circle").foregroundStyle(.secondary)
                         }
                         .padding(.vertical, 5).padding(.horizontal, 12)
                         .background(RoundedRectangle(cornerRadius: 6).fill(Color(.systemGray6)))

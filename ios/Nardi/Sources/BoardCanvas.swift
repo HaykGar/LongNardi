@@ -9,7 +9,6 @@ struct BoardCanvas: View {
     let flipped: Bool
     let selected: (Int, Int)?
     let flights: [Flight]
-    let animProgress: CGFloat
     var onTap: (Int, Int) -> Void
     /// When set, a long-press on a cell calls this (engine coords). Only attached
     /// when provided, so it never interferes with the play screen's plain taps.
@@ -21,6 +20,10 @@ struct BoardCanvas: View {
     private static let boardImage = loadImage("BoardImg", "jpg")
     private static let whitePiece = loadImage("WhitePiece", "png")
     private static let blackPiece = loadImage("BlackPiece", "png")
+
+    /// One checker slide. Game objects sleep for this per hop, so it stays in sync
+    /// with the FlightView's self-animation.
+    static let flightDuration: Double = 0.4
 
     static func loadImage(_ name: String, _ ext: String) -> UIImage? {
         guard let p = Bundle.main.path(forResource: name, ofType: ext) else { return nil }
@@ -134,32 +137,20 @@ struct BoardCanvas: View {
         return (CGPoint(x: cell.midX, y: y), d, down)
     }
 
-    // Checkers sliding during a move, interpolated by animProgress (0->1).
+    // Checkers sliding during a move. Each flight is a FlightView that animates
+    // itself from start to end on appear (framework-interpolated), so the slide is
+    // smooth without republishing a per-frame progress on the game object.
     @ViewBuilder
     private func flightsLayer(geom: BoardGeometry) -> some View {
-        let p = animProgress
         ForEach(flights) { f in
             let aFrom = f.from.map { anchor(geom, $0.0, $0.1) }
             let aTo = f.to.map { anchor(geom, $0.0, $0.1) }
             if let known = aFrom ?? aTo {
                 let d = known.d
                 let off = CGPoint(x: known.pt.x, y: known.pt.y + (known.down ? -d * 2.2 : d * 2.2))
-                let start = aFrom?.pt ?? off
-                let end = aTo?.pt ?? off
-                let pos = CGPoint(x: start.x + (end.x - start.x) * p,
-                                  y: start.y + (end.y - start.y) * p)
-                let opacity: Double = f.to == nil ? Double(1 - p) : (f.from == nil ? Double(p) : 1)
-                let img = f.white ? Self.whitePiece : Self.blackPiece
-                Group {
-                    if let img {
-                        Image(uiImage: img).resizable().frame(width: d, height: d)
-                    } else {
-                        Circle().fill(f.white ? Color.white : Color.black)
-                            .overlay(Circle().stroke(Color.gray)).frame(width: d, height: d)
-                    }
-                }
-                .opacity(opacity)
-                .position(pos)
+                FlightView(start: aFrom?.pt ?? off, end: aTo?.pt ?? off, d: d,
+                           image: f.white ? Self.whitePiece : Self.blackPiece, white: f.white,
+                           fadeOut: f.to == nil, fadeIn: f.from == nil)
             }
         }
     }
@@ -206,6 +197,42 @@ private struct LongPressIfNeeded: ViewModifier {
             )
         } else {
             content
+        }
+    }
+}
+
+/// A single sliding checker. It renders at `start`, then on appear animates itself
+/// to `end` over `BoardCanvas.flightDuration`. Because the motion is a SwiftUI
+/// animation local to this view (not a per-frame value republished on the game
+/// object), only this view redraws each frame — the board doesn't — so the slide
+/// stays smooth. Bear-off (`fadeOut`) fades while sliding off; an entering checker
+/// (`fadeIn`, e.g. an undone bear-off) fades in.
+private struct FlightView: View {
+    let start: CGPoint
+    let end: CGPoint
+    let d: CGFloat
+    let image: UIImage?
+    let white: Bool
+    let fadeOut: Bool
+    let fadeIn: Bool
+
+    @State private var progressed = false
+
+    var body: some View {
+        piece
+            .frame(width: d, height: d)
+            .opacity(fadeOut ? (progressed ? 0 : 1) : (fadeIn ? (progressed ? 1 : 0) : 1))
+            .position(progressed ? end : start)
+            .onAppear {
+                withAnimation(.easeOut(duration: BoardCanvas.flightDuration)) { progressed = true }
+            }
+    }
+
+    @ViewBuilder private var piece: some View {
+        if let image {
+            Image(uiImage: image).resizable()
+        } else {
+            Circle().fill(white ? Color.white : Color.black).overlay(Circle().stroke(Color.gray))
         }
     }
 }

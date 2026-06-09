@@ -79,12 +79,23 @@ final class NardiGame: ObservableObject {
     @Published private(set) var blackOff = 0
     @Published private(set) var canConfirm = false   // turn complete, awaiting confirm
 
-    // Move animation: checkers in flight + a 0->1 progress the board view lerps.
+    // Move animation: the checker(s) currently in flight (each FlightView self-
+    // animates, so there's no per-frame progress to publish).
     @Published private(set) var flights: [Flight] = []
-    @Published private(set) var animProgress: CGFloat = 0
     @Published private(set) var isAnimating = false
+    // Replay: the most recently animated move, re-playable via replayLastMove().
+    @Published private(set) var canReplay = false
+    private var lastMove: ReplayMove? = nil
     static let cols = 12
-    private let animDuration: Double = 0.45
+
+    /// A move's animation captured for replay: the board before it, the ordered
+    /// sub-move hops, the mover's sign, and the board after.
+    private struct ReplayMove {
+        let before: [Int8]
+        let subs: [(from: (Int, Int)?, to: (Int, Int)?)]
+        let moverSign: Int8
+        let after: [Int8]
+    }
 
     private let handle: OpaquePointer
     private var modelLoaded: Bool = false
@@ -151,6 +162,8 @@ final class NardiGame: ObservableObject {
         selected = nil
         flights = []
         isAnimating = false
+        canReplay = false
+        lastMove = nil
         reviewLog = []
         humanTurnPre = nil
         board = engineBoard()   // opening position shows instantly (no animation)
@@ -329,40 +342,55 @@ final class NardiGame: ObservableObject {
         return out
     }
 
-    /// Animate each sub-move of the last command separately, one finishing before
-    /// the next starts (a checker played with both dice slides in two hops). The
-    /// displayed board is advanced sub-move by sub-move so the animation matches
-    /// the engine's true sequence (including intermediate landings / bear-offs).
+    /// Animate the last command's sub-moves and stash them so the move can be
+    /// replayed (e.g. to re-watch what the computer did).
     private func animateMoves() async {
         refreshMeta()
         let moves = recentMoves()
-        guard !moves.isEmpty else { board = engineBoard(); return }
+        let before = board
+        let after = engineBoard()
+        guard !moves.isEmpty else { board = after; return }
 
         // One mover per turn (nardi has no hitting). Take its sign from the first
         // source cell on the displayed board.
         var moverSign: Int8 = 0
         for m in moves {
-            if let (r, c) = m.from { let v = board[r * Self.cols + c]; if v != 0 { moverSign = v > 0 ? 1 : -1; break } }
+            if let (r, c) = m.from { let v = before[r * Self.cols + c]; if v != 0 { moverSign = v > 0 ? 1 : -1; break } }
         }
         if moverSign == 0 { moverSign = (nardi_sign(handle) >= 0) ? 1 : -1 }   // e.g. undone bear-off
 
+        lastMove = ReplayMove(before: before, subs: moves, moverSign: moverSign, after: after)
+        canReplay = true
+        await runFlights(lastMove!)
+    }
+
+    /// Slide each sub-move in sequence (pure display; touches no engine state), one
+    /// finishing before the next starts. The displayed board advances hop by hop so
+    /// it matches the engine's true sequence (intermediate landings / bear-offs).
+    private func runFlights(_ move: ReplayMove) async {
         isAnimating = true
-        var disp = board
-        for m in moves {
-            if let (r, c) = m.from { disp[r * Self.cols + c] -= moverSign }   // lift off source
+        var disp = move.before
+        board = disp
+        let dur = UInt64(BoardCanvas.flightDuration * 1_000_000_000)
+        for m in move.subs {
+            if let (r, c) = m.from { disp[r * Self.cols + c] -= move.moverSign }   // lift off source
             board = disp
-            flights = [Flight(from: m.from, to: m.to, white: moverSign > 0)]
-            animProgress = 0
-            withAnimation(.easeOut(duration: animDuration)) { animProgress = 1 }
-            try? await Task.sleep(nanoseconds: UInt64(animDuration * 1_000_000_000))
-            if let (r, c) = m.to { disp[r * Self.cols + c] += moverSign }      // land on dest
+            flights = [Flight(from: m.from, to: m.to, white: move.moverSign > 0)]
+            try? await Task.sleep(nanoseconds: dur)
+            if let (r, c) = m.to { disp[r * Self.cols + c] += move.moverSign }      // land on dest
             flights = []
-            animProgress = 0
             board = disp
-            try? await Task.sleep(nanoseconds: 70_000_000)                     // brief gap between hops
+            try? await Task.sleep(nanoseconds: 70_000_000)                          // brief gap between hops
         }
         isAnimating = false
-        board = engineBoard()   // safety sync
+        board = move.after
+    }
+
+    /// Re-play the most recent move's animation. The displayed board sits at the
+    /// post-move position between animations, so replaying ends right back there.
+    func replayLastMove() {
+        guard let lm = lastMove, !isAnimating, phase != .botThinking else { return }
+        Task { @MainActor in await runFlights(lm) }
     }
 
     private func updateSelection() {

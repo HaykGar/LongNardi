@@ -10,7 +10,6 @@ struct BoardView: View {
                     flipped: game.flipped,
                     selected: game.selected,
                     flights: game.flights,
-                    animProgress: game.animProgress,
                     onTap: { row, col in game.tap(row: row, col: col) })
     }
 }
