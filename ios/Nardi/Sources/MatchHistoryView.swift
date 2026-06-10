@@ -24,9 +24,16 @@ struct MatchHistoryView: View {
                             .buttonStyle(.plain)
                             .listRowInsets(.init(top: 6, leading: 16, bottom: 6, trailing: 16))
                             .listRowSeparator(.hidden)
+                            // Delete one game: swipe, or long-press for the menu.
                             .swipeActions(edge: .trailing) {
                                 Button(role: .destructive) { store.delete(match) } label: {
                                     Label("Delete", systemImage: "trash")
+                                }
+                            }
+                            .contextMenu {
+                                Button { onReview(match) } label: { Label("Review", systemImage: "chart.line.uptrend.xyaxis") }
+                                Button(role: .destructive) { store.delete(match) } label: {
+                                    Label("Delete game", systemImage: "trash")
                                 }
                             }
                     }
