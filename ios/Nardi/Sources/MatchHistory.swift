@@ -45,7 +45,10 @@ struct SavedMatch: Codable, Identifiable {
     var reviewedSideWon: Bool { winnerWhite == !reviewSide }
 
     /// Human-facing one-liner for the opponent / mode.
-    var opponentLabel: String { opponentRaw.map { "vs \($0)" } ?? "Pass & Play" }
+    var opponentLabel: String {
+        if let o = opponentRaw { return "vs \(o)" }
+        return modeRaw == GameMode.passAndPlay.rawValue ? "Pass & Play" : modeRaw
+    }
 }
 
 /// Stores finished games as JSON in the app's Documents directory. Small enough

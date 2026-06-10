@@ -36,6 +36,7 @@ struct ContentView: View {
         }
         .onAppear {
             game.onGameFinished = { [weak store] in store?.add($0) }
+            analyze.onLogSaved = { [weak store] in store?.add($0) }
             let args = ProcessInfo.processInfo.arguments
             if args.contains("--seed-history") || args.contains("--seed-history-review") {
                 game.devSeedHistory()

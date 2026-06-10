@@ -1,10 +1,19 @@
 import SwiftUI
 
+/// Persisted analyzer display prefs (independently toggleable, e.g. hide both to
+/// play a live game vs vzg0 with no hints, or keep suggestions on to read its move).
+enum AnalyzerDisplay {
+    static let showEvalKey = "nardi.showEvalBar"
+    static let showSuggestionsKey = "nardi.showSuggestions"
+}
+
 /// Top-level Analyze container: the position editor, then the analysis board.
 struct AnalyzeScreen: View {
     @EnvironmentObject var game: AnalyzeGame
     var onExit: () -> Void
     @AppStorage(AnimationSpeed.storageKey) private var animSpeed: AnimationSpeed = .high
+    @AppStorage(AnalyzerDisplay.showEvalKey) private var showEvalBar = true
+    @AppStorage(AnalyzerDisplay.showSuggestionsKey) private var showSuggestions = true
 
     var body: some View {
         VStack(spacing: 8) {
@@ -17,6 +26,8 @@ struct AnalyzeScreen: View {
                     } label: {
                         Label("Animation Speed: \(animSpeed.rawValue)", systemImage: "speedometer")
                     }
+                    Toggle(isOn: $showEvalBar) { Label("Show eval bar", systemImage: "gauge.with.dots.needle.bottom.50percent") }
+                    Toggle(isOn: $showSuggestions) { Label("Show engine moves", systemImage: "lightbulb") }
                     Divider()
                     Button { onExit() } label: { Label("Close analysis", systemImage: "xmark") }
                 } label: {
@@ -115,11 +126,15 @@ private struct EditorBody: View {
 
 private struct AnalysisBody: View {
     @EnvironmentObject var game: AnalyzeGame
+    @AppStorage(AnalyzerDisplay.showEvalKey) private var showEvalBar = true
+    @AppStorage(AnalyzerDisplay.showSuggestionsKey) private var showSuggestions = true
 
     var body: some View {
         VStack(spacing: 8) {
-            EvalBar(value: game.positionEval, anchor: game.originalSide ? "Black" : "White")
-                .padding(.horizontal)
+            if showEvalBar {
+                EvalBar(value: game.positionEval, anchor: game.originalSide ? "Black" : "White")
+                    .padding(.horizontal)
+            }
 
             BoardCanvas(board: game.board, flipped: game.flipped, selected: game.selected,
                         flights: game.flights,
@@ -128,7 +143,15 @@ private struct AnalysisBody: View {
 
             diceControls
 
-            engineMoves
+            if showSuggestions { engineMoves }
+
+            // Logged a full game from the standard start — save it to History to review.
+            if game.canSaveLog {
+                Button { game.saveLoggedGame() } label: {
+                    Label("Save game to History", systemImage: "square.and.arrow.down")
+                }
+                .buttonStyle(.borderedProminent).font(.callout)
+            }
 
             Text(game.status).font(.caption).multilineTextAlignment(.center)
                 .frame(maxWidth: .infinity, minHeight: 16)

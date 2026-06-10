@@ -54,6 +54,13 @@ final class AnalyzeGame: ObservableObject {
     private var gameDiceScript: [(Int, Int)] = []   // dice from the jump-in point onward
     private var gameLineBoards: [[Int8]] = []        // the game's positions from the jump-in (mainline)
     private var relTurn = 0                          // turns played since jump-in
+    // Logging: when analysis starts from the standard opening, accumulate the played
+    // turns so the whole game can be saved to History and reviewed.
+    private var loggedTurns: [ReviewTurn] = []
+    @Published private(set) var startedFromStandard = false
+    @Published private(set) var loggedSaved = false
+    /// Archive a logged game to the match history (injected by the app).
+    var onLogSaved: ((SavedMatch) -> Void)?
     @Published private(set) var positionEval: Float? = nil
     @Published private(set) var selected: (Int, Int)? = nil
     @Published private(set) var dieUsable: (Bool, Bool) = (false, false)
@@ -192,6 +199,11 @@ final class AnalyzeGame: ObservableObject {
         history = []
         turnStart = nil
         gameDiceScript = []; gameLineBoards = []; hasGameDice = false; useGameDice = false; relTurn = 0   // free
+        // A standard-opening start can be logged + reviewed as a full game.
+        var std = [Int8](repeating: 0, count: Self.cells); std[0] = 15; std[Self.cols] = -15
+        startedFromStandard = (editorBoard == std && !endgameWhite && !endgameBlack)
+        loggedTurns = []
+        loggedSaved = false
         resetTurnState()
         isTerminal = false
         canUndo = false
@@ -227,6 +239,9 @@ final class AnalyzeGame: ObservableObject {
         turnStart = nil
         gameDiceScript = gameDice
         gameLineBoards = gameLine
+        startedFromStandard = false   // opened mid-game; not a loggable full trajectory
+        loggedTurns = []
+        loggedSaved = false
         hasGameDice = !gameDice.isEmpty
         useGameDice = hasGameDice          // default to the game's dice when available
         relTurn = 0
@@ -300,6 +315,7 @@ final class AnalyzeGame: ObservableObject {
     private func applyAnalyzed(_ idx: Int, following: Bool = false) {
         if let ts = turnStart { history.append(ts) }
         nardi_apply_analyzed_move(handle, Int32(idx))   // applies + confirms (switches side)
+        logCompletedTurn(moved: true)                   // record for a savable/reviewable log
         canUndo = true
         Task { @MainActor in
             await animateMoves()                      // moverSign uses the pre-switch side
@@ -370,6 +386,39 @@ final class AnalyzeGame: ObservableObject {
         }
         guard idx >= 0 else { status = "Couldn't replay the game's move."; return }
         applyAnalyzed(idx, following: true)
+    }
+
+    // MARK: - Logging a played game (from the standard start) for review
+
+    /// Append the just-completed turn to the trajectory log (only when this session
+    /// started from the standard opening, so it forms a reviewable full game).
+    private func logCompletedTurn(moved: Bool) {
+        guard startedFromStandard, let ts = turnStart else { return }
+        loggedTurns.append(ReviewTurn(preBoard: ts.board, preSide: ts.side,
+                                      dice: (die1, die2), postBoard: engineBoard(), moved: moved))
+    }
+
+    /// Whether the logged game can be saved: a completed (terminal) game from the
+    /// standard start that hasn't already been saved this session.
+    var canSaveLog: Bool {
+        startedFromStandard && isTerminal && !loggedTurns.isEmpty && !loggedSaved
+    }
+
+    /// Save the logged game to the match history so it can be reviewed like a played
+    /// game. The result is read off the terminal position.
+    func saveLoggedGame() {
+        guard canSaveLog, let save = onLogSaved else { return }
+        let b = engineBoard()
+        let whiteOn = b.reduce(0) { $0 + max(0, Int($1)) }
+        let winnerWhite = (whiteOn == 0)                 // winner has borne off all (0 left)
+        let mars = (nardi_winner_result(handle) == 2)
+        loggedSaved = true
+        save(SavedMatch(id: UUID(), date: Date(),
+                        modeRaw: "Logged game", opponentRaw: nil,
+                        reviewSide: false,               // review White's play
+                        winnerWhite: winnerWhite, mars: mars,
+                        turns: loggedTurns.map { SavedTurn($0) }))
+        status = "Saved to History — review it from the History tab."
     }
 
     /// Point number 1..24 along the mover's path for an engine (row, col).
@@ -532,6 +581,7 @@ final class AnalyzeGame: ObservableObject {
             turnStart = nil
             resetTurnState()
             relTurn = max(0, relTurn - 1)
+            if !loggedTurns.isEmpty { loggedTurns.removeLast() }   // keep the log in sync
             refreshGameLineFlag()
             isTerminal = false
             positionEval = staticEval()
@@ -544,6 +594,7 @@ final class AnalyzeGame: ObservableObject {
     func confirm() {
         guard phase == .analyzing, canConfirm, !isAnimating else { return }
         if let ts = turnStart { history.append(ts) }
+        logCompletedTurn(moved: true)   // record for a savable/reviewable log
         nardi_confirm_turn(handle)
         currentSide = (nardi_current_player(handle) == 1)
         flipped = currentSide
@@ -564,6 +615,7 @@ final class AnalyzeGame: ObservableObject {
     func pass() {
         guard phase == .analyzing, diceApplied, noLegalMoves, !isAnimating else { return }
         if let ts = turnStart { history.append(ts) }
+        logCompletedTurn(moved: false)   // record the pass in the log
         currentSide.toggle()
         flipped = currentSide
         board.withUnsafeBufferPointer { _ = nardi_set_position(handle, $0.baseAddress, currentSide ? 1 : 0) }
