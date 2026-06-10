@@ -83,9 +83,13 @@ final class NardiGame: ObservableObject {
     // animates, so there's no per-frame progress to publish).
     @Published private(set) var flights: [Flight] = []
     @Published private(set) var isAnimating = false
-    // Replay: the most recently animated move, re-playable via replayLastMove().
-    @Published private(set) var canReplay = false
+    // Replay: the last actual move animated (by EITHER side). Replay is offered only
+    // while it's the other side's turn, so it always re-plays the opponent's move.
     private var lastMove: ReplayMove? = nil
+    // Accumulates the in-progress human turn's hops so the whole turn can be replayed.
+    private var turnSubs: [(from: (Int, Int)?, to: (Int, Int)?)] = []
+    private var turnStartBoard: [Int8] = []
+    private var turnMoverSign: Int8 = 1
     static let cols = 12
 
     /// A move's animation captured for replay: the board before it, the ordered
@@ -98,8 +102,25 @@ final class NardiGame: ObservableObject {
         let dice: (Int, Int)
     }
 
-    /// The dice of the replayable (opponent's last) move, for the Replay button.
+    /// The dice of the replayable move, for the Replay button label.
     var lastMoveDice: (Int, Int)? { lastMove?.dice }
+
+    /// Offer Replay only when the recorded move was made by the OPPONENT of whoever
+    /// is now to move — so it's always "their last move", never your own, and it's
+    /// unavailable right after a pass (a pass records no move, so lastMove is stale
+    /// and belongs to the current player).
+    var canReplay: Bool {
+        guard let lm = lastMove, !isAnimating, phase != .botThinking else { return false }
+        let blackToMove = (nardi_current_player(handle) == 1)
+        return (lm.moverSign < 0) != blackToMove
+    }
+
+    /// Record `move` as the replayable move and capture the dice it was rolled with.
+    private func recordReplay(before: [Int8], subs: [(from: (Int, Int)?, to: (Int, Int)?)],
+                              moverSign: Int8, after: [Int8]) {
+        guard !subs.isEmpty else { return }
+        lastMove = ReplayMove(before: before, subs: subs, moverSign: moverSign, after: after, dice: dice)
+    }
 
     private let handle: OpaquePointer
     private var modelLoaded: Bool = false
@@ -166,8 +187,8 @@ final class NardiGame: ObservableObject {
         selected = nil
         flights = []
         isAnimating = false
-        canReplay = false
         lastMove = nil
+        turnSubs = []
         reviewLog = []
         humanTurnPre = nil
         board = engineBoard()   // opening position shows instantly (no animation)
@@ -203,8 +224,10 @@ final class NardiGame: ObservableObject {
         selected = nil   // hide highlight while the checker slides
         Task { @MainActor in
             await animateMoves()
+            turnSubs += recentMoves()   // accumulate this hop into the turn for replay
             // A move that ends the game finalizes immediately (no confirm needed).
             if nardi_is_terminal(handle) == 1 {
+                recordReplay(before: turnStartBoard, subs: turnSubs, moverSign: turnMoverSign, after: engineBoard())
                 recordHumanTurn()
                 saveMatchIfNeeded()
                 phase = .gameOver(message: outcomeMessage())
@@ -220,6 +243,7 @@ final class NardiGame: ObservableObject {
 
     func confirm() {
         guard phase == .awaitingHuman, canConfirm, !isAnimating else { return }
+        recordReplay(before: turnStartBoard, subs: turnSubs, moverSign: turnMoverSign, after: engineBoard())
         recordHumanTurn()
         nardi_confirm_turn(handle)
         canConfirm = false
@@ -242,6 +266,7 @@ final class NardiGame: ObservableObject {
         selected = nil
         Task { @MainActor in
             await animateMoves()   // slide the checker back
+            if !turnSubs.isEmpty { turnSubs.removeLast() }   // drop the undone hop
             updateSelection()
             updateConfirmState()
         }
@@ -285,8 +310,11 @@ final class NardiGame: ObservableObject {
                 default:                       // BotMoved (bot or forced auto-play)
                     reviewLog.append(ReviewTurn(preBoard: preBoard, preSide: preSide,
                                                 dice: dice, postBoard: engineBoard(), moved: true))
+                    // Record this move for replay (mover = the side that just moved).
+                    recordReplay(before: board, subs: recentMoves(),
+                                 moverSign: preSide ? -1 : 1, after: engineBoard())
                     status = "Opponent played \(dice.0)-\(dice.1)…"
-                    await animateMoves(recordReplay: true)   // record so it can be replayed
+                    await animateMoves()
                     try? await Task.sleep(nanoseconds: 200_000_000)
                 }
             }
@@ -302,6 +330,10 @@ final class NardiGame: ObservableObject {
         // perspective (board inverts each turn); vs-computer is fixed to the human.
         let perspectiveIsBlack = isPassAndPlay ? !whiteToMove : !humanIsWhite
         flipped = perspectiveIsBlack
+        // Start accumulating this turn's hops (for replaying the whole turn later).
+        turnSubs = []
+        turnStartBoard = engineBoard()
+        turnMoverSign = whiteToMove ? 1 : -1
         selected = nil
         canConfirm = false
         phase = .awaitingHuman
@@ -346,11 +378,10 @@ final class NardiGame: ObservableObject {
         return out
     }
 
-    /// Animate the last command's sub-moves. When `recordReplay` is set (only the
-    /// opponent's move), stash it so the user can re-watch it — the human's own
-    /// moves and undos are animated but not recorded, so Replay always replays the
-    /// opponent's last move.
-    private func animateMoves(recordReplay: Bool = false) async {
+    /// Animate the last command's sub-moves (pure display). Replay recording is done
+    /// by the callers (advanceLoop for the bot, confirm/tapDie for a human turn), not
+    /// here, so a turn is recorded once as a whole rather than hop by hop.
+    private func animateMoves() async {
         refreshMeta()
         let moves = recentMoves()
         let before = board
@@ -365,9 +396,7 @@ final class NardiGame: ObservableObject {
         }
         if moverSign == 0 { moverSign = (nardi_sign(handle) >= 0) ? 1 : -1 }   // e.g. undone bear-off
 
-        let move = ReplayMove(before: before, subs: moves, moverSign: moverSign, after: after, dice: dice)
-        if recordReplay { lastMove = move; canReplay = true }
-        await runFlights(move)
+        await runFlights(ReplayMove(before: before, subs: moves, moverSign: moverSign, after: after, dice: dice))
     }
 
     /// Slide each sub-move in sequence (pure display; touches no engine state), one
@@ -396,7 +425,7 @@ final class NardiGame: ObservableObject {
     /// replays the slide, then settles on the current true board (in case the user
     /// has already started their own turn since).
     func replayLastMove() {
-        guard let lm = lastMove, !isAnimating, phase != .botThinking else { return }
+        guard canReplay, let lm = lastMove else { return }
         let replay = ReplayMove(before: lm.before, subs: lm.subs, moverSign: lm.moverSign,
                                 after: engineBoard(), dice: lm.dice)
         Task { @MainActor in await runFlights(replay) }
