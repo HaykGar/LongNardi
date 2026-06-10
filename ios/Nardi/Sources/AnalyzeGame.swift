@@ -196,6 +196,7 @@ final class AnalyzeGame: ObservableObject {
         isTerminal = false
         canUndo = false
         phase = .analyzing
+        refreshGameLineFlag()
         positionEval = staticEval()
         autoApplyDice()   // apply the default dice so play + eval show immediately
     }
@@ -204,6 +205,7 @@ final class AnalyzeGame: ObservableObject {
         phase = .editing
         board = editorBoard
         resetTurnState()
+        refreshGameLineFlag()
         status = ""
     }
 
@@ -232,6 +234,7 @@ final class AnalyzeGame: ObservableObject {
         isTerminal = false
         canUndo = false
         phase = .analyzing
+        refreshGameLineFlag()
         positionEval = staticEval()
         autoApplyDice()
         status = hasGameDice ? "Following the game's dice — toggle off to explore freely."
@@ -306,6 +309,7 @@ final class AnalyzeGame: ObservableObject {
             turnStart = nil
             resetTurnState()
             relTurn += 1
+            refreshGameLineFlag()
             isTerminal = (nardi_is_terminal(handle) == 1)
             positionEval = staticEval()
             status = isTerminal ? "Position is terminal. Undo to continue."
@@ -318,9 +322,15 @@ final class AnalyzeGame: ObservableObject {
     // MARK: - Stepping through the reviewed game (mainline)
 
     /// True when the current confirmed position is exactly the game's position at
-    /// this step — i.e. we haven't branched into a line that didn't happen.
-    var onGameLine: Bool {
-        hasGameDice && relTurn < gameLineBoards.count && engineBoard() == gameLineBoards[relTurn]
+    /// this step — i.e. we haven't branched into a line that didn't happen. Stored
+    /// and refreshed only at turn boundaries (via refreshGameLineFlag), never
+    /// recomputed mid-animation, so the on/off-line indicator doesn't flicker while
+    /// a move is still sliding.
+    @Published private(set) var onGameLine = false
+
+    private func refreshGameLineFlag() {
+        onGameLine = hasGameDice && relTurn < gameLineBoards.count
+            && engineBoard() == gameLineBoards[relTurn]
     }
 
     /// Whether "Follow game" can step forward: on the game line, a next game move
@@ -345,6 +355,7 @@ final class AnalyzeGame: ObservableObject {
             turnStart = nil
             resetTurnState()
             relTurn += 1
+            refreshGameLineFlag()
             canUndo = true
             positionEval = staticEval()
             status = "Following the game (pass) — \(currentSide ? "Black" : "White") to move."
@@ -521,6 +532,7 @@ final class AnalyzeGame: ObservableObject {
             turnStart = nil
             resetTurnState()
             relTurn = max(0, relTurn - 1)
+            refreshGameLineFlag()
             isTerminal = false
             positionEval = staticEval()
             canUndo = !history.isEmpty
@@ -541,6 +553,7 @@ final class AnalyzeGame: ObservableObject {
         isTerminal = (nardi_is_terminal(handle) == 1)
         canUndo = !history.isEmpty
         relTurn += 1                       // advance the game-dice pointer
+        refreshGameLineFlag()
         positionEval = staticEval()
         status = isTerminal ? "Position is terminal. Undo to continue."
                             : "\(currentSide ? "Black" : "White") to move."
@@ -557,6 +570,7 @@ final class AnalyzeGame: ObservableObject {
         turnStart = nil
         resetTurnState()
         relTurn += 1
+        refreshGameLineFlag()
         positionEval = staticEval()
         canUndo = !history.isEmpty
         status = "Passed — \(currentSide ? "Black" : "White") to move."

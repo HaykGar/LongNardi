@@ -193,10 +193,10 @@ struct ContentView: View {
             Text(game.status).font(.callout).multilineTextAlignment(.center)
                 .frame(maxWidth: .infinity, minHeight: 24)
 
-            // Re-watch the last move's animation (e.g. to see what the computer did).
-            if game.canReplay {
+            // Re-watch the opponent's last move (shows the dice it was rolled with).
+            if game.canReplay, let d = game.lastMoveDice {
                 Button { game.replayLastMove() } label: {
-                    Label("Replay move", systemImage: "arrow.counterclockwise")
+                    Label("Replay move (\(d.0)-\(d.1))", systemImage: "arrow.counterclockwise")
                         .font(.caption)
                 }
                 .buttonStyle(.bordered)

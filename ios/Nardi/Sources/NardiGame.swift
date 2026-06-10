@@ -89,13 +89,17 @@ final class NardiGame: ObservableObject {
     static let cols = 12
 
     /// A move's animation captured for replay: the board before it, the ordered
-    /// sub-move hops, the mover's sign, and the board after.
+    /// sub-move hops, the mover's sign, the board after, and the dice that rolled it.
     private struct ReplayMove {
         let before: [Int8]
         let subs: [(from: (Int, Int)?, to: (Int, Int)?)]
         let moverSign: Int8
         let after: [Int8]
+        let dice: (Int, Int)
     }
+
+    /// The dice of the replayable (opponent's last) move, for the Replay button.
+    var lastMoveDice: (Int, Int)? { lastMove?.dice }
 
     private let handle: OpaquePointer
     private var modelLoaded: Bool = false
@@ -361,7 +365,7 @@ final class NardiGame: ObservableObject {
         }
         if moverSign == 0 { moverSign = (nardi_sign(handle) >= 0) ? 1 : -1 }   // e.g. undone bear-off
 
-        let move = ReplayMove(before: before, subs: moves, moverSign: moverSign, after: after)
+        let move = ReplayMove(before: before, subs: moves, moverSign: moverSign, after: after, dice: dice)
         if recordReplay { lastMove = move; canReplay = true }
         await runFlights(move)
     }
@@ -393,7 +397,8 @@ final class NardiGame: ObservableObject {
     /// has already started their own turn since).
     func replayLastMove() {
         guard let lm = lastMove, !isAnimating, phase != .botThinking else { return }
-        let replay = ReplayMove(before: lm.before, subs: lm.subs, moverSign: lm.moverSign, after: engineBoard())
+        let replay = ReplayMove(before: lm.before, subs: lm.subs, moverSign: lm.moverSign,
+                                after: engineBoard(), dice: lm.dice)
         Task { @MainActor in await runFlights(replay) }
     }
 
