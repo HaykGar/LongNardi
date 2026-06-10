@@ -133,14 +133,28 @@ private struct AnalysisBody: View {
             Text(game.status).font(.caption).multilineTextAlignment(.center)
                 .frame(maxWidth: .infinity, minHeight: 16)
 
+            // Stepping through the reviewed game: are we still on it, or in a line
+            // that didn't happen?
+            if game.hasGameDice {
+                Text(game.onGameLine ? "On the game line — step forward with Follow ▸"
+                                     : "Exploring a line that didn't happen — Undo to rejoin the game")
+                    .font(.caption2)
+                    .foregroundStyle(game.onGameLine ? Color.secondary : Color.orange)
+                    .multilineTextAlignment(.center)
+            }
+
             HStack(spacing: 16) {
                 if game.noLegalMoves {
                     Button("Pass") { game.pass() }.buttonStyle(.bordered)
                 }
-                Button { game.undo() } label: { Label("Undo", systemImage: "arrow.uturn.backward") }
+                Button { game.undo() } label: { Label("Back", systemImage: "chevron.backward") }
                     .buttonStyle(.bordered).disabled(!game.canUndo || game.isAnimating)
                 Button { game.confirm() } label: { Label("Confirm", systemImage: "checkmark") }
                     .buttonStyle(.borderedProminent).disabled(!game.canConfirm)
+                if game.hasGameDice {
+                    Button { game.followGameMove() } label: { Label("Follow", systemImage: "chevron.forward.2") }
+                        .buttonStyle(.bordered).disabled(!game.canFollowGame)
+                }
             }
             .padding(.bottom, 6)
             Spacer(minLength: 0)

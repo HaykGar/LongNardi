@@ -57,6 +57,14 @@ final class GameReview: ObservableObject {
         return log[pointIndex...].map { $0.dice }
     }
 
+    /// The game's positions from review point `pointIndex` onward — the mainline the
+    /// analyzer steps through (index k = k turns after the jump-in). Aligned with
+    /// gameDiceFrom, so dice[k] is the roll from boards[k] to boards[k+1].
+    func gameBoardsFrom(_ pointIndex: Int) -> [[Int8]] {
+        guard pointIndex < points.count else { return [] }
+        return points[pointIndex...].map { $0.board }
+    }
+
     /// Async so the "Analyzing…" spinner stays live: the engine calls run on the
     /// main actor (it isn't thread-safe), but we yield between turns.
     func compute() async {

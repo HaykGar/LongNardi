@@ -44,7 +44,7 @@ struct GameReviewView: View {
         let i = max(0, index - 1)
         guard let pt = review.points[safe: i] else { return }
         analyze.openForReview(board: pt.board, side: pt.sideToMove, anchor: review.reviewSide,
-                              gameDice: review.gameDiceFrom(i))
+                              gameDice: review.gameDiceFrom(i), gameLine: review.gameBoardsFrom(i))
         showAnalyzer = true
     }
 

@@ -52,6 +52,7 @@ final class AnalyzeGame: ObservableObject {
     @Published private(set) var useGameDice = false
     @Published private(set) var hasGameDice = false
     private var gameDiceScript: [(Int, Int)] = []   // dice from the jump-in point onward
+    private var gameLineBoards: [[Int8]] = []        // the game's positions from the jump-in (mainline)
     private var relTurn = 0                          // turns played since jump-in
     @Published private(set) var positionEval: Float? = nil
     @Published private(set) var selected: (Int, Int)? = nil
@@ -190,7 +191,7 @@ final class AnalyzeGame: ObservableObject {
         board = engineBoard()
         history = []
         turnStart = nil
-        gameDiceScript = []; hasGameDice = false; useGameDice = false; relTurn = 0   // free dice
+        gameDiceScript = []; gameLineBoards = []; hasGameDice = false; useGameDice = false; relTurn = 0   // free
         resetTurnState()
         isTerminal = false
         canUndo = false
@@ -212,7 +213,8 @@ final class AnalyzeGame: ObservableObject {
     /// eval stays from their perspective even when it's the opponent's turn here.
     /// When `gameDice` is supplied (the reviewed game's rolls from this point on),
     /// the dice default to following the game and can be unlocked to explore freely.
-    func openForReview(board b: [Int8], side: Bool, anchor: Bool, gameDice: [(Int, Int)] = []) {
+    func openForReview(board b: [Int8], side: Bool, anchor: Bool,
+                       gameDice: [(Int, Int)] = [], gameLine: [[Int8]] = []) {
         editorBoard = b
         board = b
         originalSide = anchor          // eval frame = reviewed player
@@ -222,6 +224,7 @@ final class AnalyzeGame: ObservableObject {
         history = []
         turnStart = nil
         gameDiceScript = gameDice
+        gameLineBoards = gameLine
         hasGameDice = !gameDice.isEmpty
         useGameDice = hasGameDice          // default to the game's dice when available
         relTurn = 0
@@ -286,8 +289,14 @@ final class AnalyzeGame: ObservableObject {
     func applyTopMove(_ i: Int) {
         guard phase == .analyzing, diceApplied, !movedThisTurn, !isAnimating,
               !canConfirm, i < topMoves.count else { return }
+        applyAnalyzed(i)
+    }
+
+    /// Apply ranked analyzed move `idx` (already enumerated on the handle) as a whole
+    /// turn: record the pre-move snapshot for undo, play + confirm, animate, advance.
+    private func applyAnalyzed(_ idx: Int, following: Bool = false) {
         if let ts = turnStart { history.append(ts) }
-        nardi_apply_analyzed_move(handle, Int32(i))   // applies + confirms (switches side)
+        nardi_apply_analyzed_move(handle, Int32(idx))   // applies + confirms (switches side)
         canUndo = true
         Task { @MainActor in
             await animateMoves()                      // moverSign uses the pre-switch side
@@ -300,9 +309,56 @@ final class AnalyzeGame: ObservableObject {
             isTerminal = (nardi_is_terminal(handle) == 1)
             positionEval = staticEval()
             status = isTerminal ? "Position is terminal. Undo to continue."
-                                : "\(currentSide ? "Black" : "White") to move."
+                   : following ? "Following the game — \(currentSide ? "Black" : "White") to move."
+                               : "\(currentSide ? "Black" : "White") to move."
             autoApplyDice()
         }
+    }
+
+    // MARK: - Stepping through the reviewed game (mainline)
+
+    /// True when the current confirmed position is exactly the game's position at
+    /// this step — i.e. we haven't branched into a line that didn't happen.
+    var onGameLine: Bool {
+        hasGameDice && relTurn < gameLineBoards.count && engineBoard() == gameLineBoards[relTurn]
+    }
+
+    /// Whether "Follow game" can step forward: on the game line, a next game move
+    /// exists, and we're at a clean turn start (greyed out otherwise).
+    var canFollowGame: Bool {
+        phase == .analyzing && !isAnimating && !movedThisTurn && !isTerminal
+            && relTurn + 1 < gameLineBoards.count && onGameLine
+    }
+
+    /// Step forward along the reviewed game: replay the move the game actually made
+    /// this turn (its dice + recorded resulting position), animated like any move.
+    func followGameMove() {
+        guard canFollowGame else { return }
+        let (d1, d2) = gameDiceScript[relTurn]
+        let target = gameLineBoards[relTurn + 1]
+        let cur = engineBoard()
+        if target == cur {   // the game's turn here was a forced pass
+            if let ts = turnStart { history.append(ts) }
+            currentSide.toggle()
+            flipped = currentSide
+            cur.withUnsafeBufferPointer { _ = nardi_set_position(handle, $0.baseAddress, currentSide ? 1 : 0) }
+            turnStart = nil
+            resetTurnState()
+            relTurn += 1
+            canUndo = true
+            positionEval = staticEval()
+            status = "Following the game (pass) — \(currentSide ? "Black" : "White") to move."
+            autoApplyDice()
+            return
+        }
+        let n = Int(nardi_analyze_dice(handle, Int32(d1), Int32(d2)))   // game's roll
+        var idx = -1
+        for j in 0..<max(0, n) {
+            var b = [Int8](repeating: 0, count: Self.cells); var v: Float = 0
+            if nardi_analyzed_move(handle, Int32(j), &b, &v) == NARDI_OK, b == target { idx = j; break }
+        }
+        guard idx >= 0 else { status = "Couldn't replay the game's move."; return }
+        applyAnalyzed(idx, following: true)
     }
 
     /// Point number 1..24 along the mover's path for an engine (row, col).
