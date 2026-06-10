@@ -132,6 +132,8 @@ final class NardiGame: ObservableObject {
     /// to the match history. Injected by the app; nil disables archiving.
     var onGameFinished: ((SavedMatch) -> Void)?
     private var matchSaved = false   // guards against double-archiving one game
+    /// id of the SavedMatch for the just-finished game, so Review can open + cache it.
+    @Published private(set) var lastMatchID: UUID? = nil
 
     // Post-game review: one record per completed turn, plus a stash for the
     // in-progress human turn (recorded on confirm / game-ending move).
@@ -189,6 +191,7 @@ final class NardiGame: ObservableObject {
         isAnimating = false
         lastMove = nil
         turnSubs = []
+        lastMatchID = nil
         reviewLog = []
         humanTurnPre = nil
         board = engineBoard()   // opening position shows instantly (no animation)
@@ -458,7 +461,9 @@ final class NardiGame: ObservableObject {
         matchSaved = true
         let whiteWon = (nardi_current_player(handle) == 1)   // loser is to move at game end
         let mars = (nardi_winner_result(handle) == 2)
-        save(SavedMatch(id: UUID(), date: Date(),
+        let id = UUID()
+        lastMatchID = id    // so the Review button can open (and cache) this match
+        save(SavedMatch(id: id, date: Date(),
                         modeRaw: mode.rawValue,
                         opponentRaw: mode == .vsComputer ? opponent.rawValue : nil,
                         reviewSide: reviewSide,

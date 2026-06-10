@@ -34,6 +34,7 @@ struct SavedMatch: Codable, Identifiable {
     let winnerWhite: Bool        // who won, regardless of review side
     let mars: Bool
     let turns: [SavedTurn]
+    var review: CachedReview? = nil   // computed lazily on first open, then cached
 
     var reviewTurns: [ReviewTurn] { turns.map { $0.reviewTurn } }
     var reviewSideName: String { reviewSide ? "Black" : "White" }
@@ -65,6 +66,13 @@ final class MatchStore: ObservableObject {
 
     func add(_ m: SavedMatch) {
         matches.insert(m, at: 0)          // newest first
+        persist()
+    }
+
+    /// Cache a computed review onto its match and persist it (tiny — a few KB).
+    func setReview(_ id: UUID, _ review: CachedReview) {
+        guard let i = matches.firstIndex(where: { $0.id == id }) else { return }
+        matches[i].review = review
         persist()
     }
 

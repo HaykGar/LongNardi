@@ -142,10 +142,12 @@ struct ContentView: View {
         .padding(.horizontal)
     }
 
-    /// Re-run game review on a stored match. Its turn log replays exactly, so the
-    /// review (and its "Open in Analyzer" jump) work just as for a live game.
+    /// Open game review for a stored match: reuse its cached review if present
+    /// (instant), otherwise compute once and cache the result back onto the match.
     private func openReview(_ match: SavedMatch) {
-        review = GameReview(log: match.reviewTurns, reviewSide: match.reviewSide)
+        review = GameReview(log: match.reviewTurns, reviewSide: match.reviewSide,
+                            cached: match.review,
+                            onComputed: { [weak store] data in store?.setReview(match.id, data) })
     }
 
     private func labeledPicker<T: Hashable & Identifiable>(
@@ -224,8 +226,14 @@ struct ContentView: View {
                     Text(message).font(.title2.bold())
                     HStack(spacing: 14) {
                         if game.hasReview {
-                            Button { review = GameReview(log: game.reviewLog, reviewSide: game.reviewSide) }
-                                label: { Label("Review", systemImage: "chart.line.uptrend.xyaxis") }
+                            Button {
+                                // Open via the archived match so the computed review is cached.
+                                if let id = game.lastMatchID, let m = store.matches.first(where: { $0.id == id }) {
+                                    openReview(m)
+                                } else {
+                                    review = GameReview(log: game.reviewLog, reviewSide: game.reviewSide)
+                                }
+                            } label: { Label("Review", systemImage: "chart.line.uptrend.xyaxis") }
                                 .buttonStyle(.bordered)
                         }
                         Button("New Game") { game.backToSetup() }.buttonStyle(.borderedProminent)

@@ -17,6 +17,42 @@ struct ReviewPoint: Identifiable {
     let label: String           // move descriptor, e.g. "13 -> 8"
 }
 
+/// A persisted, ready-to-display game review (cached on a SavedMatch). Stores only
+/// the computed bits per position (~tens of bytes each); bumping `version`
+/// invalidates stale caches, e.g. after retraining the display/selection nets.
+struct CachedReview: Codable {
+    let version: Int
+    let points: [CachedReviewPoint]
+    let biggestBlunder: Int?
+}
+
+struct CachedReviewPoint: Codable {
+    var board: [Int8]
+    var sideToMove: Bool
+    var mover: Bool?
+    var die0: Int?
+    var die1: Int?
+    var moved: Bool
+    var evalReview: Float?
+    var blunderDelta: Float?
+    var bestEval: Float?
+    var playedEval: Float?
+    var label: String
+
+    init(_ p: ReviewPoint) {
+        board = p.board; sideToMove = p.sideToMove; mover = p.mover
+        die0 = p.dice?.0; die1 = p.dice?.1; moved = p.moved
+        evalReview = p.evalReview; blunderDelta = p.blunderDelta
+        bestEval = p.bestEval; playedEval = p.playedEval; label = p.label
+    }
+    var point: ReviewPoint {
+        ReviewPoint(board: board, sideToMove: sideToMove, mover: mover,
+                    dice: die0.flatMap { d0 in die1.map { (d0, $0) } },
+                    moved: moved, evalReview: evalReview, blunderDelta: blunderDelta,
+                    bestEval: bestEval, playedEval: playedEval, label: label)
+    }
+}
+
 /// Computes a post-game review from NardiGame's recorded turns: the eval
 /// trajectory from the reviewed player's perspective, and that player's biggest
 /// blunder (largest best-vs-played lookahead gap). Owns its own engine.
@@ -24,6 +60,8 @@ struct ReviewPoint: Identifiable {
 final class GameReview: ObservableObject {
     static let cols = 12
     static let cells = Int(NARDI_BOARD_CELLS)
+    /// Bump to invalidate every cached review (e.g. after retraining res2/vzg0).
+    static let reviewVersion = 1
 
     @Published private(set) var points: [ReviewPoint] = []
     @Published private(set) var biggestBlunder: Int? = nil   // index into points
@@ -34,10 +72,15 @@ final class GameReview: ObservableObject {
     private let handle: OpaquePointer       // vzg0: blunder / best-move selection
     private let evalHandle: OpaquePointer   // res2: the displayed eval-trajectory graph
     private let log: [ReviewTurn]
+    private let cached: CachedReview?                  // reuse instead of recomputing
+    private let onComputed: ((CachedReview) -> Void)?  // report a freshly-computed review to cache
 
-    init(log: [ReviewTurn], reviewSide: Bool) {
+    init(log: [ReviewTurn], reviewSide: Bool,
+         cached: CachedReview? = nil, onComputed: ((CachedReview) -> Void)? = nil) {
         self.log = log
         self.reviewSide = reviewSide
+        self.cached = cached
+        self.onComputed = onComputed
         guard let h = nardi_create(), let e = nardi_create() else { fatalError("nardi_create failed") }
         handle = h; evalHandle = e
         // Strong vzg0 picks the best move (blunder detection); well-calibrated res2
@@ -69,6 +112,15 @@ final class GameReview: ObservableObject {
     /// main actor (it isn't thread-safe), but we yield between turns.
     func compute() async {
         guard !ready, !log.isEmpty else { return }
+
+        // Reuse a current cached review if available — instant, no recompute.
+        if let c = cached, c.version == Self.reviewVersion {
+            points = c.points.map { $0.point }
+            biggestBlunder = c.biggestBlunder
+            ready = true
+            return
+        }
+
         var pts: [ReviewPoint] = []
 
         // Point 0: the starting position (before the first recorded turn).
@@ -100,6 +152,10 @@ final class GameReview: ObservableObject {
             .max { ($0.element.blunderDelta ?? 0) < ($1.element.blunderDelta ?? 0) }
             .map { $0.offset }
         ready = true
+        // Hand the computed review back to be cached, so re-opening is instant.
+        onComputed?(CachedReview(version: Self.reviewVersion,
+                                 points: pts.map { CachedReviewPoint($0) },
+                                 biggestBlunder: biggestBlunder))
     }
 
     // MARK: - Engine helpers
