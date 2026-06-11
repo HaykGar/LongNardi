@@ -123,6 +123,7 @@ class Game
         const Board& GetBoardRef() const;
         const BoardConfig& GetBoardData() const;
         const std::unordered_map<BoardConfig, MoveSequence, BoardConfigHash>& GetBoards2Seqs() const;
+        const std::array<std::unordered_set, 2>& GetStarts() const;
 
         int GetDice(bool idx) const;
         int GetTurnNumber(bool player) const;
@@ -264,6 +265,7 @@ class Game
         ReaderWriter* rw;
         Arbiter arbiter;
         LegalSeqComputer legal_turns;
+        std::array<std::unordered_set, 2> starts;
 
         mutable std::vector<LoggedMove> _move_log;  // appended by EmitEvent when recording
         bool _recording = false;

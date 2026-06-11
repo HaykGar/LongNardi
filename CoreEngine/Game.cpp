@@ -54,6 +54,10 @@ const BoardConfig& Game::GetBoardData() const
     return board.View();
 }
 
+const std::array<std::unordered_set, 2>& Game::GetStarts() const {
+    return starts;
+}
+
 int Game::GetDice(bool idx) const
 {   return dice[idx];   }
 
@@ -665,8 +669,25 @@ status_codes Game::Arbiter::CheckForcedMoves()
 
     if(_g.legal_turns.BrdsToSeqs().empty())
         return status_codes::NO_LEGAL_MOVES_LEFT;
-    else
+    else{
+        _g.starts[0].clear();
+        _g.starts[1].clear();
+
+        auto coord = _g.PlayerHead();
+
+        while(start.InBounds()) {
+            if(CanMoveByDice(coord, 0).first == status_codes::SUCCESS){
+                starts[0].insert(coord);
+            }
+            if(CanMoveByDice(coord, 1).first == status_codes::SUCCESS){
+                starts[1].insert(coord);
+            }
+
+            coord = _g.board.CoordAfterDistance(coord, 1);
+        }
+
         return status_codes::SUCCESS;
+    }
 }
 
 ///////////////////////////////////////
