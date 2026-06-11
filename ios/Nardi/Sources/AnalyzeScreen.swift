@@ -38,7 +38,7 @@ struct AnalyzeScreen: View {
                     .font(.headline)
                 Spacer()
                 if game.phase == .analyzing {
-                    Button("Edit") { game.backToEditor() }.font(.callout)
+                    Button("Edit") { game.backToEditor() }.font(.callout).disabled(game.isThinking)
                 } else {
                     Color.clear.frame(width: 44, height: 1)   // balance the title
                 }
@@ -153,8 +153,14 @@ private struct AnalysisBody: View {
                 .buttonStyle(.borderedProminent).font(.callout)
             }
 
-            Text(game.status).font(.caption).multilineTextAlignment(.center)
-                .frame(maxWidth: .infinity, minHeight: 16)
+            // While a background dice search runs, show a thinking indicator in place
+            // of the status (same frame, so nothing shifts).
+            HStack(spacing: 6) {
+                if game.isThinking { ProgressView().controlSize(.mini) }
+                Text(game.isThinking ? "Analyzing…" : game.status)
+                    .font(.caption).multilineTextAlignment(.center)
+            }
+            .frame(maxWidth: .infinity, minHeight: 16)
 
             // Stepping through the reviewed game: are we still on it, or in a line
             // that didn't happen?
@@ -168,12 +174,12 @@ private struct AnalysisBody: View {
 
             HStack(spacing: 16) {
                 if game.noLegalMoves {
-                    Button("Pass") { game.pass() }.buttonStyle(.bordered)
+                    Button("Pass") { game.pass() }.buttonStyle(.bordered).disabled(game.isThinking)
                 }
                 Button { game.undo() } label: { Label("Back", systemImage: "chevron.backward") }
-                    .buttonStyle(.bordered).disabled(!game.canUndo || game.isAnimating)
+                    .buttonStyle(.bordered).disabled(!game.canUndo || game.isAnimating || game.isThinking)
                 Button { game.confirm() } label: { Label("Confirm", systemImage: "checkmark") }
-                    .buttonStyle(.borderedProminent).disabled(!game.canConfirm)
+                    .buttonStyle(.borderedProminent).disabled(!game.canConfirm || game.isThinking)
                 if game.hasGameDice {
                     Button { game.followGameMove() } label: { Label("Follow", systemImage: "chevron.forward.2") }
                         .buttonStyle(.bordered).disabled(!game.canFollowGame)
@@ -202,7 +208,7 @@ private struct AnalysisBody: View {
                         .padding(.vertical, 5).padding(.horizontal, 12)
                         .background(RoundedRectangle(cornerRadius: 6).fill(Color(.systemGray6)))
                     }
-                    .buttonStyle(.plain).disabled(game.isAnimating)
+                    .buttonStyle(.plain).disabled(game.isAnimating || game.isThinking)
                 }
             }
             .padding(.horizontal, 24)
@@ -234,8 +240,8 @@ private struct AnalysisBody: View {
             // Tap a die to play the selected checker by that value.
             if game.diceApplied && !game.noLegalMoves {
                 HStack(spacing: 14) {
-                    AnalyzeDie(value: game.die1, usable: game.dieUsable.0) { game.tapDie(0) }
-                    AnalyzeDie(value: game.die2, usable: game.dieUsable.1) { game.tapDie(1) }
+                    AnalyzeDie(value: game.die1, usable: game.dieUsable.0 && !game.isThinking) { game.tapDie(0) }
+                    AnalyzeDie(value: game.die2, usable: game.dieUsable.1 && !game.isThinking) { game.tapDie(1) }
                 }
             }
         }

@@ -1,8 +1,9 @@
 #!/usr/bin/env bash
 # Export the trained PyTorch value networks to the flat .nardiw blobs the app
 # bundles (DecisionEngine/nardi_net.export_weights). Regenerate whenever you
-# retrain, then run `xcodegen generate` so any new/renamed blob is picked up by
-# the Xcode project (blobs are referenced individually and are gitignored).
+# retrain. The three blobs below keep the same names, so they overwrite in place
+# and the committed Xcode project picks them up automatically. If you add a
+# new/renamed blob, drag it into the Nardi > Resources group in Xcode once.
 #
 # Produces three blobs in Nardi/Resources:
 #   mlp.nardiw   <- weights/mlp.pt   (NardiNet / MLP)   -> Medium (greedy)

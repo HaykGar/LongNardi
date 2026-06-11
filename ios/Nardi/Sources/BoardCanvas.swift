@@ -46,8 +46,28 @@ struct BoardCanvas: View {
         return UIImage(contentsOfFile: p)
     }
 
+    /// The board image's intrinsic aspect (width / height), falling back to the
+    /// known asset ratio if the image can't be loaded.
+    static let imageAspect: CGFloat = {
+        guard let img = boardImage, img.size.height > 0 else { return 1079.0 / 953.0 }
+        return img.size.width / img.size.height
+    }()
+
+    /// A fixed on-screen board size derived only from the (portrait-locked) screen
+    /// — never from sibling views. Pinning the board to this keeps it rooted in
+    /// place: it won't shrink or grow as controls (the engine-move list, status,
+    /// buttons) appear and disappear between moves. The height is capped to a
+    /// fraction of the screen so short devices still leave room for the controls.
+    static func fixedSize(horizontalPadding pad: CGFloat = 6, maxHeightFraction: CGFloat = 0.46) -> CGSize {
+        let screen = UIScreen.main.bounds.size
+        let widthLimited = max(0, screen.width - pad * 2)
+        let h = min(widthLimited / imageAspect, screen.height * maxHeightFraction)
+        return CGSize(width: h * imageAspect, height: h)
+    }
+
     var body: some View {
-        GeometryReader { geo in
+        let fixed = Self.fixedSize()
+        return GeometryReader { geo in
             let rect = boardRect(in: geo.size)
             let geom = BoardGeometry(board: rect)
             ZStack(alignment: .topLeading) {
@@ -71,7 +91,9 @@ struct BoardCanvas: View {
                                         didLongPress: $didLongPress,
                                         action: { fireLongPress(geom: geom) }))
         }
-        .aspectRatio(boardAspect, contentMode: .fit)
+        // Fixed, screen-derived size so the board stays rooted — it never resizes
+        // when surrounding controls appear/disappear between moves.
+        .frame(width: fixed.width, height: fixed.height)
     }
 
     private func tapGesture(geom: BoardGeometry) -> some Gesture {
@@ -93,10 +115,7 @@ struct BoardCanvas: View {
         }
     }
 
-    private var boardAspect: CGFloat {
-        guard let img = Self.boardImage, img.size.height > 0 else { return 1079.0 / 953.0 }
-        return img.size.width / img.size.height
-    }
+    private var boardAspect: CGFloat { Self.imageAspect }
 
     private func boardRect(in size: CGSize) -> CGRect {
         let a = boardAspect

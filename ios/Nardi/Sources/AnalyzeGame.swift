@@ -9,10 +9,20 @@ private struct Snapshot { let board: [Int8]; let side: Bool }
 /// An engine-recommended move shown in the analyzer: the end-board it reaches and a
 /// per-checker descriptor (e.g. "1 → 7, 12 → 17"). No eval is shown — these are
 /// ranked by vzg0 lookahead, whose absolute numbers we don't surface.
-struct TopMove: Identifiable {
+struct TopMove: Identifiable, Sendable {
     let id = UUID()
     let board: [Int8]
     let label: String
+}
+
+/// Everything a dice search produces, computed off the main thread and applied
+/// back on the main actor. Sendable so it can cross the thread boundary safely.
+private struct DiceSearchResult: Sendable {
+    let n: Int
+    let tops: [TopMove]
+    let die0Usable: Bool
+    let die1Usable: Bool
+    let eval: Float?
 }
 
 enum AnalyzePhase: Equatable { case editing, analyzing }
@@ -23,9 +33,10 @@ enum AnalyzePhase: Equatable { case editing, analyzing }
 /// whoever is on move, but the eval frame never changes.
 @MainActor
 final class AnalyzeGame: ObservableObject {
-    static let cells = Int(NARDI_BOARD_CELLS)
-    static let cols = 12
-    static let pieces = 15
+    // Immutable constants — nonisolated so the off-main dice search can read them.
+    nonisolated static let cells = Int(NARDI_BOARD_CELLS)
+    nonisolated static let cols = 12
+    nonisolated static let pieces = 15
 
     // Editor
     @Published var activeColor: Bool = false      // false = white, true = black
@@ -46,6 +57,13 @@ final class AnalyzeGame: ObservableObject {
     @Published var die1 = 3
     @Published var die2 = 5
     @Published private(set) var diceApplied = false
+    // Stored (not computed off the engine) so SwiftUI can read it during render
+    // without ever calling into the C++ engine — important now that the dice
+    // search runs on a background thread and the live handle is briefly busy.
+    @Published private(set) var movedThisTurn = false
+    // A background dice search (vzg0 ranking) is running; the live handle is busy,
+    // so interactions that touch the engine are disabled until it lands.
+    @Published private(set) var isThinking = false
     @Published private(set) var noLegalMoves = false
     // When opened from game review, the dice can be locked to the game's actual
     // roll at each relative turn (useGameDice) or set freely.
@@ -85,6 +103,14 @@ final class AnalyzeGame: ObservableObject {
     private let evalHandle: OpaquePointer
     private var history: [Snapshot] = []
     private var turnStart: Snapshot? = nil          // position at the start of the current turn
+    // Stepper changes are debounced: the (slow) vzg0 lookahead only runs once the
+    // user stops tapping, so dragging a die 1→6 doesn't think between every step.
+    private var diceDebounce: Task<Void, Never>? = nil
+    static let diceDebounceNanos: UInt64 = 500_000_000   // 0.5s quiet period
+    // The (slow) lookahead runs here, off the main thread, so stepping the dice
+    // never freezes the UI. Serial: only one search touches the engine at a time.
+    private let searchQueue = DispatchQueue(label: "nardi.analyze.dice-search")
+    private var searchGen = 0      // bumped per search; a stale result is discarded
 
     init() {
         guard let h = nardi_create(), let e = nardi_create() else { fatalError("nardi_create failed") }
@@ -216,8 +242,8 @@ final class AnalyzeGame: ObservableObject {
     func backToEditor() {
         phase = .editing
         board = editorBoard
-        resetTurnState()
-        refreshGameLineFlag()
+        resetTurnState()            // also abandons any in-flight search (bumps searchGen)
+        onGameLine = false          // editor isn't on a game line; avoids reading the engine here
         status = ""
     }
 
@@ -294,6 +320,10 @@ final class AnalyzeGame: ObservableObject {
     }
 
     private func resetTurnState() {
+        diceDebounce?.cancel()        // drop any pending lookahead from a stepper change
+        searchGen += 1                // abandon any in-flight search's result
+        isThinking = false
+        movedThisTurn = false
         diceApplied = false
         noLegalMoves = false
         selected = nil
@@ -305,7 +335,7 @@ final class AnalyzeGame: ObservableObject {
     /// Play an engine-recommended move (whole turn) and advance to the next side,
     /// exactly as if the user had played it by hand and confirmed.
     func applyTopMove(_ i: Int) {
-        guard phase == .analyzing, diceApplied, !movedThisTurn, !isAnimating,
+        guard phase == .analyzing, diceApplied, !movedThisTurn, !isAnimating, !isThinking,
               !canConfirm, i < topMoves.count else { return }
         applyAnalyzed(i)
     }
@@ -352,7 +382,7 @@ final class AnalyzeGame: ObservableObject {
     /// Whether "Follow game" can step forward: on the game line, a next game move
     /// exists, and we're at a clean turn start (greyed out otherwise).
     var canFollowGame: Bool {
-        phase == .analyzing && !isAnimating && !movedThisTurn && !isTerminal
+        phase == .analyzing && !isAnimating && !isThinking && !movedThisTurn && !isTerminal
             && relTurn + 1 < gameLineBoards.count && onGameLine
     }
 
@@ -422,29 +452,31 @@ final class AnalyzeGame: ObservableObject {
     }
 
     /// Point number 1..24 along the mover's path for an engine (row, col).
-    private func pointNumber(_ row: Int, _ col: Int, black: Bool) -> Int {
+    nonisolated private static func pointNumber(_ row: Int, _ col: Int, black: Bool) -> Int {
         let onHeadRow = (row == (black ? 1 : 0))
-        return (onHeadRow ? col : Self.cols + col) + 1
+        return (onHeadRow ? col : cols + col) + 1
     }
 
     /// Describe an engine suggestion as the actual per-checker hops, e.g.
     /// "1 → 7, 12 → 17" (a checker chaining both dice shows both hops). The engine
     /// only records sub-moves when a move is applied, so replay the suggestion on
     /// the eval handle -- found by matching its end board, so the model/ranking is
-    /// irrelevant -- and read the recorded {from→to} of each checker.
-    private func subMoveLabel(preBoard: [Int8], side: Bool, end: [Int8], _ d1: Int, _ d2: Int) -> String {
-        preBoard.withUnsafeBufferPointer { _ = nardi_set_position(evalHandle, $0.baseAddress, side ? 1 : 0) }
-        let m = Int(nardi_analyze_dice(evalHandle, Int32(d1), Int32(d2)))
+    /// irrelevant -- and read the recorded {from→to} of each checker. Runs on the
+    /// search queue, so it's nonisolated and takes the eval handle explicitly.
+    nonisolated private static func subMoveLabel(evalHandle eh: OpaquePointer, preBoard: [Int8],
+                                                 side: Bool, end: [Int8], _ d1: Int, _ d2: Int) -> String {
+        preBoard.withUnsafeBufferPointer { _ = nardi_set_position(eh, $0.baseAddress, side ? 1 : 0) }
+        let m = Int(nardi_analyze_dice(eh, Int32(d1), Int32(d2)))
         var idx = -1
         for j in 0..<max(0, m) {
-            var b = [Int8](repeating: 0, count: Self.cells); var v: Float = 0
-            if nardi_analyzed_move(evalHandle, Int32(j), &b, &v) == NARDI_OK, b == end { idx = j; break }
+            var b = [Int8](repeating: 0, count: cells); var v: Float = 0
+            if nardi_analyzed_move(eh, Int32(j), &b, &v) == NARDI_OK, b == end { idx = j; break }
         }
-        guard idx >= 0, nardi_apply_analyzed_move(evalHandle, Int32(idx)) == NARDI_OK else { return "—" }
+        guard idx >= 0, nardi_apply_analyzed_move(eh, Int32(idx)) == NARDI_OK else { return "—" }
         var parts: [String] = []
-        for k in 0..<max(0, Int(nardi_move_count(evalHandle))) {
+        for k in 0..<max(0, Int(nardi_move_count(eh))) {
             var a = [Int32](repeating: -1, count: 4)
-            if nardi_get_move(evalHandle, Int32(k), &a) == NARDI_OK {
+            if nardi_get_move(eh, Int32(k), &a) == NARDI_OK {
                 let from = pointNumber(Int(a[0]), Int(a[1]), black: side)
                 let to = a[2] < 0 ? "off" : "\(pointNumber(Int(a[2]), Int(a[3]), black: side))"
                 parts.append("\(from) → \(to)")
@@ -453,57 +485,113 @@ final class AnalyzeGame: ObservableObject {
         return parts.isEmpty ? "—" : parts.joined(separator: ", ")
     }
 
-    /// Apply the chosen dice to the current position. vzg0 ranks the legal moves
-    /// (best first) to populate the top-3 suggestions; the eval bar shows the res2
-    /// value of the current position. Only allowed at the start of a turn.
+    /// Apply the chosen dice to the current position. The (slow) vzg0 ranking, the
+    /// suggestion labels, and the res2 display eval are computed on a background
+    /// queue so stepping the dice never freezes the UI; `isThinking` gates
+    /// engine-touching interactions until the result lands. Start of a turn only.
     func setDice() {
         guard phase == .analyzing, !isAnimating, !isTerminal, !movedThisTurn else { return }
         guard let (d1, d2) = effectiveDice() else {
-            diceApplied = false; noLegalMoves = false
+            diceApplied = false; noLegalMoves = false; isThinking = false
             positionEval = staticEval()
             status = "Past the game's last move — turn off ‘Dice from game’ to keep exploring."
             return
         }
         die1 = d1; die2 = d2          // reflect the applied dice in the UI / steppers
-        turnStart = Snapshot(board: engineBoard(), side: currentSide)
-        let n = Int(nardi_analyze_dice(handle, Int32(d1), Int32(d2)))
-        guard n >= 0 else { status = "Analyze failed: " + String(cString: nardi_last_error(handle)); return }
+        // Snapshot the turn start once, while the engine is idle — never re-read the
+        // live handle from the main thread once a background search is in flight.
+        if turnStart == nil { turnStart = Snapshot(board: engineBoard(), side: currentSide) }
+        guard let pre = turnStart?.board else { return }
 
-        let preBoard = engineBoard()
-        var tops: [TopMove] = []
-        for i in 0..<min(n, 3) {   // vzg0's best-first ranking; labels only (no eval shown)
-            var b = [Int8](repeating: 0, count: Self.cells)
-            var v: Float = 0
-            if nardi_analyzed_move(handle, Int32(i), &b, &v) == NARDI_OK {
-                tops.append(TopMove(board: b,
-                                    label: subMoveLabel(preBoard: preBoard, side: currentSide, end: b, d1, d2)))
-            }
+        searchGen += 1
+        let gen = searchGen
+        isThinking = true            // UI shows a thinking indicator; status is left intact
+
+        // Safe to hand the C handles to the serial search queue: a search only runs
+        // while `isThinking`, during which every engine-touching interaction is gated.
+        nonisolated(unsafe) let h = handle
+        nonisolated(unsafe) let eh = evalHandle
+        let side = currentSide, anchor = originalSide
+        searchQueue.async { [weak self] in
+            let result = AnalyzeGame.runDiceSearch(handle: h, evalHandle: eh,
+                                                   preBoard: pre, side: side, anchor: anchor,
+                                                   d1: d1, d2: d2)
+            Task { @MainActor in self?.applyDiceResult(result, gen: gen) }
         }
-        topMoves = tops
-        diceApplied = true
-        noLegalMoves = (n == 0)
-        selected = nil
-        canConfirm = false
-        dieUsable = (nardi_can_use_die(handle, 0) == 1, nardi_can_use_die(handle, 1) == 1)
-        positionEval = staticEval()   // res2 display eval of the current position
-        status = n > 0 ? "Top engine moves for \(currentSide ? "Black" : "White") shown — make your move."
-                       : "No legal move for \(die1)-\(die2). Tap Pass."
     }
 
-    /// True once a checker has actually moved this turn. NOTE: we compare the
-    /// board to the turn's starting board rather than using turn_in_progress,
-    /// because analyze_dice marks the engine's dice as "rolled" (turn_in_progress
-    /// becomes true) even though no checker has moved yet.
-    var movedThisTurn: Bool {
-        guard let ts = turnStart else { return false }
-        return engineBoard() != ts.board
+    /// Off-main: run the vzg0 ranking on the live handle (which leaves it ready for
+    /// the user to play the move), label the top suggestions on the eval handle, and
+    /// compute the res2 display eval. Pure C work over captured values (no main-actor
+    /// state), so it's safe to run on the search queue.
+    nonisolated private static func runDiceSearch(
+        handle h: OpaquePointer, evalHandle eh: OpaquePointer,
+        preBoard pre: [Int8], side: Bool, anchor: Bool, d1: Int, d2: Int
+    ) -> DiceSearchResult {
+        let n = Int(nardi_analyze_dice(h, Int32(d1), Int32(d2)))
+        var tops: [TopMove] = []
+        for i in 0..<min(max(0, n), 3) {   // vzg0's best-first ranking; labels only (no eval shown)
+            var b = [Int8](repeating: 0, count: cells); var v: Float = 0
+            if nardi_analyzed_move(h, Int32(i), &b, &v) == NARDI_OK {
+                tops.append(TopMove(board: b,
+                                    label: subMoveLabel(evalHandle: eh, preBoard: pre, side: side, end: b, d1, d2)))
+            }
+        }
+        let usable0 = nardi_can_use_die(h, 0) == 1
+        let usable1 = nardi_can_use_die(h, 1) == 1
+        // res2 display eval of the (turn-start) position, mirrored onto the eval handle.
+        var eval: Float? = nil
+        pre.withUnsafeBufferPointer { _ = nardi_set_position(eh, $0.baseAddress, side ? 1 : 0) }
+        var ev: Float = 0
+        if nardi_evaluate_position(eh, &ev) == NARDI_OK { eval = ev * ((side == anchor) ? 1 : -1) }
+        return DiceSearchResult(n: max(0, n), tops: tops,
+                                die0Usable: usable0, die1Usable: usable1, eval: eval)
+    }
+
+    /// Main actor: install a finished search's result, unless a newer search has
+    /// superseded it (gen mismatch) or we've since left analysis.
+    private func applyDiceResult(_ r: DiceSearchResult, gen: Int) {
+        guard gen == searchGen, phase == .analyzing else { return }
+        isThinking = false
+        topMoves = r.tops
+        diceApplied = true
+        noLegalMoves = (r.n == 0)
+        selected = nil
+        canConfirm = false
+        dieUsable = (r.die0Usable, r.die1Usable)
+        positionEval = r.eval
+        status = r.n > 0 ? "Top engine moves for \(currentSide ? "Black" : "White") shown — make your move."
+                         : "No legal move for \(die1)-\(die2). Tap Pass."
+    }
+
+    /// Recompute the stored `movedThisTurn` from the engine (a checker has moved iff
+    /// the board differs from the turn's starting board). Call only on the main
+    /// thread when no background search is in flight. We track this as stored state
+    /// — rather than comparing the board on every read — so SwiftUI never calls into
+    /// the engine during render while the search queue is using the handle.
+    private func refreshMovedThisTurn() {
+        movedThisTurn = turnStart.map { engineBoard() != $0.board } ?? false
+    }
+
+    /// Run the (background) dice search after a 0.5s quiet period, restarting the
+    /// timer on each call. This collapses both rapid stepper taps AND the moment a
+    /// turn ends into a single search: arriving at a new position no longer thinks
+    /// immediately, so there's time to dial in that turn's dice (e.g. real OTB
+    /// rolls) before any lookahead runs.
+    private func scheduleDiceSearch() {
+        diceDebounce?.cancel()
+        diceDebounce = Task { [weak self] in
+            try? await Task.sleep(nanoseconds: Self.diceDebounceNanos)
+            guard let self, !Task.isCancelled else { return }
+            self.setDice()
+        }
     }
 
     /// Re-apply the dice after the user changes a stepper (no-op while locked to
     /// game dice, or once a checker has moved -- Undo first to change again).
     func diceChanged() {
         guard phase == .analyzing, !isAnimating, !movedThisTurn, !isTerminal, !useGameDice else { return }
-        setDice()
+        scheduleDiceSearch()
     }
 
     /// Toggle locking the dice to the reviewed game's roll at this relative turn.
@@ -522,10 +610,13 @@ final class AnalyzeGame: ObservableObject {
         return (die1, die2)
     }
 
-    /// Apply the current dice when entering a fresh turn (start / confirm / pass /
-    /// step-back), so the playable dice + eval appear without an extra tap.
+    /// Entering a fresh turn (start / confirm / pass / step-back / follow): schedule
+    /// the dice search rather than running it now, so the new position doesn't think
+    /// before the user can set that turn's dice. The eval bar is already updated by
+    /// the caller; only the lookahead-backed suggestions wait out the debounce.
     private func autoApplyDice() {
-        if modelLoaded && !isTerminal { setDice() }
+        guard modelLoaded && !isTerminal else { return }
+        scheduleDiceSearch()
     }
 
     /// Eval of the current (possibly mid/after-move) board — the res2 display eval.
@@ -534,19 +625,20 @@ final class AnalyzeGame: ObservableObject {
     // MARK: - Analysis: hands-on moves
 
     func tap(row: Int, col: Int) {
-        guard phase == .analyzing, diceApplied, !noLegalMoves, !isAnimating, !canConfirm else { return }
+        guard phase == .analyzing, diceApplied, !noLegalMoves, !isAnimating, !isThinking, !canConfirm else { return }
         _ = nardi_human_select(handle, Int32(row), Int32(col))
         updateSelection()
     }
 
     func tapDie(_ idx: Int) {
-        guard phase == .analyzing, diceApplied, !isAnimating, !canConfirm else { return }
+        guard phase == .analyzing, diceApplied, !isAnimating, !isThinking, !canConfirm else { return }
         guard nardi_start_selected(handle) == 1 else { status = "Select a checker first, then a die."; return }
         if nardi_human_move_die(handle, Int32(idx)) != NARDI_OK {
             status = "Illegal move for that die."
             updateSelection()
             return
         }
+        movedThisTurn = true        // a checker has now moved this turn
         selected = nil
         canUndo = true
         Task { @MainActor in
@@ -562,7 +654,7 @@ final class AnalyzeGame: ObservableObject {
     }
 
     func undo() {
-        guard phase == .analyzing, !isAnimating else { return }
+        guard phase == .analyzing, !isAnimating, !isThinking else { return }
         if movedThisTurn {                                    // peel back a sub-move
             _ = nardi_human_undo(handle)
             canConfirm = false
@@ -571,6 +663,7 @@ final class AnalyzeGame: ObservableObject {
                 dieUsable = (nardi_can_use_die(handle, 0) == 1, nardi_can_use_die(handle, 1) == 1)
                 updateSelection()
                 positionEval = currentEval()
+                refreshMovedThisTurn()                        // may have peeled back to the turn start
                 canUndo = movedThisTurn || !history.isEmpty
             }
         } else if let snap = history.popLast() {              // step back across a confirmed turn
@@ -592,7 +685,7 @@ final class AnalyzeGame: ObservableObject {
     }
 
     func confirm() {
-        guard phase == .analyzing, canConfirm, !isAnimating else { return }
+        guard phase == .analyzing, canConfirm, !isAnimating, !isThinking else { return }
         if let ts = turnStart { history.append(ts) }
         logCompletedTurn(moved: true)   // record for a savable/reviewable log
         nardi_confirm_turn(handle)
@@ -613,7 +706,7 @@ final class AnalyzeGame: ObservableObject {
 
     /// No legal move for the chosen dice: switch sides without moving (undoable).
     func pass() {
-        guard phase == .analyzing, diceApplied, noLegalMoves, !isAnimating else { return }
+        guard phase == .analyzing, diceApplied, noLegalMoves, !isAnimating, !isThinking else { return }
         if let ts = turnStart { history.append(ts) }
         logCompletedTurn(moved: false)   // record the pass in the log
         currentSide.toggle()
