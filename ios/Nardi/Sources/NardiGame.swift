@@ -71,6 +71,15 @@ final class NardiGame: ObservableObject {
     @Published private(set) var board: [Int8] = Array(repeating: 0, count: cells)
     @Published private(set) var dice: (Int, Int) = (0, 0)
     @Published private(set) var dieUsable: (Bool, Bool) = (false, false)
+    // Squares from which each die can start a move (bit row*cols+col), straight from
+    // the engine's precomputed start sets. Drives the green start dots; kept in sync
+    // with dieUsable since both are refreshed together from the live engine state.
+    @Published private(set) var startMasks: (Int, Int) = (0, 0)
+    // Click-to-move preference: which die a tapped checker is played with FIRST.
+    // false = dice.0 (the larger — OnRoll puts the larger first); true = dice.1.
+    // Tapping the dice flips it; it resets to the larger at the start of each turn.
+    // The engine's own dice order is never touched — this is purely a UI choice.
+    @Published private(set) var tryFirst = false
     @Published private(set) var selected: (Int, Int)? = nil
     @Published private(set) var flipped = false
     @Published private(set) var phase: Phase = .setup
@@ -104,6 +113,10 @@ final class NardiGame: ObservableObject {
 
     /// The dice of the replayable move, for the Replay button label.
     var lastMoveDice: (Int, Int)? { lastMove?.dice }
+
+    /// Whether the in-progress human turn has a sub-move to take back (drives the
+    /// center Undo button). Derived from the accumulated hops, so it tracks taps/undos.
+    var canUndo: Bool { phase == .awaitingHuman && !turnSubs.isEmpty && !isAnimating }
 
     /// Offer Replay only when the recorded move was made by the OPPONENT of whoever
     /// is now to move — so it's always "their last move", never your own, and it's
@@ -207,24 +220,56 @@ final class NardiGame: ObservableObject {
 
     // MARK: - Human interaction
 
+    /// Click-to-move: tapping a checker plays it with the preferred die (the one
+    /// tried first), falling back to the other die. Which die is "first" is the
+    /// `tryFirst` preference (flipped by tapping the dice). The per-die start sets
+    /// tell us which die can actually start from the tapped square.
     func tap(row: Int, col: Int) {
         guard phase == .awaitingHuman, !isAnimating else { return }
+        let bit = 1 << (row * Self.cols + col)
+        let firstIdx = tryFirst ? 1 : 0
+        let secondIdx = tryFirst ? 0 : 1
+        let idx = (startMask(firstIdx) & bit) != 0 ? firstIdx
+                : (startMask(secondIdx) & bit) != 0 ? secondIdx
+                : -1
+        guard idx >= 0 else { return }   // no move starts from here with either die
         _ = nardi_human_select(handle, Int32(row), Int32(col))
-        updateSelection()
+        playSelected(byDie: idx)
     }
 
-    func tapDie(_ idx: Int) {
+    /// Flip which die a tapped checker is played with first (tapping the dice
+    /// "reverses" them). Purely a UI preference — the engine's dice are untouched.
+    func toggleTryFirst() {
         guard phase == .awaitingHuman, !isAnimating else { return }
-        guard nardi_start_selected(handle) == 1 else {
-            status = "Select a checker first, then tap a die."
-            return
+        tryFirst.toggle()
+    }
+
+    /// The die index (0/1) the UI tries first this turn (0 = the larger die).
+    var firstDieIndex: Int { tryFirst ? 1 : 0 }
+    func startMask(_ idx: Int) -> Int { idx == 0 ? startMasks.0 : startMasks.1 }
+
+    /// The two dice in UI order — the first entry is the one a tapped checker is
+    /// played with first. `hasStart` is whether that die can currently start any
+    /// move (for greying); `isFirst` marks the preferred die for highlighting.
+    ///
+    /// Doubles are a single value, so both dice share one start state (the engine's
+    /// per-index budgets can diverge mid-turn): grey both, or neither — never one.
+    var orderedDice: [(value: Int, hasStart: Bool, isFirst: Bool)] {
+        let f = firstDieIndex, s = (firstDieIndex == 0 ? 1 : 0)
+        let doubles = (dice.0 == dice.1)
+        let anyStart = (startMasks.0 | startMasks.1) != 0
+        func entry(_ i: Int, _ isFirst: Bool) -> (value: Int, hasStart: Bool, isFirst: Bool) {
+            (i == 0 ? dice.0 : dice.1, doubles ? anyStart : startMask(i) != 0, isFirst)
         }
+        return [entry(f, true), entry(s, false)]
+    }
+
+    private func playSelected(byDie idx: Int) {
         if nardi_human_move_die(handle, Int32(idx)) != NARDI_OK {
-            status = "Illegal move for that die."
-            updateSelection()   // engine deselects on an illegal move — mirror that in the UI
+            status = "Illegal move."
             return
         }
-        selected = nil   // hide highlight while the checker slides
+        selected = nil   // click-to-move: no lingering selection (green dots show next starts)
         Task { @MainActor in
             await animateMoves()
             turnSubs += recentMoves()   // accumulate this hop into the turn for replay
@@ -236,10 +281,7 @@ final class NardiGame: ObservableObject {
                 phase = .gameOver(message: outcomeMessage())
                 return
             }
-            // The turn does NOT auto-advance: keep the destination selected so dice
-            // can be chained; once no legal moves remain, enable Confirm (the player
-            // may still Undo before confirming).
-            updateSelection()
+            selected = nil
             updateConfirmState()
         }
     }
@@ -338,6 +380,7 @@ final class NardiGame: ObservableObject {
         turnStartBoard = engineBoard()
         turnMoverSign = whiteToMove ? 1 : -1
         selected = nil
+        tryFirst = false          // default to the larger die each new turn
         canConfirm = false
         phase = .awaitingHuman
         let who = isPassAndPlay ? (whiteToMove ? "White" : "Black") : "You"
@@ -361,6 +404,7 @@ final class NardiGame: ObservableObject {
         var d = [Int32](repeating: 0, count: 2)
         if nardi_dice(handle, &d) == NARDI_OK { dice = (Int(d[0]), Int(d[1])) }
         dieUsable = (nardi_can_use_die(handle, 0) == 1, nardi_can_use_die(handle, 1) == 1)
+        startMasks = (Int(nardi_starts_mask(handle, 0)), Int(nardi_starts_mask(handle, 1)))
         let eb = engineBoard()
         whiteOff = 15 - eb.reduce(0) { $0 + max(0, Int($1)) }
         blackOff = 15 - eb.reduce(0) { $0 + max(0, -Int($1)) }

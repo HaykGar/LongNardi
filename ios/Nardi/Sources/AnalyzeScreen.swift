@@ -38,7 +38,7 @@ struct AnalyzeScreen: View {
                     .font(.headline)
                 Spacer()
                 if game.phase == .analyzing {
-                    Button("Edit") { game.backToEditor() }.font(.callout).disabled(game.isThinking)
+                    Button("Edit") { game.backToEditor() }.font(.callout)
                 } else {
                     Color.clear.frame(width: 44, height: 1)   // balance the title
                 }
@@ -138,6 +138,7 @@ private struct AnalysisBody: View {
 
             BoardCanvas(board: game.board, flipped: game.flipped, selected: game.selected,
                         flights: game.flights,
+                        startMask: game.startMaskCombined,
                         onTap: { r, c in game.tap(row: r, col: c) })
                 .padding(.horizontal, 6)
 
@@ -153,12 +154,12 @@ private struct AnalysisBody: View {
                 .buttonStyle(.borderedProminent).font(.callout)
             }
 
-            // While a background dice search runs, show a thinking indicator in place
-            // of the status (same frame, so nothing shifts).
+            // A small spinner next to the status while the background suggestion
+            // ranking runs — play stays fully interactive meanwhile (same frame, so
+            // nothing shifts).
             HStack(spacing: 6) {
                 if game.isThinking { ProgressView().controlSize(.mini) }
-                Text(game.isThinking ? "Analyzing…" : game.status)
-                    .font(.caption).multilineTextAlignment(.center)
+                Text(game.status).font(.caption).multilineTextAlignment(.center)
             }
             .frame(maxWidth: .infinity, minHeight: 16)
 
@@ -172,21 +173,24 @@ private struct AnalysisBody: View {
                     .multilineTextAlignment(.center)
             }
 
+            Spacer(minLength: 0)
+
+            // Pinned to the very bottom: Back · Confirm · (Follow / Pass), so the
+            // primary controls stay in a fixed spot regardless of what's above.
             HStack(spacing: 16) {
                 if game.noLegalMoves {
-                    Button("Pass") { game.pass() }.buttonStyle(.bordered).disabled(game.isThinking)
+                    Button("Pass") { game.pass() }.buttonStyle(.bordered)
                 }
                 Button { game.undo() } label: { Label("Back", systemImage: "chevron.backward") }
-                    .buttonStyle(.bordered).disabled(!game.canUndo || game.isAnimating || game.isThinking)
+                    .buttonStyle(.bordered).disabled(!game.canUndo || game.isAnimating)
                 Button { game.confirm() } label: { Label("Confirm", systemImage: "checkmark") }
-                    .buttonStyle(.borderedProminent).disabled(!game.canConfirm || game.isThinking)
+                    .buttonStyle(.borderedProminent).disabled(!game.canConfirm)
                 if game.hasGameDice {
                     Button { game.followGameMove() } label: { Label("Follow", systemImage: "chevron.forward.2") }
                         .buttonStyle(.bordered).disabled(!game.canFollowGame)
                 }
             }
-            .padding(.bottom, 6)
-            Spacer(minLength: 0)
+            .padding(.bottom, 10)
         }
     }
 
@@ -208,11 +212,19 @@ private struct AnalysisBody: View {
                         .padding(.vertical, 5).padding(.horizontal, 12)
                         .background(RoundedRectangle(cornerRadius: 6).fill(Color(.systemGray6)))
                     }
-                    .buttonStyle(.plain).disabled(game.isAnimating || game.isThinking)
+                    .buttonStyle(.plain).disabled(game.isAnimating)
                 }
             }
             .padding(.horizontal, 24)
         }
+    }
+
+    // Map a display slot (0 = first-try / D1, 1 = second-try / D2) to its engine die.
+    private func slotValue(_ slot: Int) -> Int {
+        game.dieIndex(forSlot: slot) == 0 ? game.die1 : game.die2
+    }
+    private func slotBinding(_ slot: Int) -> Binding<Int> {
+        game.dieIndex(forSlot: slot) == 0 ? $game.die1 : $game.die2
     }
 
     @ViewBuilder
@@ -227,21 +239,25 @@ private struct AnalysisBody: View {
                     .disabled(game.movedThisTurn || game.isAnimating)
             }
 
-            // Steppers: change the dice any time before a checker moves (disabled
-            // while locked to game dice — toggle off to explore).
+            // Steppers, in VISUAL (try) order — D1 is the die tried first, matching
+            // the dice shown below. Each binds to whichever engine die currently
+            // occupies that slot, so swapping the dice swaps the steppers too.
             HStack(spacing: 12) {
-                Stepper("D1: \(game.die1)", value: $game.die1, in: 1...6).fixedSize()
-                Stepper("D2: \(game.die2)", value: $game.die2, in: 1...6).fixedSize()
+                Stepper("D1: \(slotValue(0))", value: slotBinding(0), in: 1...6).fixedSize()
+                Stepper("D2: \(slotValue(1))", value: slotBinding(1), in: 1...6).fixedSize()
             }
             .disabled(game.useGameDice || game.movedThisTurn || game.isAnimating || game.isTerminal)
             .onChange(of: game.die1) { _, _ in game.diceChanged() }
             .onChange(of: game.die2) { _, _ in game.diceChanged() }
 
-            // Tap a die to play the selected checker by that value.
+            // Move dice, same as the play screen: the left (accent-ringed) die is the
+            // one a tapped checker is played with first; tap either to reverse. A die
+            // greys when it has no legal start. (Tap a checker on the board to move.)
             if game.diceApplied && !game.noLegalMoves {
                 HStack(spacing: 14) {
-                    AnalyzeDie(value: game.die1, usable: game.dieUsable.0 && !game.isThinking) { game.tapDie(0) }
-                    AnalyzeDie(value: game.die2, usable: game.dieUsable.1 && !game.isThinking) { game.tapDie(1) }
+                    ForEach(Array(game.orderedDice.enumerated()), id: \.offset) { _, d in
+                        AnalyzeDie(value: d.value, usable: d.hasStart, primary: d.isFirst) { game.toggleTryFirst() }
+                    }
                 }
             }
         }
@@ -276,15 +292,18 @@ struct EvalBar: View {
 
 private struct AnalyzeDie: View {
     let value: Int
-    let usable: Bool
-    let action: () -> Void
+    let usable: Bool                 // has a legal start this turn (else greyed)
+    var primary: Bool = false        // the die tried first (accent ring)
+    let action: () -> Void           // tapping reverses the try-order
     var body: some View {
         Button(action: action) {
             Text("\(value)").font(.title2.monospacedDigit().bold())
                 .frame(width: 46, height: 46)
                 .background(RoundedRectangle(cornerRadius: 8).fill(usable ? Color(.systemGray5) : Color(.systemGray3)))
                 .foregroundColor(usable ? .primary : .secondary)
-                .overlay(RoundedRectangle(cornerRadius: 8).stroke(usable ? Color.accentColor : .clear, lineWidth: 2))
-        }.disabled(!usable)
+                .overlay(RoundedRectangle(cornerRadius: 8).stroke(primary ? Color.accentColor : .clear, lineWidth: 3))
+                .opacity(usable ? 1 : 0.6)
+        }
+        // Always tappable (even when greyed): a tap just flips which die is tried first.
     }
 }

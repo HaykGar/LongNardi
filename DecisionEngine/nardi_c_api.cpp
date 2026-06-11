@@ -215,6 +215,11 @@ int nardi_can_use_die(NardiHandle* h, int die_idx)
     NARDI_GUARD(h, -1, { return h->engine.can_use_die(die_idx) ? 1 : 0; });
 }
 
+int nardi_starts_mask(NardiHandle* h, int die_idx)
+{
+    NARDI_GUARD(h, -1, { return h->engine.starts_mask(die_idx); });
+}
+
 int nardi_start_selected(NardiHandle* h)
 {
     NARDI_GUARD(h, -1, { return h->engine.start_is_selected() ? 1 : 0; });
@@ -282,6 +287,21 @@ NardiStatus nardi_evaluate_position(NardiHandle* h, float* out_value)
         if(out_value == nullptr) { h->last_error = "nardi_evaluate_position: null out"; return NARDI_ERR; }
         *out_value = h->engine.evaluate_position();
         return NARDI_OK;
+    });
+}
+
+int nardi_set_dice(NardiHandle* h, int d1, int d2)
+{
+    // Cheap counterpart to nardi_analyze_dice: roll {d1,d2} on the current position
+    // and enumerate the legal whole-turn options (the same set_and_enumerate that
+    // analyze_dice runs), but WITHOUT the one-ply lookahead ranking or any net
+    // evaluation. Leaves the handle ready for human play (select/move_die, or
+    // option_board + apply_human_move) and needs no model loaded. Also refreshes the
+    // per-die start sets so analysis can show the same start highlights as play.
+    NARDI_GUARD(h, -1, {
+        const int n = static_cast<int>(h->engine.set_and_enumerate(d1, d2).size());
+        h->engine.refresh_forced();
+        return n;
     });
 }
 

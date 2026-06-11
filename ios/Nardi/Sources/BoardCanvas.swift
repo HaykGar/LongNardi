@@ -24,6 +24,9 @@ struct BoardCanvas: View {
     let flipped: Bool
     let selected: (Int, Int)?
     let flights: [Flight]
+    /// Bitmask (bit row*cols+col, engine coords) of squares from which a move can
+    /// start this turn; each gets a small green dot. 0 = none (e.g. the analyzer).
+    var startMask: Int = 0
     var onTap: (Int, Int) -> Void
     /// When set, a long-press on a cell calls this (engine coords). Only attached
     /// when provided, so it never interferes with the play screen's plain taps.
@@ -81,6 +84,7 @@ struct BoardCanvas: View {
                         .position(x: rect.midX, y: rect.midY)
                 }
                 checkers(geom: geom)
+                startDots(geom: geom)
                 flightsLayer(geom: geom)
                 selectionHighlight(geom: geom)
                 if ProcessInfo.processInfo.arguments.contains("--grid") { debugGrid(geom: geom) }
@@ -198,6 +202,31 @@ struct BoardCanvas: View {
                 Rectangle().stroke(Color.red, lineWidth: 1)
                     .frame(width: r.width, height: r.height)
                     .position(x: r.midX, y: r.midY)
+            }
+        }
+    }
+
+    // A green dot at the OUTER (rim-facing) end of every point a move can start from
+    // this turn — just outside the slot rectangle, away from the board center. Sized
+    // from the point WIDTH (the cell is half the board tall, so height isn't a useful
+    // scale). Bit row*cols+col in `startMask` (engine coords).
+    @ViewBuilder
+    private func startDots(geom: BoardGeometry) -> some View {
+        ForEach(0..<(BoardGeometry.rows * BoardGeometry.cols), id: \.self) { i in
+            if (startMask >> i) & 1 == 1 {
+                let row = i / BoardGeometry.cols
+                let col = i % BoardGeometry.cols
+                let cell = geom.cellRect(row: row, col: col, flipped: flipped)
+                let down = geom.stacksDownward(row: row, col: col, flipped: flipped)
+                let dia = max(6, cell.width * 0.25)
+                // Top-row points open downward, so their outer edge is the top (minY);
+                // bottom-row points the opposite. Sit the dot just past that edge.
+                let y = down ? cell.minY - dia / 2 - 1 : cell.maxY + dia / 2 + 1
+                Circle().fill(Color.green)
+                    .overlay(Circle().stroke(Color.white, lineWidth: 1))
+                    .frame(width: dia, height: dia)
+                    .shadow(color: .black.opacity(0.5), radius: 1, y: 0.5)
+                    .position(x: cell.midX, y: y)
             }
         }
     }

@@ -46,13 +46,49 @@ struct ContentView: View {
                 openReview(m)
             }
             if args.contains("--history") || args.contains("--seed-history") { section = .history }
-            if args.contains("--demo") {
+            if args.contains("--demo") || args.contains("--demo-move") {
                 game.newGame(mode: .vsComputer, opponent: .medium,
                              first: args.contains("--black") ? .second : .first)
+            }
+            // Dev: once it's the human's turn, play one sub-move from a startable
+            // point so the center Undo button can be verified without a real tap.
+            if args.contains("--demo-move") {
+                Task { @MainActor in
+                    for _ in 0..<14 {
+                        if game.phase == .awaitingHuman {
+                            let mask = game.startMasks.0 | game.startMasks.1
+                            if mask != 0 {
+                                let i = mask.trailingZeroBitCount
+                                game.tap(row: i / NardiGame.cols, col: i % NardiGame.cols); break  // tap now moves
+                            }
+                        }
+                        try? await Task.sleep(nanoseconds: 500_000_000)
+                    }
+                    // --demo-undo: take the sub-move back to verify dots are restored.
+                    if args.contains("--demo-undo") {
+                        try? await Task.sleep(nanoseconds: 3_000_000_000)
+                        game.undo()
+                    }
+                }
             }
             // Dev hooks for verifying the Analyze flow: --analyze opens the editor
             // pre-filled with the standard start; --analyze-run also starts the
             // analysis and ranks the default dice.
+            // Dev: a spread-out mid-game position (White has checkers off the head) +
+            // a 6-3 roll, which has several legal moves — to verify top-3 suggestions.
+            if args.contains("--analyze-mid") {
+                section = .analyze
+                var b = [Int8](repeating: 0, count: 24)
+                b[0] = 11; b[3] = 1; b[5] = 1; b[7] = 1; b[9] = 1   // 15 white, spread
+                b[12] = -15                                         // 15 black on head
+                analyze.devSetup(board: b, side: false, d1: 6, d2: 3)
+                showAnalyze = true
+                // --analyze-swap: reverse the dice once, to verify D1/D2 + the dice
+                // below swap together (coupled to the visual order).
+                if args.contains("--analyze-swap") {
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) { analyze.toggleTryFirst() }
+                }
+            }
             if args.contains("--analyze") || args.contains("--analyze-run") {
                 section = .analyze
                 analyze.standardStart()
@@ -63,14 +99,18 @@ struct ContentView: View {
             }
             // Dev: open analysis and programmatically play one sub-move (select the
             // white head, tap die 0) to verify move-playing works without taps.
-            if args.contains("--analyze-move") {
+            if args.contains("--analyze-move") || args.contains("--analyze-undo") {
                 section = .analyze
                 analyze.standardStart()
                 analyze.startAnalysis()
                 showAnalyze = true
                 DispatchQueue.main.asyncAfter(deadline: .now() + 0.6) {
-                    analyze.tap(row: 0, col: 0)
-                    analyze.tapDie(0)
+                    analyze.tap(row: 0, col: 0)   // click-to-move the white head
+                    // --analyze-undo: take it back, exercising UndoLast (now recomputes
+                    // CheckForcedMoves) on the analyzer's engine — verify no crash/corruption.
+                    if args.contains("--analyze-undo") {
+                        DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) { analyze.undo() }
+                    }
                 }
             }
             if args.contains("--review") || args.contains("--review-analyze") {
@@ -191,34 +231,49 @@ struct ContentView: View {
             }
             .padding(.horizontal)
 
+            // Undo lives at the board's center bar (per the reference UI): a circular
+            // control that appears when the in-progress turn has a hop to take back.
             BoardView().environmentObject(game).padding(.horizontal, 6)
+                .overlay {
+                    if game.canUndo {
+                        Button { game.undo() } label: {
+                            Image(systemName: "arrow.counterclockwise")
+                                .font(.system(size: 15, weight: .bold))
+                                .foregroundColor(.white)
+                                .frame(width: 32, height: 32)
+                                .background(Circle().fill(Color.black.opacity(0.6)))
+                                .overlay(Circle().stroke(Color.white.opacity(0.6), lineWidth: 1))
+                                .shadow(radius: 2)
+                        }
+                        .transition(.scale.combined(with: .opacity))
+                    }
+                }
+                .animation(.easeInOut(duration: 0.15), value: game.canUndo)
 
             Text(game.status).font(.callout).multilineTextAlignment(.center)
                 .frame(maxWidth: .infinity, minHeight: 24)
 
-            // Re-watch the opponent's last move (shows the dice it was rolled with).
-            if game.canReplay, let d = game.lastMoveDice {
-                Button { game.replayLastMove() } label: {
-                    Label("Replay move (\(d.0)-\(d.1))", systemImage: "arrow.counterclockwise")
-                        .font(.caption)
+            // Static control bar: dice · dice · Confirm · Replay. Nothing appears or
+            // disappears between moves — Replay simply greys out when there's no
+            // opponent move to re-watch.
+            HStack(spacing: 14) {
+                // Two dice in try-order: the left (accent-ringed) is tried first when
+                // a checker is tapped. Tapping either die reverses that order. A die
+                // greys out the moment it has no legal start.
+                ForEach(Array(game.orderedDice.enumerated()), id: \.offset) { _, d in
+                    DieButton(value: d.value, usable: d.hasStart, primary: d.isFirst) { game.toggleTryFirst() }
                 }
-                .buttonStyle(.bordered)
-                .disabled(game.isAnimating)
-            }
-
-            HStack(spacing: 18) {
-                DieButton(value: game.dice.0, usable: game.dieUsable.0) { game.tapDie(0) }
-                DieButton(value: game.dice.1, usable: game.dieUsable.1) { game.tapDie(1) }
-                Button { game.undo() } label: {
-                    Label("Undo", systemImage: "arrow.uturn.backward")
-                }
-                .buttonStyle(.bordered)
-                .disabled(game.phase != .awaitingHuman)
                 Button { game.confirm() } label: {
-                    Label("Confirm", systemImage: "checkmark")
+                    Label("Confirm", systemImage: "checkmark").font(.callout)
                 }
                 .buttonStyle(.borderedProminent)
                 .disabled(!game.canConfirm)
+                Button { game.replayLastMove() } label: {
+                    Label(game.lastMoveDice.map { "Replay \($0.0)-\($0.1)" } ?? "Replay",
+                          systemImage: "play.circle").font(.callout)
+                }
+                .buttonStyle(.bordered)
+                .disabled(!game.canReplay)
             }
             .padding(.bottom, 6)
 
@@ -258,8 +313,9 @@ struct ContentView: View {
 
 private struct DieButton: View {
     let value: Int
-    let usable: Bool
-    let action: () -> Void
+    let usable: Bool                 // has a legal start this turn (else greyed)
+    var primary: Bool = false        // the die tried first (accent ring)
+    let action: () -> Void           // tapping reverses the try-order
     var body: some View {
         Button(action: action) {
             Text(value > 0 ? "\(value)" : "–")
@@ -269,8 +325,9 @@ private struct DieButton: View {
                     .fill(usable ? Color(.systemGray5) : Color(.systemGray3)))
                 .foregroundColor(usable ? .primary : .secondary)
                 .overlay(RoundedRectangle(cornerRadius: 8)
-                    .stroke(usable ? Color.accentColor : Color.clear, lineWidth: 2))
+                    .stroke(primary ? Color.accentColor : Color.clear, lineWidth: 3))
+                .opacity(usable ? 1 : 0.6)
         }
-        .disabled(!usable)
+        // Always tappable (even when greyed): a tap just flips which die is tried first.
     }
 }

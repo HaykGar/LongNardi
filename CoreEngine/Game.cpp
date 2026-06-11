@@ -54,7 +54,7 @@ const BoardConfig& Game::GetBoardData() const
     return board.View();
 }
 
-const std::array<std::unordered_set, 2>& Game::GetStarts() const {
+const std::array<std::unordered_set<Coord, CoordHash>, 2>& Game::GetStarts() const {
     return starts;
 }
 
@@ -101,6 +101,12 @@ status_codes Game::SimDice(DieType d_to)
 
 status_codes Game::OnRoll()
 {
+    // Normalise so the larger die is dice[0]. The UI defaults to trying the larger
+    // die first when a checker is clicked; it flips that preference on its own side
+    // (a try-first toggle) without ever reordering the dice here.
+    if(dice[0] < dice[1])
+        std::swap(dice[0], dice[1]);
+
     EmitEvent(Event{EventCode::DICE_ROLL, dice, GetSnapshot()});
 
     first_move_exception = false;
@@ -163,6 +169,11 @@ bool Game::AutoPlayTurn(const BoardConfig& key)
         arbiter.CheckForcedMoves();
         return true;
     }
+}
+
+status_codes Game::RefreshForced()
+{
+    return arbiter.CheckForcedMoves();
 }
 
 status_codes Game::TryStart(const Coord& start)
@@ -346,6 +357,9 @@ bool Game::UndoLast() {
         else
             EmitEvent(Event{EventCode::REPLACE, RemoveData{start, dice_idx}, GetSnapshot()});
         mvs_this_turn.pop_back();
+        // Re-derive legal moves + per-die start sets for the restored position, just
+        // like a forward move does — otherwise the start highlights stay stale.
+        arbiter.CheckForcedMoves();
         return true;
     }
     return false;
@@ -667,20 +681,20 @@ status_codes Game::Arbiter::CheckForcedMoves()
 {    
     _g.legal_turns.ComputeAllLegalMoves();
 
-    if(_g.legal_turns.BrdsToSeqs().empty())
-        return status_codes::NO_LEGAL_MOVES_LEFT;
-    else{
-        _g.starts[0].clear();
-        _g.starts[1].clear();
+    _g.starts[0].clear();
+    _g.starts[1].clear();
 
+    if(_g.legal_turns.BrdsToSeqs().empty())
+        return status_codes::NO_LEGAL_MOVES_LEFT;   // no moves: leave both start sets empty
+    else{
         auto coord = _g.PlayerHead();
 
-        while(start.InBounds()) {
+        while(coord.InBounds()) {
             if(CanMoveByDice(coord, 0).first == status_codes::SUCCESS){
-                starts[0].insert(coord);
+                _g.starts[0].insert(coord);
             }
             if(CanMoveByDice(coord, 1).first == status_codes::SUCCESS){
-                starts[1].insert(coord);
+                _g.starts[1].insert(coord);
             }
 
             coord = _g.board.CoordAfterDistance(coord, 1);

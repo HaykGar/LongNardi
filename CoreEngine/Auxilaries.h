@@ -117,6 +117,16 @@ struct Coord
     int col;
 };
 
+// Hash for Coord: the board is ROWS x COLS, so a flat row-major index is a
+// perfect (collision-free) hash for any in-bounds square.
+struct CoordHash
+{
+    std::size_t operator()(const Coord& c) const
+    {
+        return static_cast<std::size_t>(c.row) * COLS + static_cast<std::size_t>(c.col);
+    }
+};
+
 struct StartAndDice
 { 
     StartAndDice(const Coord& f, bool d) : _from(f), _diceIdx(d) {}

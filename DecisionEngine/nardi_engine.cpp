@@ -743,6 +743,21 @@ std::array<int, 2> NardiEngine::selected_start() const
     return {s.row, s.col};
 }
 
+int NardiEngine::starts_mask(int die_idx) const
+{
+    if(die_idx != 0 && die_idx != 1)
+        return 0;
+    int mask = 0;
+    for(const auto& c : _builder.GetGame().GetStarts()[static_cast<size_t>(die_idx)])
+        mask |= (1 << (c.row * Nardi::COLS + c.col));   // bit per square, row-major
+    return mask;
+}
+
+void NardiEngine::refresh_forced()
+{
+    _builder.GetGame().RefreshForced();
+}
+
 bool NardiEngine::turn_in_progress() const
 {
     return !_builder.GetCtrl().AwaitingRoll() && !_builder.GetGame().GameIsOver();
@@ -770,13 +785,28 @@ void NardiEngine::apply_random_board()
 void NardiEngine::apply_heuristic_board()
 {
     const auto& children = require_children();
-    auto best = std::max_element(
-        children.begin(),
-        children.end(),
-        [](const auto& lhs, const auto& rhs)
+
+    // Once the mover has every checker home (the bear-off phase), maximizing board
+    // coverage is the wrong goal -- it spreads checkers out and stalls the race.
+    // Switch objectives: bear off as many checkers as possible, breaking ties by the
+    // lower remaining pip count (closer to finishing). Outside the endgame keep the
+    // old behavior of maximizing coverage (sq_occ). Children are featured from the
+    // mover's perspective, so `player.*` are this player's post-move values.
+    const bool endgame = _builder.GetGame().GetBoardRef().CurrPlayerInEndgame();
+
+    auto worse_than = [endgame](const auto& lhs, const auto& rhs)
+    {
+        // Comparator for max_element: true when lhs is the less-preferred move.
+        if(endgame)
         {
-            return lhs.player.sq_occ < rhs.player.sq_occ;
-        });
+            if(lhs.player.pieces_off != rhs.player.pieces_off)
+                return lhs.player.pieces_off < rhs.player.pieces_off; // more off is better
+            return lhs.player.pip_count > rhs.player.pip_count;       // fewer pips is better
+        }
+        return lhs.player.sq_occ < rhs.player.sq_occ;
+    };
+
+    auto best = std::max_element(children.begin(), children.end(), worse_than);
     apply_board(best->raw_data);
 }
 

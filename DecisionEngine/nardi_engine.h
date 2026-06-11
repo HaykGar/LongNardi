@@ -163,6 +163,12 @@ public:
     bool can_use_die(int die_idx);         // die still playable this turn
     bool start_is_selected() const;
     std::array<int, 2> selected_start() const; // {row,col} or {-1,-1}
+    // Bitmask of squares that can start a move with die `die_idx` (bit row*COLS+col
+    // set), from the precomputed per-die start sets refreshed by CheckForcedMoves.
+    int starts_mask(int die_idx) const;
+    // Recompute legal moves + per-die start sets for the current position (used by
+    // analysis, which sets dice without going through the match loop's roll).
+    void refresh_forced();
     bool turn_in_progress() const;         // dice rolled and game not over
     bool turn_is_complete() const;         // no legal moves left, awaiting confirm
     void confirm_turn();                   // advance to next player (if turn complete)

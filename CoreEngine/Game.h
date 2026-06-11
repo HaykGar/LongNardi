@@ -99,6 +99,11 @@ class Game
         status_codes RollDice();
         status_codes SimDice(DieType to_set);
         status_codes OnRoll();
+        // Recompute legal moves + per-die start sets for the current position/dice
+        // (the work OnRoll does, minus rolling/events). Lets analysis set dice and
+        // get the start highlights without going through the match loop.
+        status_codes RefreshForced();
+
         status_codes TryStart(const Coord& s);
         status_codes TryFinishMove(const Coord& start, const Coord& end);   // No Removals
         status_codes TryFinishMove(const Coord& start, bool dice);          // Removals and regular moves
@@ -123,7 +128,7 @@ class Game
         const Board& GetBoardRef() const;
         const BoardConfig& GetBoardData() const;
         const std::unordered_map<BoardConfig, MoveSequence, BoardConfigHash>& GetBoards2Seqs() const;
-        const std::array<std::unordered_set, 2>& GetStarts() const;
+        const std::array<std::unordered_set<Coord, CoordHash>, 2>& GetStarts() const;
 
         int GetDice(bool idx) const;
         int GetTurnNumber(bool player) const;
@@ -265,7 +270,7 @@ class Game
         ReaderWriter* rw;
         Arbiter arbiter;
         LegalSeqComputer legal_turns;
-        std::array<std::unordered_set, 2> starts;
+        std::array<std::unordered_set<Coord, CoordHash>, 2> starts;
 
         mutable std::vector<LoggedMove> _move_log;  // appended by EmitEvent when recording
         bool _recording = false;

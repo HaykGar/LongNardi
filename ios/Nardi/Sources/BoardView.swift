@@ -10,6 +10,7 @@ struct BoardView: View {
                     flipped: game.flipped,
                     selected: game.selected,
                     flights: game.flights,
+                    startMask: game.startMasks.0 | game.startMasks.1,
                     onTap: { row, col in game.tap(row: row, col: col) })
     }
 }

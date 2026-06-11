@@ -98,6 +98,11 @@ NardiStatus nardi_human_select(NardiHandle* h, int row, int col); /* select sour
 NardiStatus nardi_human_move_die(NardiHandle* h, int die_idx);    /* 0 or 1; OK if applied */
 NardiStatus nardi_human_undo(NardiHandle* h);                     /* undo last sub-move */
 int nardi_can_use_die(NardiHandle* h, int die_idx);  /* 1/0; -1 on error */
+/* Bitmask of squares from which a move with die `die_idx` (0/1) can start: bit
+ * (row*12 + col) is set for each legal starting square, from the engine's
+ * precomputed per-die start sets (refreshed on every roll/move/undo). Use it to
+ * highlight startable points and to grey a die out when its mask is 0. -1 on error. */
+int nardi_starts_mask(NardiHandle* h, int die_idx);
 int nardi_start_selected(NardiHandle* h);            /* 1/0; -1 on error */
 /* Write the currently selected source as {row,col} (or {-1,-1}) into out_rc. */
 NardiStatus nardi_selected_start(NardiHandle* h, int out_rc[2]);
@@ -140,6 +145,12 @@ NardiStatus nardi_get_move(NardiHandle* h, int idx, int out_move[4]);
  * All require a model loaded via nardi_load_model first. */
 NardiStatus nardi_set_position(NardiHandle* h, const signed char* board /* [NARDI_BOARD_CELLS] */, int side);
 NardiStatus nardi_evaluate_position(NardiHandle* h, float* out_value);
+/* Cheap: roll {d1,d2} and enumerate legal whole-turn options (no lookahead ranking,
+ * no net evals, no model required). Leaves the handle ready for human play
+ * (select/move_die, or option_board + apply_human_move). Returns the option count
+ * (0 = forced pass; -1 on error). Use this on the live/interactive handle and run
+ * nardi_analyze_dice on a separate handle when ranked suggestions are wanted. */
+int nardi_set_dice(NardiHandle* h, int d1, int d2);               /* >=0 count; -1 on error */
 int nardi_analyze_dice(NardiHandle* h, int d1, int d2);            /* >=0 count; -1 on error */
 int nardi_analyzed_count(NardiHandle* h);                          /* >=0; -1 on error */
 NardiStatus nardi_analyzed_move(NardiHandle* h, int idx,
