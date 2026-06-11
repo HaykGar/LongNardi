@@ -89,6 +89,17 @@ struct ContentView: View {
                     DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) { analyze.toggleTryFirst() }
                 }
             }
+            // Dev: a position where die 6 has NO legal start (both its landing points
+            // are blocked by black) but die 3 does — to verify the no-start die greys.
+            if args.contains("--analyze-block") {
+                section = .analyze
+                var b = [Int8](repeating: 0, count: 24)
+                b[0] = 13; b[1] = 2          // white: 13 on pt1 (head), 2 on pt2
+                b[6] = -2; b[7] = -2         // black blocks white's pt7 and pt8 (the +6 landings)
+                b[12] = -11                  // black head
+                analyze.devSetup(board: b, side: false, d1: 6, d2: 3)
+                showAnalyze = true
+            }
             if args.contains("--analyze") || args.contains("--analyze-run") {
                 section = .analyze
                 analyze.standardStart()

@@ -51,9 +51,14 @@ final class AnalyzeGame: ObservableObject {
     // without calling into the C++ engine on every layout pass.
     @Published private(set) var movedThisTurn = false
     // Click-to-move preference (same as the play screen): which die a tapped checker
-    // is played with FIRST. false = the larger die; tapping the dice flips it. Resets
-    // to the larger each new turn. The engine's dice order is never touched.
+    // is played with FIRST. false = slot 0 (D1); tapping the dice flips it. Resets
+    // each new turn. The engine's dice order is never touched.
     @Published private(set) var tryFirst = false
+    // Squares startable per die (bit row*cols+col, engine index). STORED (not read
+    // live off the engine on every render) and refreshed in lockstep with die1/die2
+    // whenever the dice/position change, so a die's value and its greyed state never
+    // disagree for a frame. Drives the green dots and the die graying.
+    @Published private(set) var startMasks: (Int, Int) = (0, 0)
     // The background suggestion ranking is running. Purely a UI hint (a small
     // spinner): it does NOT gate interaction — play, Back, and Follow stay live
     // because the ranking runs on a separate handle, off the main thread.
@@ -333,12 +338,13 @@ final class AnalyzeGame: ObservableObject {
     private func resetTurnState() {
         cancelSuggestions()           // any pending/in-flight ranking is now stale
         movedThisTurn = false
-        tryFirst = false              // default to the larger die each new turn
+        tryFirst = false              // default to the first slot (D1) each new turn
         diceApplied = false
         noLegalMoves = false
         selected = nil
         canConfirm = false
         dieUsable = (false, false)
+        startMasks = (0, 0)
         topMoves = []
     }
 
@@ -527,7 +533,7 @@ final class AnalyzeGame: ObservableObject {
         guard phase == .analyzing, !isAnimating, !isTerminal, !movedThisTurn else { return }
         guard let (d1, d2) = effectiveDice() else {
             cancelSuggestions()
-            diceApplied = false; noLegalMoves = false; topMoves = []
+            diceApplied = false; noLegalMoves = false; topMoves = []; startMasks = (0, 0)
             positionEval = staticEval()
             status = "Past the game's last move — turn off ‘Dice from game’ to keep exploring."
             return
@@ -543,6 +549,7 @@ final class AnalyzeGame: ObservableObject {
         selected = nil
         canConfirm = false
         dieUsable = (nardi_can_use_die(handle, 0) == 1, nardi_can_use_die(handle, 1) == 1)
+        refreshStartMasks()           // greying/dots in lockstep with the just-applied dice
         positionEval = staticEval()   // res2 display eval — single forward pass, cheap
 
         if n > 0, let pre = turnStart?.board {
@@ -652,9 +659,15 @@ final class AnalyzeGame: ObservableObject {
 
     // MARK: - Click-to-move (same model as the play screen)
 
-    func startMaskFor(_ idx: Int) -> Int { Int(nardi_starts_mask(handle, Int32(idx))) }
+    func startMaskFor(_ idx: Int) -> Int { idx == 0 ? startMasks.0 : startMasks.1 }
     /// Combined startable squares (either die) — for the green start dots.
-    var startMaskCombined: Int { startMaskFor(0) | startMaskFor(1) }
+    var startMaskCombined: Int { startMasks.0 | startMasks.1 }
+    /// Pull the per-die start sets from the engine into the stored `startMasks`.
+    /// Call right after any change that re-runs CheckForcedMoves (set dice, move,
+    /// undo) so the highlights/greying track the live position.
+    private func refreshStartMasks() {
+        startMasks = (Int(nardi_starts_mask(handle, 0)), Int(nardi_starts_mask(handle, 1)))
+    }
     /// The engine die index (0/1) tried first when a checker is tapped: slot 0 (D1)
     /// by default, slot 1 (D2) when reversed. Slot-based (not value-based) so the
     /// D1/D2 steppers stay coupled to the visual order — tapping the dice swaps both
@@ -707,6 +720,7 @@ final class AnalyzeGame: ObservableObject {
         Task { @MainActor in
             await animateMoves()
             dieUsable = (nardi_can_use_die(handle, 0) == 1, nardi_can_use_die(handle, 1) == 1)
+            refreshStartMasks()     // remaining-die starts after this hop
             selected = nil          // click-to-move: no lingering selection (dots show next starts)
             if nardi_turn_is_complete(handle) == 1 {
                 canConfirm = true
@@ -724,6 +738,7 @@ final class AnalyzeGame: ObservableObject {
             Task { @MainActor in
                 await animateMoves()
                 dieUsable = (nardi_can_use_die(handle, 0) == 1, nardi_can_use_die(handle, 1) == 1)
+                refreshStartMasks()                           // starts restored for the un-done position
                 updateSelection()
                 positionEval = currentEval()
                 refreshMovedThisTurn()                        // may have peeled back to the turn start
