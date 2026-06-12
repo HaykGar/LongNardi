@@ -235,7 +235,7 @@ final class AnalyzeGame: ObservableObject {
         }
         originalSide = sideToMove
         currentSide = sideToMove
-        flipped = currentSide                 // on-move player's head sits top-right
+        flipped = flipFor(currentSide)                 // on-move player's head sits top-right
         editorBoard.withUnsafeBufferPointer { _ = nardi_set_position(handle, $0.baseAddress, sideToMove ? 1 : 0) }
         board = engineBoard()
         history = []
@@ -275,7 +275,7 @@ final class AnalyzeGame: ObservableObject {
         board = b
         originalSide = anchor          // eval frame = reviewed player
         currentSide = side             // who actually moves here
-        flipped = side
+        flipped = flipFor(side)
         b.withUnsafeBufferPointer { _ = nardi_set_position(handle, $0.baseAddress, side ? 1 : 0) }
         history = []
         turnStart = nil
@@ -308,6 +308,12 @@ final class AnalyzeGame: ObservableObject {
 
     /// Sign that pins a side-to-move value to the original-side frame.
     private var frameSign: Float { (currentSide == originalSide) ? 1 : -1 }
+
+    /// Board orientation for a side to move: flips to that side when the auto-flip
+    /// preference is on, else stays fixed (White's perspective, head top-right).
+    private func flipFor(_ side: Bool) -> Bool { BoardFlip.auto ? side : false }
+    /// Re-apply the orientation when the auto-flip preference is toggled.
+    func refreshFlip() { flipped = flipFor(currentSide) }
 
     /// At a terminal position, the EXACT game result in the original-side frame
     /// (+/-1 normal, +/-2 mars) -- not the model's estimate. The winner is the
@@ -388,7 +394,7 @@ final class AnalyzeGame: ObservableObject {
         Task { @MainActor in
             await animateMoves()                      // moverSign uses the pre-switch side
             currentSide = (nardi_current_player(handle) == 1)
-            flipped = currentSide
+            flipped = flipFor(currentSide)
             board = engineBoard()
             turnStart = nil
             resetTurnState()
@@ -435,7 +441,7 @@ final class AnalyzeGame: ObservableObject {
         if target == cur {   // the game's turn here was a forced pass
             if let ts = turnStart { history.append(ts) }
             currentSide.toggle()
-            flipped = currentSide
+            flipped = flipFor(currentSide)
             cur.withUnsafeBufferPointer { _ = nardi_set_position(handle, $0.baseAddress, currentSide ? 1 : 0) }
             turnStart = nil
             resetTurnState()
@@ -746,7 +752,7 @@ final class AnalyzeGame: ObservableObject {
             }
         } else if let snap = history.popLast() {              // step back across a confirmed turn
             currentSide = snap.side
-            flipped = currentSide
+            flipped = flipFor(currentSide)
             snap.board.withUnsafeBufferPointer { _ = nardi_set_position(handle, $0.baseAddress, snap.side ? 1 : 0) }
             board = snap.board
             turnStart = nil
@@ -768,7 +774,7 @@ final class AnalyzeGame: ObservableObject {
         logCompletedTurn(moved: true)   // record for a savable/reviewable log
         nardi_confirm_turn(handle)
         currentSide = (nardi_current_player(handle) == 1)
-        flipped = currentSide
+        flipped = flipFor(currentSide)
         board = engineBoard()
         turnStart = nil
         resetTurnState()
@@ -788,7 +794,7 @@ final class AnalyzeGame: ObservableObject {
         if let ts = turnStart { history.append(ts) }
         logCompletedTurn(moved: false)   // record the pass in the log
         currentSide.toggle()
-        flipped = currentSide
+        flipped = flipFor(currentSide)
         board.withUnsafeBufferPointer { _ = nardi_set_position(handle, $0.baseAddress, currentSide ? 1 : 0) }
         turnStart = nil
         resetTurnState()

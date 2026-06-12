@@ -15,6 +15,14 @@ enum AnimationSpeed: String, CaseIterable, Identifiable {
     }
 }
 
+/// Whether the board flips to the active player's perspective each turn (pass-and-play
+/// and the analyzer). Persisted; default on. Read by the game models when they set
+/// orientation, and bound to a menu Toggle in the views.
+enum BoardFlip {
+    static let storageKey = "nardi.autoFlip"
+    static var auto: Bool { UserDefaults.standard.object(forKey: storageKey) as? Bool ?? true }
+}
+
 /// Renders the board image with checkers placed via BoardGeometry and maps taps
 /// (and optional long-presses, used by the analysis editor) back to engine coords.
 /// Pure presentation: it takes plain values and closures so both the play screen

@@ -178,6 +178,15 @@ final class NardiGame: ObservableObject {
 
     var isPassAndPlay: Bool { mode == .passAndPlay }
 
+    /// Board orientation: vs-computer is fixed to the human's perspective; pass-and-play
+    /// flips to the active player each turn, unless the auto-flip preference is off.
+    private func desiredFlip() -> Bool {
+        let whiteToMove = (nardi_current_player(handle) == 0)
+        return isPassAndPlay ? (BoardFlip.auto ? !whiteToMove : false) : !humanIsWhite
+    }
+    /// Re-apply the orientation when the auto-flip preference is toggled mid-game.
+    func refreshFlip() { flipped = desiredFlip() }
+
     func newGame(mode: GameMode, opponent: Opponent, first: FirstMove) {
         self.mode = mode
         self.opponent = opponent
@@ -212,8 +221,7 @@ final class NardiGame: ObservableObject {
         // beginHumanTurn): the perspective player's head sits top-right, so flip
         // iff that player is Black. Otherwise a Black human sees the board
         // unflipped until their first turn, then it suddenly rotates.
-        let whiteToMove = (nardi_current_player(handle) == 0)
-        flipped = isPassAndPlay ? !whiteToMove : !humanIsWhite
+        flipped = desiredFlip()
         refreshMeta()
         advanceLoop()
     }
@@ -373,8 +381,7 @@ final class NardiGame: ObservableObject {
         // 180-degree flip (swap rows + reverse the top row). So flip iff the
         // perspective player is Black. Pass-and-play uses the active player's
         // perspective (board inverts each turn); vs-computer is fixed to the human.
-        let perspectiveIsBlack = isPassAndPlay ? !whiteToMove : !humanIsWhite
-        flipped = perspectiveIsBlack
+        flipped = desiredFlip()
         // Start accumulating this turn's hops (for replaying the whole turn later).
         turnSubs = []
         turnStartBoard = engineBoard()

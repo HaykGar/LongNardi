@@ -18,6 +18,7 @@ struct ContentView: View {
     @State private var opponent: Opponent = .medium
     @State private var first: FirstMove = .first
     @AppStorage(AnimationSpeed.storageKey) private var animSpeed: AnimationSpeed = .high
+    @AppStorage(BoardFlip.storageKey) private var autoFlip = true
 
     var body: some View {
         Group {
@@ -50,23 +51,24 @@ struct ContentView: View {
                 game.newGame(mode: .vsComputer, opponent: .medium,
                              first: args.contains("--black") ? .second : .first)
             }
-            // Dev: once it's the human's turn, play one sub-move from a startable
-            // point so the center Undo button can be verified without a real tap.
+            // Dev: play the human's turn out (tap a startable point until the turn is
+            // complete) so the center Undo + Confirm controls can be verified.
             if args.contains("--demo-move") {
                 Task { @MainActor in
-                    for _ in 0..<14 {
-                        if game.phase == .awaitingHuman {
+                    for _ in 0..<30 {
+                        if game.phase == .awaitingHuman && !game.canConfirm && !game.isAnimating {
                             let mask = game.startMasks.0 | game.startMasks.1
                             if mask != 0 {
                                 let i = mask.trailingZeroBitCount
-                                game.tap(row: i / NardiGame.cols, col: i % NardiGame.cols); break  // tap now moves
+                                game.tap(row: i / NardiGame.cols, col: i % NardiGame.cols)  // tap now moves
                             }
                         }
-                        try? await Task.sleep(nanoseconds: 500_000_000)
+                        if game.canConfirm { break }
+                        try? await Task.sleep(nanoseconds: 400_000_000)
                     }
-                    // --demo-undo: take the sub-move back to verify dots are restored.
+                    // --demo-undo: take a hop back to verify dots/controls are restored.
                     if args.contains("--demo-undo") {
-                        try? await Task.sleep(nanoseconds: 3_000_000_000)
+                        try? await Task.sleep(nanoseconds: 2_000_000_000)
                         game.undo()
                     }
                 }
@@ -230,6 +232,12 @@ struct ContentView: View {
                     } label: {
                         Label("Animation Speed: \(animSpeed.rawValue)", systemImage: "speedometer")
                     }
+                    // Pass & play flips the board each turn; let players turn that off.
+                    if game.isPassAndPlay {
+                        Toggle(isOn: $autoFlip) {
+                            Label("Flip board each turn", systemImage: "arrow.triangle.2.circlepath")
+                        }
+                    }
                     Divider()
                     Button(role: .destructive) { game.backToSetup() } label: {
                         Label("Quit to main menu", systemImage: "house")
@@ -241,6 +249,7 @@ struct ContentView: View {
                 offBadge(label: "Black off", count: game.blackOff, white: false)
             }
             .padding(.horizontal)
+            .onChange(of: autoFlip) { _, _ in game.refreshFlip() }
 
             // Undo lives at the board's center bar (per the reference UI): a circular
             // control that appears when the in-progress turn has a hop to take back.

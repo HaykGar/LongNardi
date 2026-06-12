@@ -14,6 +14,7 @@ struct AnalyzeScreen: View {
     @AppStorage(AnimationSpeed.storageKey) private var animSpeed: AnimationSpeed = .high
     @AppStorage(AnalyzerDisplay.showEvalKey) private var showEvalBar = true
     @AppStorage(AnalyzerDisplay.showSuggestionsKey) private var showSuggestions = true
+    @AppStorage(BoardFlip.storageKey) private var autoFlip = true
 
     var body: some View {
         VStack(spacing: 8) {
@@ -28,6 +29,7 @@ struct AnalyzeScreen: View {
                     }
                     Toggle(isOn: $showEvalBar) { Label("Show eval bar", systemImage: "gauge.with.dots.needle.bottom.50percent") }
                     Toggle(isOn: $showSuggestions) { Label("Show engine moves", systemImage: "lightbulb") }
+                    Toggle(isOn: $autoFlip) { Label("Flip board each turn", systemImage: "arrow.triangle.2.circlepath") }
                     Divider()
                     Button { onExit() } label: { Label("Close analysis", systemImage: "xmark") }
                 } label: {
@@ -48,6 +50,7 @@ struct AnalyzeScreen: View {
             if game.phase == .editing { EditorBody() } else { AnalysisBody() }
         }
         .padding(.top, 8)
+        .onChange(of: autoFlip) { _, _ in game.refreshFlip() }
     }
 }
 
