@@ -23,7 +23,6 @@ struct ReviewPoint: Identifiable {
 struct CachedReview: Codable {
     let version: Int
     let points: [CachedReviewPoint]
-    let biggestBlunder: Int?
 }
 
 struct CachedReviewPoint: Codable {
@@ -64,7 +63,6 @@ final class GameReview: ObservableObject {
     static let reviewVersion = 1
 
     @Published private(set) var points: [ReviewPoint] = []
-    @Published private(set) var biggestBlunder: Int? = nil   // index into points
     @Published private(set) var ready = false
 
     let reviewSide: Bool
@@ -128,7 +126,6 @@ final class GameReview: ObservableObject {
         // Reuse a current cached review if available — instant, no recompute.
         if let c = cached, c.version == Self.reviewVersion {
             points = c.points.map { $0.point }
-            biggestBlunder = c.biggestBlunder
             ready = true
             return
         }
@@ -159,15 +156,10 @@ final class GameReview: ObservableObject {
         }
 
         points = pts
-        biggestBlunder = pts.enumerated()
-            .filter { $0.element.blunderDelta != nil }
-            .max { ($0.element.blunderDelta ?? 0) < ($1.element.blunderDelta ?? 0) }
-            .map { $0.offset }
         ready = true
         // Hand the computed review back to be cached, so re-opening is instant.
         onComputed?(CachedReview(version: Self.reviewVersion,
-                                 points: pts.map { CachedReviewPoint($0) },
-                                 biggestBlunder: biggestBlunder))
+                                 points: pts.map { CachedReviewPoint($0) }))
     }
 
     // MARK: - Engine helpers

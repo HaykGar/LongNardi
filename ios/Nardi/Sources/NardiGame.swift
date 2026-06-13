@@ -2,9 +2,9 @@ import Foundation
 import SwiftUI
 
 enum Opponent: String, CaseIterable, Identifiable {
-    case easy = "Easy"      // hand-crafted heuristic, no network
-    case medium = "Medium"  // greedy over the small MLP value net
-    case hard = "Hard"      // 1-ply lookahead over the Polyak-averaged ResNardiNet
+    case easy = "Xcho"      // hand-crafted heuristic, no network
+    case medium = "Mxo"  // greedy over the small MLP value net
+    case hard = "Vzgo"      // 1-ply lookahead over the Polyak-averaged ResNardiNet
     var id: String { rawValue }
     var strategy: NardiStrategy {
         switch self {

@@ -52,24 +52,8 @@ struct GameReviewView: View {
     private var content: some View {
         let pt = review.points[safe: index]
 
-        EvalGraph(values: review.points.map { $0.evalReview },
-                  blunderIndex: review.biggestBlunder, currentIndex: index)
+        EvalGraph(values: review.points.map { $0.evalReview }, currentIndex: index)
             .frame(height: 96).padding(.horizontal)
-
-        if let b = review.biggestBlunder, let bp = review.points[safe: b], let d = bp.blunderDelta {
-            Button { index = b } label: {
-                HStack(spacing: 6) {
-                    Image(systemName: "exclamationmark.triangle.fill").foregroundColor(.orange)
-                    Text("Biggest blunder: move \(b) · −\(String(format: "%.2f", d))")
-                        .font(.caption.bold())
-                    Spacer()
-                    Text("tap").font(.caption2).foregroundStyle(.secondary)
-                }
-                .padding(.vertical, 6).padding(.horizontal, 12)
-                .background(RoundedRectangle(cornerRadius: 8).fill(Color.orange.opacity(0.12)))
-            }
-            .buttonStyle(.plain).padding(.horizontal)
-        }
 
         // Whole-game dice totals (sum of both dice on every roll, per colour).
         HStack(spacing: 6) {
@@ -136,7 +120,6 @@ struct GameReviewView: View {
 /// blunder marked, and the current scrubber position highlighted.
 struct EvalGraph: View {
     let values: [Float?]
-    let blunderIndex: Int?
     let currentIndex: Int
 
     var body: some View {
@@ -160,10 +143,6 @@ struct EvalGraph: View {
                         if started { p.addLine(to: pt) } else { p.move(to: pt); started = true }
                     }
                 }.stroke(Color.accentColor, lineWidth: 2)
-                // biggest blunder marker
-                if let b = blunderIndex, let v = values[safe: b] ?? nil {
-                    Circle().fill(Color.orange).frame(width: 8, height: 8).position(x: x(b), y: y(v))
-                }
                 // current position
                 Path { p in p.move(to: CGPoint(x: x(currentIndex), y: 0)); p.addLine(to: CGPoint(x: x(currentIndex), y: h)) }
                     .stroke(Color.primary.opacity(0.5), lineWidth: 1)
