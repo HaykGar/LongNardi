@@ -338,21 +338,24 @@ class LookaheadTDTrainer(TDTrainer):
 
     env_cls = LookaheadGameEnv
 
-    def __init__(self, *args, **kwargs):
+    def __init__(self, ema_beta, *args, **kwargs):
         super().__init__(*args, **kwargs)
         import copy
         # Frozen copy, updated only between stages. Starts as an exact clone so
         # the first stage's targets are consistent with the starting weights.
         self.target_model = copy.deepcopy(self.model)
         self.target_model.eval()
-        # Distribute the shared frozen object to every env. All envs hold the
-        # same reference, so after_stage's load_state_dict propagates to all.
+        # Distribute the shared frozen object to every env.
         for env in self.envs:
             env.target_model = self.target_model
+            
+        self.ema_beta = ema_beta
 
     def after_stage(self, *_):
-        """Snap the frozen target network to the current live model weights."""
-        self.target_model.load_state_dict(self.model.state_dict())
+        """Perform an EMA update using self.ema_beta for the decay parameter."""
+        for target_param, curr_param in zip(self.target_model.parameters(), self.model.parameters()):
+            target_param.data.mul_(self.ema_beta).add_((1 - self.ema_beta) * curr_param.data)
+                        
         self.target_model.eval()
 
 
@@ -391,6 +394,11 @@ if __name__ == "__main__":
         
         return filepath
     
+    def existing_file(filepath):
+        if not os.path.exists(filepath):
+            raise argparse.ArgumentTypeError(f"File not found: '{filepath}'")
+        return filepath
+    
     def valid_float_0to1(x):
         x = float(x)
         if not 0.0 <= x <= 1.0:
@@ -419,8 +427,8 @@ if __name__ == "__main__":
         "--arch",
         type=str,
         choices=["MLP", "Conv", "ResNet"],
-        required=True,
-        help="Architecture to train"
+        default="ResNet",
+        help="Architecture to train. Default: ResNet"
     )
     
     parser.add_argument(
@@ -452,13 +460,6 @@ if __name__ == "__main__":
              "Per synchronized step every env plays one move and the TD updates "
              "are averaged before being applied. Default 1 reproduces single-game training."
     )
-
-    parser.add_argument(
-        "--lookahead",
-        action="store_true",
-        help="use 1-ply lookahead (expectimax) values as TD targets instead of "
-             "raw model evaluations (LookaheadTDTrainer). Slower per move."
-    )
     
     parser.add_argument(
         "--lambda", 
@@ -481,10 +482,24 @@ if __name__ == "__main__":
     )
 
     parser.add_argument(
-        "--baseline-res",
-        action='store_true',
-        help="Benchmark against weights/res2.pt (a ResNardiNet) playing greedily, "
-             "instead of the default heuristic baseline."
+        "--baseline-weights",
+        type=existing_file,
+        default=None,
+        help="Optional filename for weights of a target ResNardiNet for baseline instead of the default heuristic baseline."
+    )
+    
+    parser.add_argument(
+        "--lookahead",
+        action="store_true",
+        help="use 1-ply lookahead (expectimax) values as TD targets instead of "
+             "raw model evaluations (LookaheadTDTrainer). Slower per move."
+    )
+    
+    parser.add_argument(
+        "--ema-beta",
+        type=valid_float_0to1,
+        default=0.0,
+        help="Decay parameter for exponential moving average in target network. Use with --lookahead otherwise it will have no effect. Defaults to hard updates",
     )
 
     args = parser.parse_args()
@@ -496,17 +511,29 @@ if __name__ == "__main__":
     elif args.architecture == "ResNet":
         model = nardi_net.ResNardiNet()
 
-    # Default baseline: no model, heuristic play. With --baseline-res, benchmark
-    # against weights/res2.pt (a ResNardiNet) playing greedily.
+    # Default baseline: no model, heuristic play. With baseline weights provided, intialize the ResNardiNet and use greedy play
     baseline_args = (None, "heuristic")
-    if args.baseline_res:
+    if args.baseline_weights:
         baseline_model = nardi_net.ResNardiNet()
-        baseline_model.load_state_dict(torch.load("weights/res2.pt"))
+        baseline_model.load_state_dict(torch.load(args.baseline_weights))
         baseline_model.eval()
         baseline_args = (baseline_model, "greedy")
 
-    trainer_cls = LookaheadTDTrainer if args.lookahead else TDTrainer
-    trainer = trainer_cls(model, weights_file=args.file, output_dir=args.directory,
-                          endgame_finetune=args.endgame, num_envs=args.envs,
-                          baseline_args=baseline_args)
+    kwargs = {
+                "model": model, 
+                "weights_file":args.file, 
+                "output_dir":args.directory,
+                "endgame_finetune":args.endgame, 
+                "num_envs":args.envs,
+                "baseline_args":baseline_args,
+            }
+    
+    if args.lookahead:
+        trainer_cls = LookaheadTDTrainer
+        kwargs["ema_beta"] = args.ema_beta
+    else:
+        trainer_cls = TDTrainer
+    
+    trainer = trainer_cls(**kwargs)
+    
     trainer.train(n_stages=args.stages, games_per_stage=args.games)
