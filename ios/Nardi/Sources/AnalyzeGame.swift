@@ -538,10 +538,12 @@ final class AnalyzeGame: ObservableObject {
     func setDice() {
         guard phase == .analyzing, !isAnimating, !isTerminal, !movedThisTurn else { return }
         guard let (d1, d2) = effectiveDice() else {
-            cancelSuggestions()
-            diceApplied = false; noLegalMoves = false; topMoves = []; startMasks = (0, 0)
-            positionEval = staticEval()
-            status = "Past the game's last move — turn off ‘Dice from game’ to keep exploring."
+            // Reached past the game's recorded moves while locked to its dice. The
+            // position isn't terminal (e.g. an early resignation), so unlock to free
+            // dice and re-apply, letting the user keep playing it out from here.
+            useGameDice = false
+            status = "Past the game's moves — playing on with your own dice."
+            setDice()
             return
         }
         die1 = d1; die2 = d2          // reflect the applied dice in the UI / steppers

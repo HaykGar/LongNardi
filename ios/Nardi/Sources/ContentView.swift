@@ -51,6 +51,19 @@ struct ContentView: View {
                 game.newGame(mode: .vsComputer, opponent: .medium,
                              first: args.contains("--black") ? .second : .first)
             }
+            // Dev: start a game and offer a resignation on the human's turn, to verify
+            // accept/decline. --pnp uses pass & play (shows the check/x); else vs Hard.
+            if args.contains("--resign-oin") || args.contains("--resign-mars") {
+                let level: ResignLevel = args.contains("--resign-mars") ? .mars : .oin
+                game.newGame(mode: args.contains("--pnp") ? .passAndPlay : .vsComputer,
+                             opponent: .hard, first: .first)
+                Task { @MainActor in
+                    for _ in 0..<16 {
+                        if game.canOffer { game.offerResign(level); break }
+                        try? await Task.sleep(nanoseconds: 400_000_000)
+                    }
+                }
+            }
             // Dev: play the human's turn out (tap a startable point until the turn is
             // complete) so the center Undo + Confirm controls can be verified.
             if args.contains("--demo-move") {
@@ -101,6 +114,21 @@ struct ContentView: View {
                 b[12] = -11                  // black head
                 analyze.devSetup(board: b, side: false, d1: 6, d2: 3)
                 showAnalyze = true
+            }
+            // Dev: open the analyzer in review mode with a 1-move game line, then
+            // Follow to its end (a NON-terminal position, like an early resignation),
+            // to verify you can keep playing past the end (dice auto-unlock).
+            if args.contains("--review-end") {
+                section = .analyze
+                var std = [Int8](repeating: 0, count: 24); std[0] = 15; std[12] = -15
+                var b2 = [Int8](repeating: 0, count: 24); b2[0] = 14; b2[11] = 1; b2[12] = -15
+                analyze.openForReview(board: std, side: false, anchor: false,
+                                      gameDice: [(6, 5)], gameLine: [std, b2])
+                showAnalyze = true
+                Task { @MainActor in
+                    try? await Task.sleep(nanoseconds: 800_000_000)
+                    analyze.followGameMove()   // step to the end of the line
+                }
             }
             if args.contains("--analyze") || args.contains("--analyze-run") {
                 section = .analyze
@@ -246,6 +274,15 @@ struct ContentView: View {
                     Label("Menu", systemImage: "line.3.horizontal").font(.callout)
                 }
                 Spacer()
+                // Resign: offer the opponent a single (oin) or a mars (double).
+                Menu {
+                    Button { game.offerResign(.oin) } label: { Label("Offer single (oin)", systemImage: "flag") }
+                    Button(role: .destructive) { game.offerResign(.mars) } label: { Label("Offer mars (double)", systemImage: "flag.checkered") }
+                } label: {
+                    Label("Resign", systemImage: "flag.fill").font(.callout)
+                }
+                .disabled(!game.canOffer)
+                Spacer()
                 offBadge(label: "Black off", count: game.blackOff, white: false)
             }
             .padding(.horizontal)
@@ -273,29 +310,42 @@ struct ContentView: View {
             Text(game.status).font(.callout).multilineTextAlignment(.center)
                 .frame(maxWidth: .infinity, minHeight: 24)
 
-            // Static control bar: dice · dice · Confirm · Replay. Nothing appears or
-            // disappears between moves — Replay simply greys out when there's no
-            // opponent move to re-watch.
-            HStack(spacing: 14) {
-                // Two dice in try-order: the left (accent-ringed) is tried first when
-                // a checker is tapped. Tapping either die reverses that order. A die
-                // greys out the moment it has no legal start.
-                ForEach(Array(game.orderedDice.enumerated()), id: \.offset) { _, d in
-                    DieButton(value: d.value, usable: d.hasStart, primary: d.isFirst) { game.toggleTryFirst() }
+            if game.pendingResign != nil {
+                // Pass & play: the opponent accepts (green check) or declines (red x).
+                HStack(spacing: 44) {
+                    Button { game.respondResign(accept: false) } label: {
+                        Image(systemName: "xmark.circle.fill").font(.system(size: 48)).foregroundStyle(.red)
+                    }
+                    Button { game.respondResign(accept: true) } label: {
+                        Image(systemName: "checkmark.circle.fill").font(.system(size: 48)).foregroundStyle(.green)
+                    }
                 }
-                Button { game.confirm() } label: {
-                    Label("Confirm", systemImage: "checkmark").font(.callout)
+                .padding(.bottom, 6)
+            } else {
+                // Static control bar: dice · dice · Confirm · Replay. Nothing appears or
+                // disappears between moves — Replay simply greys out when there's no
+                // opponent move to re-watch.
+                HStack(spacing: 14) {
+                    // Two dice in try-order: the left (accent-ringed) is tried first when
+                    // a checker is tapped. Tapping either die reverses that order. A die
+                    // greys out the moment it has no legal start.
+                    ForEach(Array(game.orderedDice.enumerated()), id: \.offset) { _, d in
+                        DieButton(value: d.value, usable: d.hasStart, primary: d.isFirst) { game.toggleTryFirst() }
+                    }
+                    Button { game.confirm() } label: {
+                        Label("Confirm", systemImage: "checkmark").font(.callout)
+                    }
+                    .buttonStyle(.borderedProminent)
+                    .disabled(!game.canConfirm)
+                    Button { game.replayLastMove() } label: {
+                        Label(game.lastMoveDice.map { "Replay \($0.0)-\($0.1)" } ?? "Replay",
+                              systemImage: "play.circle").font(.callout)
+                    }
+                    .buttonStyle(.bordered)
+                    .disabled(!game.canReplay)
                 }
-                .buttonStyle(.borderedProminent)
-                .disabled(!game.canConfirm)
-                Button { game.replayLastMove() } label: {
-                    Label(game.lastMoveDice.map { "Replay \($0.0)-\($0.1)" } ?? "Replay",
-                          systemImage: "play.circle").font(.callout)
-                }
-                .buttonStyle(.bordered)
-                .disabled(!game.canReplay)
+                .padding(.bottom, 6)
             }
-            .padding(.bottom, 6)
 
             if case let .gameOver(message) = game.phase {
                 VStack(spacing: 8) {

@@ -30,6 +30,14 @@ enum GameMode: String, CaseIterable, Identifiable {
     var id: String { rawValue }
 }
 
+/// Resignation level a player offers: a single win (oin) or a double (mars).
+enum ResignLevel: String, Identifiable {
+    case oin  = "single (oin)"
+    case mars = "mars (double)"
+    var id: String { rawValue }
+    var isMars: Bool { self == .mars }
+}
+
 enum FirstMove: String, CaseIterable, Identifiable {
     case first = "I play first (White)"
     case second = "I play second (Black)"
@@ -87,6 +95,9 @@ final class NardiGame: ObservableObject {
     @Published private(set) var whiteOff = 0
     @Published private(set) var blackOff = 0
     @Published private(set) var canConfirm = false   // turn complete, awaiting confirm
+    // A resignation the side-to-move has offered, awaiting the opponent's response
+    // (pass & play only — vs-computer decides immediately). nil = no offer pending.
+    @Published private(set) var pendingResign: ResignLevel? = nil
 
     // Move animation: the checker(s) currently in flight (each FlightView self-
     // animates, so there's no per-frame progress to publish).
@@ -136,6 +147,13 @@ final class NardiGame: ObservableObject {
     }
 
     private let handle: OpaquePointer
+    // Scratch engines used only to judge a resignation offer (vs-computer): the
+    // strong vzg0 net and the calibrated res2 net. Independent of the playing
+    // opponent's net, so the accept rule is the same at every difficulty.
+    private let vzgEvalHandle: OpaquePointer
+    private let res2EvalHandle: OpaquePointer
+    private let vzgEvalLoaded: Bool
+    private let res2EvalLoaded: Bool
     private var modelLoaded: Bool = false
     private var mode: GameMode = .vsComputer
     private var opponent: Opponent = .medium   // remembered for the saved record
@@ -158,13 +176,19 @@ final class NardiGame: ObservableObject {
     var hasReview: Bool { !reviewLog.isEmpty }
 
     init() {
-        guard let h = nardi_create() else { fatalError("nardi_create failed") }
-        handle = h
+        guard let h = nardi_create(), let v = nardi_create(), let r = nardi_create() else {
+            fatalError("nardi_create failed")
+        }
+        handle = h; vzgEvalHandle = v; res2EvalHandle = r
+        // Load the resignation-judge nets first (direct C calls, no self), so all
+        // stored properties are initialized before loadModel() (a method) is called.
+        vzgEvalLoaded  = Bundle.main.path(forResource: "vzg0", ofType: "nardiw").map { nardi_load_model(v, $0) == NARDI_OK } ?? false
+        res2EvalLoaded = Bundle.main.path(forResource: "res2", ofType: "nardiw").map { nardi_load_model(r, $0) == NARDI_OK } ?? false
         // Default to the strong network so the dev self-play hooks (which use a
         // model bot) have one loaded; newGame swaps in the chosen opponent's net.
         modelLoaded = loadModel("vzg0")
     }
-    deinit { nardi_destroy(handle) }
+    deinit { nardi_destroy(handle); nardi_destroy(vzgEvalHandle); nardi_destroy(res2EvalHandle) }
 
     /// Load a bundled `.nardiw` value network into the engine. Returns whether it
     /// loaded; a missing blob means the project needs `make_model.sh` + xcodegen.
@@ -213,6 +237,7 @@ final class NardiGame: ObservableObject {
         isAnimating = false
         lastMove = nil
         turnSubs = []
+        pendingResign = nil
         lastMatchID = nil
         reviewLog = []
         humanTurnPre = nil
@@ -233,7 +258,7 @@ final class NardiGame: ObservableObject {
     /// `tryFirst` preference (flipped by tapping the dice). The per-die start sets
     /// tell us which die can actually start from the tapped square.
     func tap(row: Int, col: Int) {
-        guard phase == .awaitingHuman, !isAnimating else { return }
+        guard phase == .awaitingHuman, !isAnimating, pendingResign == nil else { return }
         let bit = 1 << (row * Self.cols + col)
         let firstIdx = tryFirst ? 1 : 0
         let secondIdx = tryFirst ? 0 : 1
@@ -248,7 +273,7 @@ final class NardiGame: ObservableObject {
     /// Flip which die a tapped checker is played with first (tapping the dice
     /// "reverses" them). Purely a UI preference — the engine's dice are untouched.
     func toggleTryFirst() {
-        guard phase == .awaitingHuman, !isAnimating else { return }
+        guard phase == .awaitingHuman, !isAnimating, pendingResign == nil else { return }
         tryFirst.toggle()
     }
 
@@ -295,13 +320,113 @@ final class NardiGame: ObservableObject {
     }
 
     func confirm() {
-        guard phase == .awaitingHuman, canConfirm, !isAnimating else { return }
+        guard phase == .awaitingHuman, canConfirm, !isAnimating, pendingResign == nil else { return }
         recordReplay(before: turnStartBoard, subs: turnSubs, moverSign: turnMoverSign, after: engineBoard())
         recordHumanTurn()
         nardi_confirm_turn(handle)
         canConfirm = false
         selected = nil
         advanceLoop()   // advance to the next player / bot
+    }
+
+    // MARK: - Resignation (offer oin / mars)
+
+    /// The side to move may offer a resignation on their own turn.
+    var canOffer: Bool { phase == .awaitingHuman && !isAnimating && pendingResign == nil }
+
+    /// Offer to resign at `level`. Pass & play: the opponent gets accept/decline
+    /// buttons. vs-computer: VZG-0 decides right away (it only ever responds).
+    func offerResign(_ level: ResignLevel) {
+        guard canOffer else { return }
+        if isPassAndPlay {
+            pendingResign = level
+            let who = (nardi_current_player(handle) == 0) ? "White" : "Black"
+            status = "\(who) offers to resign — \(level.rawValue). Opponent: accept or decline?"
+        } else if botAcceptsResign(level) {
+            acceptResign(level)
+        } else {
+            status = "Computer declined your \(level.rawValue) offer — play on."
+        }
+    }
+
+    /// Pass & play: the opponent accepts or declines the pending offer.
+    func respondResign(accept: Bool) {
+        guard let level = pendingResign else { return }
+        pendingResign = nil
+        if accept {
+            acceptResign(level)
+        } else {
+            let who = (nardi_current_player(handle) == 0) ? "White" : "Black"
+            status = "Offer declined — \(who) to move."
+        }
+    }
+
+    /// Conclude the game from an accepted resignation: the offerer (the side to move)
+    /// loses; the opponent wins at `level` (oin = normal, mars = double).
+    private func acceptResign(_ level: ResignLevel) {
+        let offererIsWhite = (nardi_current_player(handle) == 0)
+        let winnerWhite = !offererIsWhite
+        saveResignedMatch(winnerWhite: winnerWhite, mars: level.isMars)
+        phase = .gameOver(message: resignMessage(winnerWhite: winnerWhite, mars: level.isMars))
+    }
+
+    /// VZG-0's response (vs-computer). Mars is free points, so always accept. For oin,
+    /// accept only when VZG-0 is NOT comfortably ahead: max(vzg0, res2) < 0.5 from its
+    /// own perspective (else it declines and plays on for a possible mars).
+    private func botAcceptsResign(_ level: ResignLevel) -> Bool {
+        if level.isMars { return true }
+        return botEval() < 0.5
+    }
+
+    /// Max of the vzg0 and res2 static evals of the current board, in VZG-0's frame.
+    /// Mid-turn the side to move is the human, so evaluate side-to-move and NEGATE;
+    /// once the turn is complete (awaiting confirm) it's effectively VZG-0 to move, so
+    /// evaluate from its side directly. Never scores from the human's point of view.
+    private func botEval() -> Float {
+        let b = engineBoard()
+        let humanSide: Int32 = humanIsWhite ? 0 : 1
+        let botSide: Int32 = humanIsWhite ? 1 : 0
+        let turnComplete = (nardi_turn_is_complete(handle) == 1)
+
+        func eval(_ h: OpaquePointer, _ loaded: Bool, side: Int32) -> Float? {
+            guard loaded else { return nil }
+            var v: Float = 0
+            let ok = b.withUnsafeBufferPointer { buf -> Bool in
+                nardi_set_position(h, buf.baseAddress, side) == NARDI_OK
+                    && nardi_evaluate_position(h, &v) == NARDI_OK
+            }
+            return ok ? v : nil
+        }
+        func botValue(_ h: OpaquePointer, _ loaded: Bool) -> Float? {
+            turnComplete ? eval(h, loaded, side: botSide)
+                         : eval(h, loaded, side: humanSide).map { -$0 }
+        }
+
+        let vals = [botValue(vzgEvalHandle, vzgEvalLoaded), botValue(res2EvalHandle, res2EvalLoaded)].compactMap { $0 }
+        // No eval available (blobs missing): treat as not-ahead so the offer is accepted.
+        return vals.max() ?? -.greatestFiniteMagnitude
+    }
+
+    private func resignMessage(winnerWhite: Bool, mars: Bool) -> String {
+        let tag = mars ? " (mars!)" : ""
+        if mode == .vsComputer {
+            return (winnerWhite == humanIsWhite) ? "You win!\(tag)" : "Computer wins\(tag) — you resigned."
+        }
+        return (winnerWhite ? "White" : "Black") + " wins\(tag) by resignation."
+    }
+
+    /// Archive a resigned game (engine is NOT terminal, so winner/mars are explicit).
+    private func saveResignedMatch(winnerWhite: Bool, mars: Bool) {
+        guard !matchSaved, let save = onGameFinished else { return }
+        matchSaved = true
+        let id = UUID()
+        lastMatchID = id
+        save(SavedMatch(id: id, date: Date(),
+                        modeRaw: mode.rawValue,
+                        opponentRaw: mode == .vsComputer ? opponent.rawValue : nil,
+                        reviewSide: reviewSide,
+                        winnerWhite: winnerWhite, mars: mars,
+                        turns: reviewLog.map { SavedTurn($0) }))
     }
 
     /// Append the just-completed human turn to the review log (post = current
@@ -314,7 +439,7 @@ final class NardiGame: ObservableObject {
     }
 
     func undo() {
-        guard phase == .awaitingHuman, !isAnimating else { return }
+        guard phase == .awaitingHuman, !isAnimating, pendingResign == nil else { return }
         nardi_human_undo(handle)
         selected = nil
         Task { @MainActor in
