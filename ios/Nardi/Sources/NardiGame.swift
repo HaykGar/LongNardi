@@ -491,7 +491,12 @@ final class NardiGame: ObservableObject {
                     // Record this move for replay (mover = the side that just moved).
                     recordReplay(before: board, subs: recentMoves(),
                                  moverSign: preSide ? -1 : 1, after: engineBoard())
-                    status = "Opponent played \(dice.0)-\(dice.1)…"
+                    // This step is either the computer's move or a FORCED auto-play of
+                    // the human's move; word it for whoever actually moved (preSide:
+                    // true = black). Pass & play has no computer, so it's always auto.
+                    let moverIsHuman = isPassAndPlay || (!preSide == humanIsWhite)
+                    status = moverIsHuman ? "Auto-played \(dice.0)-\(dice.1)…"
+                                          : "Opponent played \(dice.0)-\(dice.1)…"
                     await animateMoves()
                     try? await Task.sleep(nanoseconds: 200_000_000)
                 }
