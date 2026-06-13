@@ -11,6 +11,8 @@ struct BoardView: View {
                     selected: game.selected,
                     flights: game.flights,
                     startMask: game.startMasks.0 | game.startMasks.1,
+                    whitePips: game.pipCounts.white,
+                    blackPips: game.pipCounts.black,
                     onTap: { row, col in game.tap(row: row, col: col) })
     }
 }

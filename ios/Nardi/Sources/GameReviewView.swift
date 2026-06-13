@@ -71,6 +71,17 @@ struct GameReviewView: View {
             .buttonStyle(.plain).padding(.horizontal)
         }
 
+        // Whole-game dice totals (sum of both dice on every roll, per colour).
+        HStack(spacing: 6) {
+            Image(systemName: "dice.fill").foregroundStyle(.secondary)
+            Text("Dice rolled — White \(review.whiteDiceTotal) · Black \(review.blackDiceTotal)")
+                .font(.caption.bold())
+            Spacer()
+        }
+        .padding(.vertical, 6).padding(.horizontal, 12)
+        .background(RoundedRectangle(cornerRadius: 8).fill(Color(.systemGray6)))
+        .padding(.horizontal)
+
         BoardCanvas(board: pt?.board ?? [], flipped: review.reviewSide, selected: nil,
                     flights: [], onTap: { _, _ in })
             .padding(.horizontal, 6)

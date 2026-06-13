@@ -94,6 +94,8 @@ final class NardiGame: ObservableObject {
     @Published private(set) var status = ""
     @Published private(set) var whiteOff = 0
     @Published private(set) var blackOff = 0
+    /// Pip count (1-moves to bear off) per colour, from the engine.
+    @Published private(set) var pipCounts: (white: Int, black: Int) = (0, 0)
     @Published private(set) var canConfirm = false   // turn complete, awaiting confirm
     // A resignation the side-to-move has offered, awaiting the opponent's response
     // (pass & play only — vs-computer decides immediately). nil = no offer pending.
@@ -545,6 +547,8 @@ final class NardiGame: ObservableObject {
         let eb = engineBoard()
         whiteOff = 15 - eb.reduce(0) { $0 + max(0, Int($1)) }
         blackOff = 15 - eb.reduce(0) { $0 + max(0, -Int($1)) }
+        var pips = [Int32](repeating: 0, count: 2)
+        if nardi_pip_counts(handle, &pips) == NARDI_OK { pipCounts = (Int(pips[0]), Int(pips[1])) }
     }
 
     /// Read the sub-moves applied by the last move command, in order.

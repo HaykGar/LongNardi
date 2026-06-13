@@ -93,6 +93,18 @@ final class GameReview: ObservableObject {
 
     var reviewSideName: String { reviewSide ? "Black" : "White" }
 
+    /// Total pips rolled by each colour over the whole game (both dice every roll,
+    /// passes included). Summed from the recorded turns — each point past the start
+    /// carries that turn's dice and mover — so it also works for a cached review.
+    var whiteDiceTotal: Int { diceTotal(black: false) }
+    var blackDiceTotal: Int { diceTotal(black: true) }
+    private func diceTotal(black: Bool) -> Int {
+        points.reduce(0) { acc, p in
+            guard let d = p.dice, p.mover == black else { return acc }
+            return acc + d.0 + d.1
+        }
+    }
+
     /// The game's actual dice from review point `pointIndex` onward (turn k's dice
     /// is the move out of point k), so the analyzer can lock to the game's rolls.
     func gameDiceFrom(_ pointIndex: Int) -> [(Int, Int)] {

@@ -71,6 +71,8 @@ public:
     void apply_board(const Nardi::BoardConfig& brd);
     bool current_player() const;
     int sign() const;
+    // Pip count (1-moves to bear all pieces off) per colour: {white, black}.
+    std::array<int, 2> pip_counts() const;
     int turn_num() const;
     int player_turn_num(bool player) const;
 

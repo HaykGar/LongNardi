@@ -670,6 +670,17 @@ final class AnalyzeGame: ObservableObject {
     func startMaskFor(_ idx: Int) -> Int { idx == 0 ? startMasks.0 : startMasks.1 }
     /// Combined startable squares (either die) — for the green start dots.
     var startMaskCombined: Int { startMasks.0 | startMasks.1 }
+
+    /// Pip count per colour for the current analysis position, read live from the
+    /// engine handle (main-thread only, like all `handle` access — view rendering
+    /// is on main). The board view re-reads this whenever `board`/`phase` change,
+    /// so it tracks moves, undo, step-back and follow without a stored mirror.
+    var pipCounts: (white: Int, black: Int) {
+        guard phase == .analyzing else { return (0, 0) }
+        var pips = [Int32](repeating: 0, count: 2)
+        guard nardi_pip_counts(handle, &pips) == NARDI_OK else { return (0, 0) }
+        return (Int(pips[0]), Int(pips[1]))
+    }
     /// Pull the per-die start sets from the engine into the stored `startMasks`.
     /// Call right after any change that re-runs CheckForcedMoves (set dice, move,
     /// undo) so the highlights/greying track the live position.

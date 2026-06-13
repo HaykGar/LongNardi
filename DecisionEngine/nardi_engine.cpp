@@ -131,6 +131,19 @@ int NardiEngine::sign() const
     return current_player() ? -1 : 1;
 }
 
+std::array<int, 2> NardiEngine::pip_counts() const
+{
+    // ExtractFeatures() reports pips from the side-to-move's frame (player =
+    // current player, opp = the other). Re-key by colour so callers get a
+    // stable {white, black} regardless of whose turn it is.
+    const Nardi::Board::Features f = board_features();
+    const bool side = current_player();   // 0 white, 1 black (side to move)
+    std::array<int, 2> out{};             // index 0 = white, 1 = black
+    out[side]  = f.player.pip_count;
+    out[!side] = f.opp.pip_count;
+    return out;
+}
+
 int NardiEngine::turn_num() const
 {
     return _builder.GetGame().GetTotalTurnNumber();

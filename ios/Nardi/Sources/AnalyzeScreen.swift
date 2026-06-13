@@ -142,6 +142,8 @@ private struct AnalysisBody: View {
             BoardCanvas(board: game.board, flipped: game.flipped, selected: game.selected,
                         flights: game.flights,
                         startMask: game.startMaskCombined,
+                        whitePips: game.pipCounts.white,
+                        blackPips: game.pipCounts.black,
                         onTap: { r, c in game.tap(row: r, col: c) })
                 .padding(.horizontal, 6)
 

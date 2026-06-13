@@ -35,6 +35,12 @@ struct BoardCanvas: View {
     /// Bitmask (bit row*cols+col, engine coords) of squares from which a move can
     /// start this turn; each gets a small green dot. 0 = none (e.g. the analyzer).
     var startMask: Int = 0
+    /// Pip counts per colour, shown centered on the board's hinge line: the visual
+    /// TOP row's owner above the top hinge, the other below the bottom hinge. Since
+    /// BoardGeometry swaps rows on flip, the top label follows the flipped state.
+    /// 0/0 hides them (e.g. before a position is set).
+    var whitePips: Int = 0
+    var blackPips: Int = 0
     var onTap: (Int, Int) -> Void
     /// When set, a long-press on a cell calls this (engine coords). Only attached
     /// when provided, so it never interferes with the play screen's plain taps.
@@ -92,6 +98,7 @@ struct BoardCanvas: View {
                         .position(x: rect.midX, y: rect.midY)
                 }
                 checkers(geom: geom)
+                pipCounts(rect: rect)
                 startDots(geom: geom)
                 flightsLayer(geom: geom)
                 selectionHighlight(geom: geom)
@@ -212,6 +219,42 @@ struct BoardCanvas: View {
                     .position(x: r.midX, y: r.midY)
             }
         }
+    }
+
+    // Vertical placement of the two pip-count labels as fractions of board height:
+    // just above the top brass hinge and just below the bottom one (the art's two
+    // hinges sit ~17% / ~83% down the central divider). Both are horizontally
+    // centered on that divider.
+    private static let topPipYFrac: CGFloat = 0.15
+    private static let botPipYFrac: CGFloat = 0.85
+
+    // Each player's pip count, centered on the board's hinge line. The owner of the
+    // visual TOP row goes on top: BoardGeometry swaps rows on flip, so that's white
+    // when not flipped and black when flipped — i.e. always the perspective /
+    // side-to-move player, whose head is drawn top-right.
+    @ViewBuilder
+    private func pipCounts(rect: CGRect) -> some View {
+        if whitePips > 0 || blackPips > 0 {
+            let topPips = flipped ? blackPips : whitePips
+            let botPips = flipped ? whitePips : blackPips
+            let fs = max(13, rect.width * 0.042)
+            pipLabel(topPips, fontSize: fs)
+                .position(x: rect.midX, y: rect.minY + rect.height * Self.topPipYFrac)
+            pipLabel(botPips, fontSize: fs)
+                .position(x: rect.midX, y: rect.minY + rect.height * Self.botPipYFrac)
+        }
+    }
+
+    private func pipLabel(_ n: Int, fontSize: CGFloat) -> some View {
+        // Plain narrow numerals over the central wood bar (dark, so white reads).
+        // A faint shadow keeps them legible without a filled background.
+        Text("\(n)")
+            .font(.system(size: fontSize, weight: .bold))
+            .fontWidth(.condensed)
+            .monospacedDigit()
+            .foregroundColor(.white)
+            .shadow(color: .black.opacity(0.6), radius: 1.5)
+            .fixedSize()
     }
 
     // A green dot at the OUTER (rim-facing) end of every point a move can start from

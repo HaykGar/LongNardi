@@ -80,6 +80,11 @@ int nardi_winner_result(NardiHandle* h);  /* 1 normal, 2 mars; -1 on error/not o
 /* Write the two dice into out_dice[2]. */
 NardiStatus nardi_dice(NardiHandle* h, int out_dice[2]);
 
+/* Write each colour's pip count (1-moves to bear all pieces off) into
+ * out_pips[2]: index 0 = white, 1 = black. Reflects the current board,
+ * including any partial moves played this turn. */
+NardiStatus nardi_pip_counts(NardiHandle* h, int out_pips[2]);
+
 /* Write the current board (NARDI_BOARD_CELLS signed bytes, row-major) into out. */
 NardiStatus nardi_board(NardiHandle* h, signed char* out /* [NARDI_BOARD_CELLS] */);
 

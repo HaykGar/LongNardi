@@ -144,6 +144,17 @@ NardiStatus nardi_dice(NardiHandle* h, int out_dice[2])
     });
 }
 
+NardiStatus nardi_pip_counts(NardiHandle* h, int out_pips[2])
+{
+    NARDI_GUARD(h, NARDI_ERR, {
+        if(out_pips == nullptr) { h->last_error = "nardi_pip_counts: null out"; return NARDI_ERR; }
+        const auto p = h->engine.pip_counts();
+        out_pips[0] = p[0];
+        out_pips[1] = p[1];
+        return NARDI_OK;
+    });
+}
+
 NardiStatus nardi_board(NardiHandle* h, signed char* out)
 {
     NARDI_GUARD(h, NARDI_ERR, {
