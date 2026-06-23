@@ -7,7 +7,7 @@
 #
 # Produces three blobs in Nardi/Resources:
 #   mlp.nardiw   <- weights/mlp.pt   (NardiNet / MLP)   -> Medium (greedy)
-#   vzg0.nardiw  <- weights/vzg0.pt  (ResNardiNet)      -> Hard (1-ply lookahead)
+#   vzg0.nardiw  <- weights/vzg0mk2.pt  (ResNardiNet)      -> Hard (1-ply lookahead)
 #                                                          + analyzer/review MOVE SELECTION
 #   res2.nardiw  <- weights/res2.pt  (ResNardiNet)      -> analyzer/review DISPLAY eval
 #                  (well-calibrated: ~0 at the symmetric start, near-antisymmetric,
@@ -36,6 +36,6 @@ def export(model, pt, out):
 # Medium = greedy over the small MLP; Hard / analysis = 1-ply lookahead over the
 # Polyak-averaged ResNardiNet.
 export(NardiNet(64, 16), "mlp.pt",  "mlp.nardiw")
-export(ResNardiNet(),    "vzg0.pt", "vzg0.nardiw")
+export(ResNardiNet(),    "vzg0mk2.pt", "vzg0.nardiw")
 export(ResNardiNet(),    "res2.pt", "res2.nardiw")
 PY

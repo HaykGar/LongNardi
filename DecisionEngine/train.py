@@ -270,7 +270,7 @@ class TDTrainer:
             self.eps = self.eps_min + (self.eps0 - self.eps_min) * 2.0**(-stage / self.h_e)
             self.temperature = self.t_min + (self.t0 - self.t_min) * 2.0**(-stage / self.h_t)
 
-            # Noisy exploration for the first half of stages, then pure greedy.
+            # Noisy exploration for the first self.noise_fraction portion, then pure greedy.
             noisy = (stage / n_stages) < self.noise_fraction
 
             # Run games_per_stage games as a synchronized batch across all envs.
@@ -328,8 +328,9 @@ class LookaheadTDTrainer(TDTrainer):
 
     Adds a *frozen target network* that is used exclusively for computing the
     lookahead bootstrap value L(s). The live model is still trained normally; the
-    frozen copy is snapped to the live model at the end of every stage (fitted-VI
-    rhythm). This prevents the target from chasing its own tail mid-stage.
+    frozen copy is updated via an Exponential Moving Average towards the live model 
+    at the end of every stage (fitted-VI rhythm). This prevents the target from chasing 
+    its own tail mid-stage.
 
     The noisy/greedy move_fn is still respected: move selection and target
     computation are now decoupled — the env always uses the frozen model for the

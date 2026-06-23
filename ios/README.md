@@ -51,7 +51,7 @@ strategy over a value network bundled as a `.nardiw` blob:
 |------------|-----------------|--------------------------|-------------------------|
 | Easy       | heuristic       | none (hand-crafted)      | —                       |
 | Medium     | greedy (1-ply)  | `mlp.nardiw` (MLP)       | `mlp.pt`                |
-| Hard       | 1-ply lookahead | `vzg0.nardiw` (ResNet) | `vzg0.pt` |
+| Hard       | 1-ply lookahead | `vzg0.nardiw` (ResNet) | `vzg0mk2.pt` |
 
 All analysis (game review + the analyzer) uses the strongest network,
 `vzg0.nardiw`. The blobs are produced by `scripts/make_model.sh` from
