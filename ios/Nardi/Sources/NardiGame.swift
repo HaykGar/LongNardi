@@ -160,6 +160,10 @@ final class NardiGame: ObservableObject {
     private var mode: GameMode = .vsComputer
     private var opponent: Opponent = .medium   // remembered for the saved record
     private var humanIsWhite = true   // vs-computer orientation (fixed)
+    // The running auto-play / bot loop, kept so it can be cancelled the instant the
+    // human ends the game out-of-band (resigns or quits to menu). Otherwise the loop
+    // would keep advancing and clobber the game-over / setup phase we just set.
+    private var loopTask: Task<Void, Never>?
 
     /// Called once when a real (non-dev) game finishes, so the app can archive it
     /// to the match history. Injected by the app; nil disables archiving.
@@ -333,8 +337,18 @@ final class NardiGame: ObservableObject {
 
     // MARK: - Resignation (offer oin / mars)
 
-    /// The side to move may offer a resignation on their own turn.
-    var canOffer: Bool { phase == .awaitingHuman && !isAnimating && pendingResign == nil }
+    /// When the Resign control is live. vs-computer: the human may resign at ANY time
+    /// the game is in progress — including while the bot is thinking or forced moves are
+    /// auto-playing — since they are always the one resigning. Pass & play: only on the
+    /// active player's own settled turn, as the side to move is the offerer.
+    var canOffer: Bool {
+        guard pendingResign == nil else { return false }
+        switch phase {
+        case .botThinking:      return !isPassAndPlay
+        case .awaitingHuman:    return !isAnimating
+        case .setup, .gameOver: return false
+        }
+    }
 
     /// Offer to resign at `level`. Pass & play: the opponent gets accept/decline
     /// buttons. vs-computer: VZG-0 decides right away (it only ever responds).
@@ -366,8 +380,12 @@ final class NardiGame: ObservableObject {
     /// Conclude the game from an accepted resignation: the offerer (the side to move)
     /// loses; the opponent wins at `level` (oin = normal, mars = double).
     private func acceptResign(_ level: ResignLevel) {
-        let offererIsWhite = (nardi_current_player(handle) == 0)
+        // vs-computer: the human is always the offerer (the bot only ever responds),
+        // even mid-auto-play when the engine's current player is the bot — so the human
+        // loses. Pass & play: the side to move is the one resigning.
+        let offererIsWhite = isPassAndPlay ? (nardi_current_player(handle) == 0) : humanIsWhite
         let winnerWhite = !offererIsWhite
+        loopTask?.cancel()   // halt any in-flight auto-play before it overwrites game-over
         saveResignedMatch(winnerWhite: winnerWhite, mars: level.isMars)
         phase = .gameOver(message: resignMessage(winnerWhite: winnerWhite, mars: level.isMars))
     }
@@ -461,8 +479,10 @@ final class NardiGame: ObservableObject {
 
     private func advanceLoop() {
         phase = .botThinking
-        Task { @MainActor in
+        loopTask?.cancel()
+        loopTask = Task { @MainActor in
             while true {
+                if Task.isCancelled { return }   // human resigned / quit mid-loop
                 let preBoard = engineBoard()
                 let preSide = (nardi_current_player(handle) == 1)
                 let step = nardi_advance(handle)
@@ -500,6 +520,7 @@ final class NardiGame: ObservableObject {
                     status = moverIsHuman ? "Auto-played \(dice.0)-\(dice.1)…"
                                           : "Opponent played \(dice.0)-\(dice.1)…"
                     await animateMoves()
+                    if Task.isCancelled { return }   // resigned / quit while the move slid
                     try? await Task.sleep(nanoseconds: 200_000_000)
                 }
             }
@@ -656,7 +677,10 @@ final class NardiGame: ObservableObject {
                         turns: reviewLog.map { SavedTurn($0) }))
     }
 
-    func backToSetup() { phase = .setup }
+    func backToSetup() {
+        loopTask?.cancel()   // stop auto-play so it can't snap us back into the game
+        phase = .setup
+    }
 
     /// Synchronously self-play random(white) vs greedy(black) to completion,
     /// returning the per-turn log. Used by the dev review/history hooks.
