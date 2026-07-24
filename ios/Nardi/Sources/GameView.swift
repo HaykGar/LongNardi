@@ -154,16 +154,18 @@ struct GameView: View {
         return VStack(spacing: 14) {
             Text(message).font(ThemeFont.screenTitle).foregroundStyle(Palette.cream)
                 .multilineTextAlignment(.center)
-            HStack(spacing: 14) {
+            HStack(spacing: 12) {
                 if game.hasReview {
                     Button { onReview() } label: {
                         Label("Review", systemImage: "chart.line.uptrend.xyaxis")
                     }
                     .buttonStyle(GhostPillButtonStyle())
                 }
+                Button { onQuit() } label: { Label("Home", systemImage: "house") }
+                    .buttonStyle(GhostPillButtonStyle())
                 Button { onNewGame() } label: { Text("New Game").padding(.horizontal, 6) }
                     .buttonStyle(PrimaryCTAButtonStyle(cornerRadius: 12, minHeight: 44))
-                    .frame(width: 180)
+                    .frame(width: 160)
             }
         }
         .padding(28)
