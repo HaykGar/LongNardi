@@ -1,83 +1,99 @@
-import CoreGraphics
+import SwiftUI
 
-/// Maps engine board coordinates (row 0/1, col 0..11) to screen rectangles on the
-/// board image, mirroring CoreEngine/SFMLRW.cpp: row 0 (white) is drawn along the
-/// top with columns reversed (visualCol = 11 - col); row 1 (black) along the
-/// bottom (visualCol = col); 12 columns split into two 6-wide halves. `flipped`
-/// swaps the rows and reverses the top row (pass-and-play / black perspective) so
-/// the active player's head is at the TOP-RIGHT.
+/// The four 6-slot quadrants of the landscape board, matching the mockup's DOM:
+/// left leaf = topLeft over botLeft; right leaf = topRight over botRight.
+enum Quadrant: CaseIterable { case topLeft, topRight, botLeft, botRight }
+
+/// Pure coordinate math between the mockup quadrants and the engine board
+/// (index = row*12 + col; value > 0 = white, < 0 = black). This reuses v1's
+/// PROVEN `visual()` map verbatim — only the pixel layout changed (a uniform
+/// grid instead of the old perspective art), so the mapping stays correct.
 ///
-/// BoardImg.jpg is drawn in slight perspective: the bottom points are spread a
-/// little wider than the top, and the top/bottom insets differ. So the point
-/// centers are anchored PER visual row + half (col0/col5 center fractions,
-/// measured from the art), with vertical insets per top/bottom edge. The flip is
-/// a logical row/col remap (not a pixel rotation). See BOARD_ART_SPEC.txt.
-struct BoardGeometry {
+/// Verified (see Board.cpp / SFMLRW.cpp): row 0 (white) draws along the visual
+/// TOP with columns reversed; row 1 (black) along the BOTTOM. The 180° flip
+/// (Black perspective / pass-and-play) puts the perspective player's head at the
+/// TOP-RIGHT — each side's head lands at topRight[5], its home in botRight.
+enum BoardMap {
     static let cols = 12
     static let rows = 2
 
-    let board: CGRect          // displayed (aspect-fit) board image frame
-
-    // (col0 center, col5 center) as fractions of board width, per row/half.
-    private let topLeft  = (c0: CGFloat(0.0839), c5: CGFloat(0.4189))
-    private let topRight = (c0: CGFloat(0.5816), c5: CGFloat(0.9161))
-    private let botLeft  = (c0: CGFloat(0.0769), c5: CGFloat(0.4194))
-    private let botRight = (c0: CGFloat(0.5843), c5: CGFloat(0.9231))
-    // Vertical insets of the point bases (fractions of board height).
-    private let padYTopFrac: CGFloat = 0.092
-    private let padYBotFrac: CGFloat = 0.076
-
-    private var innerTop: CGFloat { board.minY + board.height * padYTopFrac }
-    private var innerHeight: CGFloat { board.height * (1 - padYTopFrac - padYBotFrac) }
-    private var cellH: CGFloat { innerHeight / CGFloat(Self.rows) }
-
-    private func anchor(vRow: Int, rightHalf: Bool) -> (c0: CGFloat, c5: CGFloat) {
-        switch (vRow, rightHalf) {
-        case (0, false): return topLeft
-        case (0, true):  return topRight
-        case (1, false): return botLeft
-        default:         return botRight
-        }
-    }
-
-    private func visual(row: Int, col: Int, flipped: Bool) -> (vRow: Int, vCol: Int) {
+    /// engine (row,col) -> FINAL visual (vRow,vCol). Copied from v1 BoardGeometry.
+    static func visual(row: Int, col: Int, flipped: Bool) -> (vRow: Int, vCol: Int) {
         var vRow = row
-        var vCol = (row == 0) ? (Self.cols - 1 - col) : col
-        if flipped { vRow = 1 - vRow; vCol = Self.cols - 1 - vCol }
+        var vCol = (row == 0) ? (cols - 1 - col) : col
+        if flipped { vRow = 1 - vRow; vCol = cols - 1 - vCol }
         return (vRow, vCol)
     }
 
-    func cellRect(row: Int, col: Int, flipped: Bool) -> CGRect {
-        let v = visual(row: row, col: col, flipped: flipped)
-        let rightHalf = v.vCol >= Self.cols / 2
-        let localCol = rightHalf ? v.vCol - Self.cols / 2 : v.vCol
-        let a = anchor(vRow: v.vRow, rightHalf: rightHalf)
-        let cwFrac = (a.c5 - a.c0) / 5
-        let centerFrac = a.c0 + CGFloat(localCol) * cwFrac
-        let w = cwFrac * board.width
-        return CGRect(x: board.minX + centerFrac * board.width - w / 2,
-                      y: innerTop + CGFloat(v.vRow) * cellH,
-                      width: w, height: cellH)
+    /// Inverse of `visual()`: FINAL visual (vRow,vCol) -> engine (row,col).
+    static func engine(vRow: Int, vCol: Int, flipped: Bool) -> (row: Int, col: Int) {
+        var r = vRow, c = vCol
+        if flipped { r = 1 - r; c = cols - 1 - c }       // undo flip
+        let row = r
+        let col = (r == 0) ? (cols - 1 - c) : c           // undo top-row reversal
+        return (row, col)
     }
 
-    func stacksDownward(row: Int, col: Int, flipped: Bool) -> Bool {
+    /// Engine (row,col) for slot i (0..5, left→right) of a quadrant.
+    static func coord(_ q: Quadrant, _ i: Int, flipped: Bool) -> (row: Int, col: Int) {
+        let vRow: Int, vCol: Int
+        switch q {
+        case .topLeft:  vRow = 0; vCol = i
+        case .botLeft:  vRow = 1; vCol = i
+        case .topRight: vRow = 0; vCol = 6 + i
+        case .botRight: vRow = 1; vCol = 6 + i
+        }
+        return engine(vRow: vRow, vCol: vCol, flipped: flipped)
+    }
+
+    /// True when the point sits on the visual TOP row (checkers stack downward).
+    static func stacksDownward(row: Int, col: Int, flipped: Bool) -> Bool {
         visual(row: row, col: col, flipped: flipped).vRow == 0
     }
 
-    func hitTest(_ point: CGPoint, flipped: Bool) -> (row: Int, col: Int)? {
-        guard point.y >= innerTop, point.y < innerTop + innerHeight,
-              point.x >= board.minX, point.x < board.maxX else { return nil }
-        var vRow = (point.y < innerTop + cellH) ? 0 : 1
-        let xfrac = (point.x - board.minX) / board.width
-        let rightHalf = xfrac >= 0.5
-        let a = anchor(vRow: vRow, rightHalf: rightHalf)
-        let cwFrac = (a.c5 - a.c0) / 5
-        let localCol = Int(((xfrac - a.c0) / cwFrac).rounded())
-        guard localCol >= 0, localCol < Self.cols / 2 else { return nil }
-        var vCol = localCol + (rightHalf ? Self.cols / 2 : 0)
-        if flipped { vRow = 1 - vRow; vCol = Self.cols - 1 - vCol }
-        let row = vRow
-        let col = (vRow == 0) ? (Self.cols - 1 - vCol) : vCol
-        return (row, col)
+    /// One checker's on-screen diameter for a slot of the given size. Shared by the
+    /// static stacks (PointView) and the flight layer so they line up exactly.
+    static func checkerDiameter(cellW: CGFloat, cellH: CGFloat) -> CGFloat {
+        min(cellW * 0.82, cellH * 0.40)
+    }
+    static let stackOverlap: CGFloat = 0.52   // fraction of a diameter each stacked checker advances
+    static let maxShown = 5
+}
+
+/// Uniform pixel metrics for the flight/replay animation, built from the two leaf
+/// frames captured (in the board coordinate space) by `LeafFrameKey`.
+struct BoardMetrics {
+    let leftLeaf: CGRect
+    let rightLeaf: CGRect
+    var ready: Bool { leftLeaf.width > 0 && rightLeaf.width > 0 }
+
+    func cellRect(row: Int, col: Int, flipped: Bool) -> CGRect {
+        let v = BoardMap.visual(row: row, col: col, flipped: flipped)
+        let rightHalf = v.vCol >= 6
+        let leaf = rightHalf ? rightLeaf : leftLeaf
+        let localCol = rightHalf ? v.vCol - 6 : v.vCol
+        let cw = leaf.width / 6, ch = leaf.height / 2
+        return CGRect(x: leaf.minX + CGFloat(localCol) * cw,
+                      y: leaf.minY + CGFloat(v.vRow) * ch, width: cw, height: ch)
+    }
+
+    /// Stack-base anchor + checker diameter + which half the point is in.
+    func anchor(row: Int, col: Int, flipped: Bool) -> (pt: CGPoint, d: CGFloat, rightHalf: Bool)? {
+        guard ready else { return nil }
+        let v = BoardMap.visual(row: row, col: col, flipped: flipped)
+        let cell = cellRect(row: row, col: col, flipped: flipped)
+        let d = BoardMap.checkerDiameter(cellW: cell.width, cellH: cell.height)
+        let down = v.vRow == 0
+        let y = down ? cell.minY + d / 2 + 2 : cell.maxY - d / 2 - 2
+        return (CGPoint(x: cell.midX, y: y), d, v.vCol >= 6)
+    }
+}
+
+/// Captures the two leaf frames (keyed by isRightHalf) so the flight layer can
+/// position sliding checkers in the same "board" coordinate space.
+struct LeafFrameKey: PreferenceKey {
+    static var defaultValue: [Bool: CGRect] = [:]
+    static func reduce(value: inout [Bool: CGRect], nextValue: () -> [Bool: CGRect]) {
+        value.merge(nextValue()) { _, n in n }
     }
 }

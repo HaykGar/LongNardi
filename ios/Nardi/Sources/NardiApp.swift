@@ -12,6 +12,8 @@ struct NardiApp: App {
                 .environmentObject(game)
                 .environmentObject(analyze)
                 .environmentObject(store)
+                .preferredColorScheme(.dark)   // v2 is a fixed warm-dark theme
+                .tint(Palette.accentSoft)
         }
     }
 }

@@ -181,6 +181,13 @@ final class NardiGame: ObservableObject {
     var reviewSide: Bool { mode == .vsComputer ? !humanIsWhite : false }
     var hasReview: Bool { !reviewLog.isEmpty }
 
+    /// Combined startable squares (either die), for the green start dots.
+    var startMaskCombined: Int { startMasks.0 | startMasks.1 }
+    /// Whether a colour has begun bearing off (drives the "Off n/15" badges). The
+    /// engine exposes no all-home flag, so "endgame" = at least one checker off.
+    var whiteEndgame: Bool { whiteOff > 0 }
+    var blackEndgame: Bool { blackOff > 0 }
+
     init() {
         guard let h = nardi_create(), let v = nardi_create(), let r = nardi_create() else {
             fatalError("nardi_create failed")
@@ -615,7 +622,7 @@ final class NardiGame: ObservableObject {
         isAnimating = true
         var disp = move.before
         board = disp
-        let dur = UInt64(BoardCanvas.flightDuration * 1_000_000_000)
+        let dur = UInt64(AnimationSpeed.flightDuration * 1_000_000_000)
         for m in move.subs {
             if let (r, c) = m.from { disp[r * Self.cols + c] -= move.moverSign }   // lift off source
             board = disp

@@ -1,131 +1,158 @@
 import SwiftUI
 
-/// Persisted analyzer display prefs (independently toggleable, e.g. hide both to
-/// play a live game vs vzg0 with no hints, or keep suggestions on to read its move).
+/// Persisted analyzer display prefs (independently toggleable).
 enum AnalyzerDisplay {
     static let showEvalKey = "nardi.showEvalBar"
     static let showSuggestionsKey = "nardi.showSuggestions"
 }
 
-/// Top-level Analyze container: the position editor, then the analysis board.
+/// Analyze container (mockup 2a editor + 2b analyzer). Landscape: board on the
+/// left, controls on the right. Drives `AnalyzeGame` (engine-backed).
 struct AnalyzeScreen: View {
     @EnvironmentObject var game: AnalyzeGame
     var onExit: () -> Void
-    @AppStorage(AnimationSpeed.storageKey) private var animSpeed: AnimationSpeed = .high
+    @AppStorage(AnimationSpeed.storageKey) private var speed: AnimationSpeed = .high
     @AppStorage(AnalyzerDisplay.showEvalKey) private var showEvalBar = true
     @AppStorage(AnalyzerDisplay.showSuggestionsKey) private var showSuggestions = true
     @AppStorage(BoardFlip.storageKey) private var autoFlip = true
+    @State private var menuOpen = false
 
     var body: some View {
-        VStack(spacing: 8) {
-            HStack {
-                Menu {
-                    Menu {
-                        Picker("Animation Speed", selection: $animSpeed) {
-                            ForEach(AnimationSpeed.allCases) { Text($0.rawValue).tag($0) }
-                        }
-                    } label: {
-                        Label("Animation Speed: \(animSpeed.rawValue)", systemImage: "speedometer")
-                    }
-                    Toggle(isOn: $showEvalBar) { Label("Show eval bar", systemImage: "gauge.with.dots.needle.bottom.50percent") }
-                    Toggle(isOn: $showSuggestions) { Label("Show engine moves", systemImage: "lightbulb") }
-                    Toggle(isOn: $autoFlip) { Label("Flip board each turn", systemImage: "arrow.triangle.2.circlepath") }
-                    Divider()
-                    Button { onExit() } label: { Label("Close analysis", systemImage: "xmark") }
-                } label: {
-                    Label("Menu", systemImage: "line.3.horizontal").font(.callout)
-                }
-                Spacer()
-                Text(game.phase == .editing ? "Set Up Position" : "Analysis")
-                    .font(.headline)
-                Spacer()
-                if game.phase == .analyzing {
-                    Button("Edit") { game.backToEditor() }.font(.callout)
-                } else {
-                    Color.clear.frame(width: 44, height: 1)   // balance the title
-                }
+        ZStack(alignment: .topLeading) {
+            RadialBackground(surface: .analysis)
+            VStack(spacing: 8) {
+                topBar
+                if game.phase == .editing { EditorBody() } else { AnalysisBody() }
             }
-            .padding(.horizontal)
-
-            if game.phase == .editing { EditorBody() } else { AnalysisBody() }
+            .padding(.top, 8)
+            if menuOpen { menuPopover.padding(.leading, 16).padding(.top, 54) }
         }
-        .padding(.top, 8)
         .onChange(of: autoFlip) { _, _ in game.refreshFlip() }
+    }
+
+    private var topBar: some View {
+        HStack {
+            CircleIconButton(systemName: "line.3.horizontal", kind: .wood, size: 36) { menuOpen.toggle() }
+            Spacer()
+            Text(game.phase == .editing ? "Set Up Position" : game.modeLabel)
+                .font(ThemeFont.screenTitle).foregroundStyle(Palette.cream)
+            Spacer()
+            if game.phase == .analyzing {
+                Button("Edit") { game.backToEditor() }
+                    .font(ThemeFont.bodyStrong).foregroundStyle(Palette.creamDim)
+                    .frame(width: 44)
+            } else {
+                Button("Close") { onExit() }
+                    .font(ThemeFont.bodyStrong).foregroundStyle(Palette.creamDim)
+                    .frame(width: 44)
+            }
+        }
+        .padding(.horizontal, 16)
+    }
+
+    private var menuPopover: some View {
+        ParchmentCard {
+            VStack(alignment: .leading, spacing: 10) {
+                SectionLabel(text: "Animation speed", color: Palette.parchmentInk.opacity(0.6))
+                SegmentedChips(options: AnimationSpeed.allCases, selection: $speed, context: .parchment) { $0.rawValue }
+                Toggle(isOn: $showEvalBar) { Text("Show eval bar").font(ThemeFont.bodyStrong) }.toggleStyle(.flip)
+                Toggle(isOn: $showSuggestions) { Text("Show engine moves").font(ThemeFont.bodyStrong) }.toggleStyle(.flip)
+                Toggle(isOn: $autoFlip) { Text("Flip board each turn").font(ThemeFont.bodyStrong) }.toggleStyle(.flip)
+                Divider().background(Palette.parchmentEdge.opacity(0.25))
+                Button { menuOpen = false; onExit() } label: {
+                    Label(game.isReviewSession ? "Exit game review" : "Close analysis", systemImage: "xmark")
+                        .font(ThemeFont.bodyStrong).foregroundStyle(Palette.destructiveInk)
+                }
+                .buttonStyle(.plain)
+            }
+        }
+        .transition(.opacity)
     }
 }
 
-// MARK: - Editor
+// MARK: - Editor (2a)
 
 private struct EditorBody: View {
     @EnvironmentObject var game: AnalyzeGame
 
     var body: some View {
-        VStack(spacing: 10) {
-            HStack {
-                bankBadge(white: true)
-                Spacer()
-                bankBadge(white: false)
-            }.padding(.horizontal)
-
-            BoardCanvas(board: game.board, flipped: false, selected: nil,
-                        flights: [],
-                        onTap: { r, c in game.tapCellEditor(row: r, col: c) },
-                        onLongPress: { r, c in game.longPressCellEditor(row: r, col: c) })
-                .padding(.horizontal, 6)
-
-            Text("Tap to add the active colour · long-press to remove")
-                .font(.caption2).foregroundStyle(.secondary)
-
-            Picker("Active", selection: $game.activeColor) {
-                Text("White").tag(false); Text("Black").tag(true)
-            }.pickerStyle(.segmented).padding(.horizontal)
-
-            HStack(spacing: 16) {
-                Toggle("White endgame", isOn: Binding(
-                    get: { game.endgameWhite }, set: { game.setEndgame(false, $0) })).font(.caption)
-                Toggle("Black endgame", isOn: Binding(
-                    get: { game.endgameBlack }, set: { game.setEndgame(true, $0) })).font(.caption)
-            }.padding(.horizontal)
-
-            HStack {
-                Text("First to move").font(.caption).foregroundStyle(.secondary)
-                Picker("Side", selection: $game.sideToMove) {
-                    Text("White").tag(false); Text("Black").tag(true)
-                }.pickerStyle(.segmented).frame(maxWidth: 180)
-            }.padding(.horizontal)
-
-            HStack(spacing: 14) {
-                Button("Clear") { game.clearBoard() }.buttonStyle(.bordered)
-                Button("Std start") { game.standardStart() }.buttonStyle(.bordered)
+        HStack(alignment: .center, spacing: 18) {
+            VStack(spacing: 6) {
+                BoardCanvas(board: game.board, flipped: false, selected: nil,
+                            whitePips: game.editorPipCounts.white, blackPips: game.editorPipCounts.black,
+                            whiteOff: game.whiteOff, blackOff: game.blackOff,
+                            whiteEndgame: game.whiteEndgame, blackEndgame: game.blackEndgame,
+                            showPips: game.validationError == nil,
+                            onTap: { r, c in game.tapCellEditor(row: r, col: c) },
+                            onLongPress: { r, c in game.longPressCellEditor(row: r, col: c) })
+                Text("Tap a point to add · switch to Erase to remove")
+                    .font(ThemeFont.micro).foregroundStyle(Palette.muted)
             }
+            .frame(maxWidth: .infinity)
 
-            Text(game.validationError ?? (game.modelLoaded ? "Ready to analyze." : "⚠️ model blob missing"))
-                .font(.caption).foregroundStyle(game.canAnalyze ? .green : .secondary)
-                .multilineTextAlignment(.center).frame(minHeight: 18)
+            ScrollView {
+                VStack(alignment: .leading, spacing: 12) {
+                    SectionLabel(text: "Place / Remove")
+                    SegmentedChips(options: [EditTool.white, .black, .erase], selection: $game.editTool,
+                                   context: .onDark) { t in t == .white ? "White" : t == .black ? "Black" : "Erase" }
+                    Text("On board — White \(game.placed(false)) · Black \(game.placed(true))")
+                        .font(ThemeFont.micro).foregroundStyle(Palette.muted)
 
-            Button { game.startAnalysis() } label: {
-                Label("Analyze", systemImage: "play.fill").font(.title3.bold()).frame(maxWidth: .infinity)
+                    SectionLabel(text: "Dice")
+                    HStack(spacing: 16) {
+                        editorDie(0, value: game.die1)
+                        editorDie(1, value: game.die2)
+                    }
+
+                    HStack(spacing: 14) {
+                        Toggle(isOn: Binding(get: { game.endgameWhite }, set: { game.setEndgame(false, $0) })) {
+                            Text("White endgame").font(ThemeFont.micro)
+                        }.toggleStyle(.diceFromGame)
+                        Toggle(isOn: Binding(get: { game.endgameBlack }, set: { game.setEndgame(true, $0) })) {
+                            Text("Black endgame").font(ThemeFont.micro)
+                        }.toggleStyle(.diceFromGame)
+                    }
+
+                    HStack {
+                        SectionLabel(text: "First to move")
+                        Spacer()
+                        SegmentedChips(options: [false, true], selection: $game.sideToMove, context: .onDark) {
+                            $0 ? "Black" : "White"
+                        }.frame(width: 150)
+                    }
+
+                    HStack(spacing: 10) {
+                        Button("Clear") { game.clearBoard() }.buttonStyle(GhostPillButtonStyle())
+                        Button("Std start") { game.standardStart() }.buttonStyle(GhostPillButtonStyle())
+                    }
+
+                    Text(game.validationError ?? (game.modelLoaded ? "Ready to analyze." : "⚠️ model blob missing"))
+                        .font(ThemeFont.caption)
+                        .foregroundStyle(game.canAnalyze ? Palette.winText : Palette.muted)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+
+                    Button { game.startAnalysis() } label: { Label("Analyze", systemImage: "play.fill") }
+                        .buttonStyle(PrimaryCTAButtonStyle())
+                        .disabled(!game.canAnalyze)
+                        .opacity(game.canAnalyze ? 1 : 0.5)
+                }
+                .padding(.trailing, 4)
             }
-            .buttonStyle(.borderedProminent).padding(.horizontal, 40)
-            .disabled(!game.canAnalyze)
-
-            Spacer(minLength: 0)
+            .frame(width: 250)
         }
+        .padding(.horizontal, 16)
     }
 
-    private func bankBadge(white: Bool) -> some View {
-        let black = !white
-        return VStack(spacing: 2) {
-            Text(white ? "White" : "Black").font(.caption2).foregroundStyle(.secondary)
-            Text("bank \(game.bank(black))").font(.subheadline.monospacedDigit())
-            if game.isEndgame(black) {
-                Text("off \(game.borneOff(black))").font(.caption2).foregroundStyle(.secondary)
-            }
+    private func editorDie(_ which: Int, value: Int) -> some View {
+        HStack(spacing: 6) {
+            StepButton(symbol: "minus") { game.stepEditorDie(which, by: -1) }
+            DieFace(value: value, size: 40)
+            StepButton(symbol: "plus") { game.stepEditorDie(which, by: 1) }
         }
     }
 }
 
-// MARK: - Analysis
+// MARK: - Analyzer (2b)
 
 private struct AnalysisBody: View {
     @EnvironmentObject var game: AnalyzeGame
@@ -135,180 +162,165 @@ private struct AnalysisBody: View {
     var body: some View {
         VStack(spacing: 8) {
             if showEvalBar {
-                EvalBar(value: game.positionEval, anchor: game.originalSide ? "Black" : "White")
-                    .padding(.horizontal)
+                EvalBar(value: game.positionEval, anchor: game.originalSideName).padding(.horizontal, 16)
             }
+            HStack(alignment: .center, spacing: 16) {
+                BoardCanvas(board: game.board, flipped: game.flipped, selected: game.selected,
+                            flights: game.flights, startMask: game.startMaskCombined,
+                            whitePips: game.pipCounts.white, blackPips: game.pipCounts.black,
+                            whiteOff: game.whiteOff, blackOff: game.blackOff,
+                            whiteEndgame: game.whiteEndgame, blackEndgame: game.blackEndgame,
+                            onTap: { r, c in game.tap(row: r, col: c) })
+                    .frame(maxWidth: .infinity)
 
-            BoardCanvas(board: game.board, flipped: game.flipped, selected: game.selected,
-                        flights: game.flights,
-                        startMask: game.startMaskCombined,
-                        whitePips: game.pipCounts.white,
-                        blackPips: game.pipCounts.black,
-                        onTap: { r, c in game.tap(row: r, col: c) })
-                .padding(.horizontal, 6)
-
-            diceControls
-
-            if showSuggestions { engineMoves }
-
-            // Logged a full game from the standard start — save it to History to review.
-            if game.canSaveLog {
-                Button { game.saveLoggedGame() } label: {
-                    Label("Save game to History", systemImage: "square.and.arrow.down")
-                }
-                .buttonStyle(.borderedProminent).font(.callout)
+                rightPanel.frame(width: 236)
             }
-
-            // A small spinner next to the status while the background suggestion
-            // ranking runs — play stays fully interactive meanwhile (same frame, so
-            // nothing shifts).
-            HStack(spacing: 6) {
-                if game.isThinking { ProgressView().controlSize(.mini) }
-                Text(game.status).font(.caption).multilineTextAlignment(.center)
-            }
-            .frame(maxWidth: .infinity, minHeight: 16)
-
-            // Stepping through the reviewed game: are we still on it, or in a line
-            // that didn't happen?
-            if game.hasGameDice {
-                Text(game.onGameLine ? "On the game line — step forward with Follow ▸"
-                                     : "Exploring a line that didn't happen — Undo to rejoin the game")
-                    .font(.caption2)
-                    .foregroundStyle(game.onGameLine ? Color.secondary : Color.orange)
-                    .multilineTextAlignment(.center)
-            }
-
-            Spacer(minLength: 0)
-
-            // Pinned to the very bottom: Back · Confirm · (Follow / Pass), so the
-            // primary controls stay in a fixed spot regardless of what's above.
-            HStack(spacing: 16) {
-                if game.noLegalMoves {
-                    Button("Pass") { game.pass() }.buttonStyle(.bordered)
-                }
-                Button { game.undo() } label: { Label("Back", systemImage: "chevron.backward") }
-                    .buttonStyle(.bordered).disabled(!game.canUndo || game.isAnimating)
-                Button { game.confirm() } label: { Label("Confirm", systemImage: "checkmark") }
-                    .buttonStyle(.borderedProminent).disabled(!game.canConfirm)
-                if game.hasGameDice {
-                    Button { game.followGameMove() } label: { Label("Follow", systemImage: "chevron.forward.2") }
-                        .buttonStyle(.bordered).disabled(!game.canFollowGame)
-                }
-            }
-            .padding(.bottom, 10)
+            .padding(.horizontal, 16)
         }
     }
 
-    // Up to 3 engine-recommended moves for the current roll (vzg0, best first),
-    // shown as per-checker hops. Tap one to play it.
-    @ViewBuilder
-    private var engineMoves: some View {
+    private var rightPanel: some View {
+        VStack(spacing: 9) {
+            diceControls
+            if game.hasGameDice {
+                Toggle(isOn: Binding(get: { game.useGameDice }, set: { game.setUseGameDice($0) })) {
+                    Text("Dice from game").font(ThemeFont.micro).foregroundStyle(Palette.accentSoft)
+                }
+                .toggleStyle(.diceFromGame)
+                .disabled(game.movedThisTurn || game.isAnimating)
+                .padding(.horizontal, 11).padding(.vertical, 8)
+                .background(RoundedRectangle(cornerRadius: 10).fill(Palette.accentSoft.opacity(0.1)))
+            }
+            if showSuggestions { engineMoves }
+            if game.canSaveLog {
+                Button { game.saveLoggedGame() } label: { Label("Save game to History", systemImage: "square.and.arrow.down") }
+                    .buttonStyle(PrimaryCTAButtonStyle(cornerRadius: 10, minHeight: 40))
+            }
+            HStack(spacing: 6) {
+                if game.isThinking { ProgressView().controlSize(.mini) }
+                Text(game.status).font(ThemeFont.micro).foregroundStyle(Palette.muted)
+                    .multilineTextAlignment(.center)
+            }
+            .frame(maxWidth: .infinity, minHeight: 16)
+            if game.hasGameDice {
+                Text(game.onGameLine ? "On the game line — Follow ▸"
+                                     : "Off the game line — Back to rejoin")
+                    .font(.system(size: 10, weight: .semibold))
+                    .foregroundStyle(game.onGameLine ? Palette.muted : Palette.accentSoft)
+                    .multilineTextAlignment(.center)
+            }
+            Spacer(minLength: 0)
+            bottomControls
+        }
+    }
+
+    @ViewBuilder private var diceControls: some View {
+        let dice = game.orderedDice
+        HStack(spacing: 10) {
+            dieWithSteppers(slot: 0, spec: dice[0])
+            dieWithSteppers(slot: 1, spec: dice[1])
+        }
+        Button { game.randomizeDice() } label: {
+            Label("Roll random", systemImage: "arrow.triangle.2.circlepath")
+                .font(ThemeFont.caption).foregroundStyle(Palette.accentSoft)
+                .frame(maxWidth: .infinity).padding(.vertical, 8)
+                .background(RoundedRectangle(cornerRadius: 9).fill(Palette.fillWarm.opacity(0.08)))
+                .overlay(RoundedRectangle(cornerRadius: 9).stroke(Palette.strokeWarm.opacity(0.2), lineWidth: 1))
+        }
+        .buttonStyle(.plain)
+        .disabled(game.movedThisTurn || game.isAnimating || game.isTerminal)
+    }
+
+    private func dieWithSteppers(slot: Int, spec: (value: Int, hasStart: Bool, isFirst: Bool)) -> some View {
+        let locked = game.useGameDice || game.movedThisTurn || game.isAnimating || game.isTerminal
+        return HStack(spacing: 4) {
+            StepButton(symbol: "minus") { game.stepDie(slot: slot, by: -1) }.disabled(locked).opacity(locked ? 0.4 : 1)
+            DieFace(value: spec.value, style: .classic, primary: spec.isFirst, disabled: !spec.hasStart,
+                    size: 38) { game.toggleTryFirst() }
+            StepButton(symbol: "plus") { game.stepDie(slot: slot, by: 1) }.disabled(locked).opacity(locked ? 0.4 : 1)
+        }
+    }
+
+    @ViewBuilder private var engineMoves: some View {
         if game.diceApplied && !game.movedThisTurn && !game.topMoves.isEmpty {
-            VStack(spacing: 3) {
-                Text("Engine moves").font(.caption2).foregroundStyle(.secondary)
+            VStack(alignment: .leading, spacing: 4) {
+                SectionLabel(text: "Engine moves")
                 ForEach(Array(game.topMoves.enumerated()), id: \.element.id) { i, m in
                     Button { game.applyTopMove(i) } label: {
                         HStack {
-                            Text("\(i + 1).").font(.caption2.monospacedDigit()).foregroundStyle(.secondary)
-                            Text(m.label).font(.callout.monospacedDigit())
+                            Text("\(i + 1)").font(ThemeFont.micro).foregroundStyle(Palette.muted)
+                            Text(m.label).font(.system(size: 12.5, weight: .bold).monospacedDigit())
+                                .foregroundStyle(Palette.cream)
                             Spacer()
-                            Image(systemName: "play.circle").foregroundStyle(.secondary)
+                            Image(systemName: "play.circle").foregroundStyle(Palette.muted)
                         }
-                        .padding(.vertical, 5).padding(.horizontal, 12)
-                        .background(RoundedRectangle(cornerRadius: 6).fill(Color(.systemGray6)))
+                        .padding(.vertical, 8).padding(.horizontal, 11)
+                        .background(RoundedRectangle(cornerRadius: 10).fill(Palette.fillWarm.opacity(0.06)))
+                        .overlay(RoundedRectangle(cornerRadius: 10).stroke(Palette.strokeWarm.opacity(0.14), lineWidth: 1))
                     }
                     .buttonStyle(.plain).disabled(game.isAnimating)
                 }
             }
-            .padding(.horizontal, 24)
         }
     }
 
-    // Map a display slot (0 = first-try / D1, 1 = second-try / D2) to its engine die.
-    private func slotValue(_ slot: Int) -> Int {
-        game.dieIndex(forSlot: slot) == 0 ? game.die1 : game.die2
-    }
-    private func slotBinding(_ slot: Int) -> Binding<Int> {
-        game.dieIndex(forSlot: slot) == 0 ? $game.die1 : $game.die2
-    }
-
-    @ViewBuilder
-    private var diceControls: some View {
-        VStack(spacing: 6) {
-            // From game review: follow the game's actual dice, or unlock to explore
-            // alternate rolls.
+    private var bottomControls: some View {
+        HStack(spacing: 10) {
+            if game.noLegalMoves { Button("Pass") { game.pass() }.buttonStyle(GhostPillButtonStyle()) }
+            Button { game.undo() } label: { Label("Back", systemImage: "chevron.backward") }
+                .buttonStyle(GhostPillButtonStyle(disabled: !game.canUndo || game.isAnimating))
+                .disabled(!game.canUndo || game.isAnimating)
+            Button { game.confirm() } label: { Label("Confirm", systemImage: "checkmark") }
+                .buttonStyle(ConfirmPillButtonStyle())
+                .disabled(!game.canConfirm).opacity(game.canConfirm ? 1 : 0.5)
             if game.hasGameDice {
-                Toggle("Dice from game", isOn: Binding(
-                    get: { game.useGameDice }, set: { game.setUseGameDice($0) }))
-                    .font(.caption).fixedSize()
-                    .disabled(game.movedThisTurn || game.isAnimating)
-            }
-
-            // Steppers, in VISUAL (try) order — D1 is the die tried first, matching
-            // the dice shown below. Each binds to whichever engine die currently
-            // occupies that slot, so swapping the dice swaps the steppers too.
-            HStack(spacing: 12) {
-                Stepper("D1: \(slotValue(0))", value: slotBinding(0), in: 1...6).fixedSize()
-                Stepper("D2: \(slotValue(1))", value: slotBinding(1), in: 1...6).fixedSize()
-            }
-            .disabled(game.useGameDice || game.movedThisTurn || game.isAnimating || game.isTerminal)
-            .onChange(of: game.die1) { _, _ in game.diceChanged() }
-            .onChange(of: game.die2) { _, _ in game.diceChanged() }
-
-            // Move dice, same as the play screen: the left (accent-ringed) die is the
-            // one a tapped checker is played with first; tap either to reverse. A die
-            // greys when it has no legal start. (Tap a checker on the board to move.)
-            if game.diceApplied && !game.noLegalMoves {
-                HStack(spacing: 14) {
-                    ForEach(Array(game.orderedDice.enumerated()), id: \.offset) { _, d in
-                        AnalyzeDie(value: d.value, usable: d.hasStart, primary: d.isFirst) { game.toggleTryFirst() }
-                    }
-                }
+                Button { game.followGameMove() } label: { Image(systemName: "chevron.forward.2") }
+                    .buttonStyle(GhostPillButtonStyle(disabled: !game.canFollowGame))
+                    .disabled(!game.canFollowGame)
             }
         }
     }
 }
 
-/// The original-perspective eval bar, shared by analysis and (later) game review.
+// MARK: - Shared bits
+
+/// A small wood +/- stepper button.
+struct StepButton: View {
+    let symbol: String
+    let action: () -> Void
+    var body: some View {
+        Button(action: action) {
+            Image(systemName: symbol).font(.system(size: 13, weight: .heavy))
+                .foregroundStyle(Palette.buttonInk)
+                .frame(width: 26, height: 26)
+                .background(RoundedRectangle(cornerRadius: 7).fill(Palette.fillWarm.opacity(0.09)))
+                .overlay(RoundedRectangle(cornerRadius: 7).stroke(Palette.strokeWarm.opacity(0.2), lineWidth: 1))
+        }
+        .buttonStyle(.plain)
+    }
+}
+
+/// The eval bar (original-perspective), pinned to `anchor` (never hardcoded White).
 struct EvalBar: View {
     let value: Float?
     let anchor: String
     var body: some View {
         let v = value
         let frac = v.map { Double(max(-2, min(2, $0)) + 2) / 4 } ?? 0.5
-        return VStack(spacing: 2) {
-            HStack {
-                Text("Eval (\(anchor))").font(.caption).foregroundStyle(.secondary)
-                Spacer()
-                Text(v.map { String(format: "%+.3f", $0) } ?? "—")
-                    .font(.subheadline.monospacedDigit().bold())
-                    .foregroundColor((v ?? 0) >= 0 ? .green : .red)
-            }
+        return HStack(spacing: 10) {
+            Text("Eval · \(anchor)").font(ThemeFont.caption).foregroundStyle(Palette.muted)
+                .fixedSize()
             GeometryReader { geo in
                 ZStack(alignment: .leading) {
-                    Capsule().fill(Color(.systemGray5)).frame(height: 6)
-                    Capsule().fill((v ?? 0) >= 0 ? Color.green : Color.red)
-                        .frame(width: geo.size.width * frac, height: 6)
+                    Capsule().fill(Color.white.opacity(0.12)).frame(height: 8)
+                    Capsule().fill((v ?? 0) >= 0 ? Grad.evalBar : LinearGradient.horizontal(Palette.lossFill[1], Palette.lossFill[0]))
+                        .frame(width: max(0, geo.size.width * frac), height: 8)
                 }
-            }.frame(height: 6)
+                .frame(maxHeight: .infinity, alignment: .center)
+            }.frame(height: 8)
+            Text(v.map { String(format: "%+.3f", $0) } ?? "—")
+                .font(ThemeFont.evalValue).foregroundStyle((v ?? 0) >= 0 ? Palette.evalPos : Palette.evalNeg)
+                .fixedSize()
         }
-    }
-}
-
-private struct AnalyzeDie: View {
-    let value: Int
-    let usable: Bool                 // has a legal start this turn (else greyed)
-    var primary: Bool = false        // the die tried first (accent ring)
-    let action: () -> Void           // tapping reverses the try-order
-    var body: some View {
-        Button(action: action) {
-            Text("\(value)").font(.title2.monospacedDigit().bold())
-                .frame(width: 46, height: 46)
-                .background(RoundedRectangle(cornerRadius: 8).fill(usable ? Color(.systemGray5) : Color(.systemGray3)))
-                .foregroundColor(usable ? .primary : .secondary)
-                .overlay(RoundedRectangle(cornerRadius: 8).stroke(primary ? Color.accentColor : .clear, lineWidth: 3))
-                .opacity(usable ? 1 : 0.6)
-        }
-        // Always tappable (even when greyed): a tap just flips which die is tried first.
     }
 }

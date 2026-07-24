@@ -1,403 +1,187 @@
 import SwiftUI
 
-enum AppSection: String, CaseIterable, Identifiable {
-    case play = "Play"
-    case analyze = "Analyze"
-    case history = "History"
-    var id: String { rawValue }
+/// Top-level destinations. The Home hero is the root; the review screen is a
+/// separate overlay (@State review) that wins over `route`, reproducing v1's
+/// `if let review { … }` precedence so review open/close behaves identically.
+enum Route: Equatable {
+    case home, playSetup, game, analyze, history
 }
 
 struct ContentView: View {
     @EnvironmentObject var game: NardiGame
     @EnvironmentObject var analyze: AnalyzeGame
     @EnvironmentObject var store: MatchStore
-    @State private var section: AppSection = .play
-    @State private var showAnalyze = false
+
+    @State private var route: Route = .home
     @State private var review: GameReview? = nil
-    @State private var mode: GameMode = .vsComputer
-    @State private var opponent: Opponent = .medium
-    @State private var first: FirstMove = .first
-    @AppStorage(AnimationSpeed.storageKey) private var animSpeed: AnimationSpeed = .high
-    @AppStorage(BoardFlip.storageKey) private var autoFlip = true
+    @State private var reviewReturn: Route = .history   // where "Done" lands after review
 
     var body: some View {
         Group {
             if let review {
                 GameReviewView(review: review,
                                autoOpen: ProcessInfo.processInfo.arguments.contains("--review-analyze"),
-                               onExit: { self.review = nil })
+                               onExit: { self.review = nil; route = reviewReturn })
                     .environmentObject(analyze)
-            } else if showAnalyze {
-                AnalyzeScreen(onExit: { showAnalyze = false }).environmentObject(analyze)
-            } else if game.phase == .setup {
-                setupScreen
             } else {
-                gameScreen
+                switch route {
+                case .home:
+                    HomeView(store: store,
+                             onPlay:    { route = .playSetup },
+                             onAnalyze: { analyze.backToEditor(); route = .analyze },
+                             onHistory: { route = .history })
+                case .playSetup:
+                    PlaySetupView(onStart: startGame, onBack: { route = .home })
+                case .game:
+                    GameView(onQuit:    { game.backToSetup(); route = .home },
+                             onNewGame: { game.backToSetup(); route = .playSetup },
+                             onReview:  openReviewFromCurrentGame)
+                        .environmentObject(game)
+                case .analyze:
+                    AnalyzeScreen(onExit: { route = .home }).environmentObject(analyze)
+                case .history:
+                    HistoryView(store: store,
+                                onReview: { m in reviewReturn = .history; openReview(m) },
+                                onBack:   { route = .home })
+                }
             }
         }
-        .onAppear {
-            game.onGameFinished = { [weak store] in store?.add($0) }
-            analyze.onLogSaved = { [weak store] in store?.add($0) }
-            let args = ProcessInfo.processInfo.arguments
-            if args.contains("--seed-history") || args.contains("--seed-history-review") {
-                game.devSeedHistory()
-            }
-            // Dev: seed history then re-run review on the most recent match.
-            if args.contains("--seed-history-review"), let m = store.matches.first {
-                openReview(m)
-            }
-            if args.contains("--history") || args.contains("--seed-history") { section = .history }
-            if args.contains("--demo") || args.contains("--demo-move") {
-                game.newGame(mode: .vsComputer, opponent: .medium,
-                             first: args.contains("--black") ? .second : .first)
-            }
-            // Dev: start a game and offer a resignation on the human's turn, to verify
-            // accept/decline. --pnp uses pass & play (shows the check/x); else vs Hard.
-            if args.contains("--resign-oin") || args.contains("--resign-mars") {
-                let level: ResignLevel = args.contains("--resign-mars") ? .mars : .oin
-                game.newGame(mode: args.contains("--pnp") ? .passAndPlay : .vsComputer,
-                             opponent: .hard, first: .first)
-                Task { @MainActor in
-                    for _ in 0..<16 {
-                        if game.canOffer { game.offerResign(level); break }
-                        try? await Task.sleep(nanoseconds: 400_000_000)
-                    }
-                }
-            }
-            // Dev: play the human's turn out (tap a startable point until the turn is
-            // complete) so the center Undo + Confirm controls can be verified.
-            if args.contains("--demo-move") {
-                Task { @MainActor in
-                    for _ in 0..<30 {
-                        if game.phase == .awaitingHuman && !game.canConfirm && !game.isAnimating {
-                            let mask = game.startMasks.0 | game.startMasks.1
-                            if mask != 0 {
-                                let i = mask.trailingZeroBitCount
-                                game.tap(row: i / NardiGame.cols, col: i % NardiGame.cols)  // tap now moves
-                            }
-                        }
-                        if game.canConfirm { break }
-                        try? await Task.sleep(nanoseconds: 400_000_000)
-                    }
-                    // --demo-undo: take a hop back to verify dots/controls are restored.
-                    if args.contains("--demo-undo") {
-                        try? await Task.sleep(nanoseconds: 2_000_000_000)
-                        game.undo()
-                    }
-                }
-            }
-            // Dev hooks for verifying the Analyze flow: --analyze opens the editor
-            // pre-filled with the standard start; --analyze-run also starts the
-            // analysis and ranks the default dice.
-            // Dev: a spread-out mid-game position (White has checkers off the head) +
-            // a 6-3 roll, which has several legal moves — to verify top-3 suggestions.
-            if args.contains("--analyze-mid") {
-                section = .analyze
-                var b = [Int8](repeating: 0, count: 24)
-                b[0] = 11; b[3] = 1; b[5] = 1; b[7] = 1; b[9] = 1   // 15 white, spread
-                b[12] = -15                                         // 15 black on head
-                analyze.devSetup(board: b, side: false, d1: 6, d2: 3)
-                showAnalyze = true
-                // --analyze-swap: reverse the dice once, to verify D1/D2 + the dice
-                // below swap together (coupled to the visual order).
-                if args.contains("--analyze-swap") {
-                    DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) { analyze.toggleTryFirst() }
-                }
-            }
-            // Dev: a position where die 6 has NO legal start (both its landing points
-            // are blocked by black) but die 3 does — to verify the no-start die greys.
-            if args.contains("--analyze-block") {
-                section = .analyze
-                var b = [Int8](repeating: 0, count: 24)
-                b[0] = 13; b[1] = 2          // white: 13 on pt1 (head), 2 on pt2
-                b[6] = -2; b[7] = -2         // black blocks white's pt7 and pt8 (the +6 landings)
-                b[12] = -11                  // black head
-                analyze.devSetup(board: b, side: false, d1: 6, d2: 3)
-                showAnalyze = true
-            }
-            // Dev: open the analyzer in review mode with a 1-move game line, then
-            // Follow to its end (a NON-terminal position, like an early resignation),
-            // to verify you can keep playing past the end (dice auto-unlock).
-            if args.contains("--review-end") {
-                section = .analyze
-                var std = [Int8](repeating: 0, count: 24); std[0] = 15; std[12] = -15
-                var b2 = [Int8](repeating: 0, count: 24); b2[0] = 14; b2[11] = 1; b2[12] = -15
-                analyze.openForReview(board: std, side: false, anchor: false,
-                                      gameDice: [(6, 5)], gameLine: [std, b2])
-                showAnalyze = true
-                Task { @MainActor in
-                    try? await Task.sleep(nanoseconds: 800_000_000)
-                    analyze.followGameMove()   // step to the end of the line
-                }
-            }
-            if args.contains("--analyze") || args.contains("--analyze-run") {
-                section = .analyze
-                analyze.standardStart()
-                showAnalyze = true
-                if args.contains("--analyze-run") {
-                    analyze.startAnalysis()        // auto-applies the default dice
-                }
-            }
-            // Dev: open analysis and programmatically play one sub-move (select the
-            // white head, tap die 0) to verify move-playing works without taps.
-            if args.contains("--analyze-move") || args.contains("--analyze-undo") {
-                section = .analyze
-                analyze.standardStart()
-                analyze.startAnalysis()
-                showAnalyze = true
-                DispatchQueue.main.asyncAfter(deadline: .now() + 0.6) {
-                    analyze.tap(row: 0, col: 0)   // click-to-move the white head
-                    // --analyze-undo: take it back, exercising UndoLast (now recomputes
-                    // CheckForcedMoves) on the analyzer's engine — verify no crash/corruption.
-                    if args.contains("--analyze-undo") {
-                        DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) { analyze.undo() }
-                    }
-                }
-            }
-            if args.contains("--review") || args.contains("--review-analyze") {
-                game.devAutoPlayAndReview()
-                review = GameReview(log: game.reviewLog, reviewSide: game.reviewSide)
-            }
+        .onAppear(perform: wireCallbacksAndDevHooks)
+    }
+
+    // MARK: - Actions
+
+    private func startGame(_ cfg: PlayConfig) {
+        game.newGame(mode: cfg.mode, opponent: cfg.opponent, first: cfg.first)
+        route = .game
+    }
+
+    private func openReviewFromCurrentGame() {
+        reviewReturn = .game
+        if let id = game.lastMatchID, let m = store.matches.first(where: { $0.id == id }) {
+            openReview(m)
+        } else {
+            review = GameReview(log: game.reviewLog, reviewSide: game.reviewSide)
         }
     }
 
-    // MARK: - Setup
-
-    private var setupScreen: some View {
-        VStack(spacing: 18) {
-            Text("Nardi").font(.system(size: 40, weight: .bold)).padding(.top, 14)
-
-            Picker("Section", selection: $section) {
-                ForEach(AppSection.allCases) { Text($0.rawValue).tag($0) }
-            }.pickerStyle(.segmented).padding(.horizontal, 30)
-
-            switch section {
-            case .play:    playSetup
-            case .analyze: analyzeSetup
-            case .history: MatchHistoryView(store: store, onReview: openReview).padding(.top, 4)
-            }
-        }
-    }
-
-    private var playSetup: some View {
-        VStack(spacing: 22) {
-            Spacer()
-            Picker("Mode", selection: $mode) {
-                ForEach(GameMode.allCases) { Text($0.rawValue).tag($0) }
-            }.pickerStyle(.segmented)
-
-            if mode == .vsComputer {
-                VStack(spacing: 14) {
-                    labeledPicker("Opponent", selection: $opponent, options: Opponent.allCases) { $0.rawValue }
-                    labeledPicker("You", selection: $first, options: FirstMove.allCases) { $0.rawValue }
-                }
-            } else {
-                Text("Two players, one device.\nThe board flips each turn.")
-                    .multilineTextAlignment(.center).foregroundStyle(.secondary)
-            }
-
-            Button {
-                game.newGame(mode: mode, opponent: opponent, first: first)
-            } label: {
-                Text("Start Game").font(.title3.bold()).frame(maxWidth: .infinity)
-            }
-            .buttonStyle(.borderedProminent).padding(.horizontal, 40)
-            Spacer()
-        }
-        .padding(.horizontal)
-    }
-
-    private var analyzeSetup: some View {
-        VStack(spacing: 22) {
-            Spacer()
-            Text("Build any position, set the dice, and play moves by hand while the learned evaluator tracks how the eval swings.")
-                .multilineTextAlignment(.center).foregroundStyle(.secondary).padding(.horizontal, 30)
-            Button {
-                analyze.backToEditor()   // always start in the editor (shared model may be mid-analysis)
-                showAnalyze = true
-            } label: {
-                Text("Open Analysis").font(.title3.bold()).frame(maxWidth: .infinity)
-            }
-            .buttonStyle(.borderedProminent).padding(.horizontal, 40)
-            Spacer()
-        }
-        .padding(.horizontal)
-    }
-
-    /// Open game review for a stored match: reuse its cached review if present
-    /// (instant), otherwise compute once and cache the result back onto the match.
+    /// Open review for a stored match, reusing its cached review or computing + caching once.
     private func openReview(_ match: SavedMatch) {
         review = GameReview(log: match.reviewTurns, reviewSide: match.reviewSide,
                             cached: match.review,
                             onComputed: { [weak store] data in store?.setReview(match.id, data) })
     }
 
-    private func labeledPicker<T: Hashable & Identifiable>(
-        _ label: String, selection: Binding<T>, options: [T], title: @escaping (T) -> String
-    ) -> some View {
-        HStack {
-            Text(label).frame(width: 90, alignment: .leading)
-            Picker(label, selection: selection) {
-                ForEach(options) { Text(title($0)).tag($0) }
-            }.pickerStyle(.menu)
-            Spacer()
+    // MARK: - Dev / verification launch hooks (preserved from v1; destinations → route)
+
+    private func wireCallbacksAndDevHooks() {
+        // MUST be first: devSeedHistory() calls onGameFinished synchronously, which
+        // --seed-history-review then reads back from the store.
+        game.onGameFinished = { [weak store] in store?.add($0) }
+        analyze.onLogSaved = { [weak store] in store?.add($0) }
+        let args = ProcessInfo.processInfo.arguments
+
+        if args.contains("--seed-history") || args.contains("--seed-history-review") {
+            game.devSeedHistory()
         }
-        .padding(.horizontal, 30)
-    }
+        if args.contains("--seed-history-review"), let m = store.matches.first {
+            reviewReturn = .history
+            openReview(m)
+        }
+        if args.contains("--history") || args.contains("--seed-history") { route = .history }
 
-    // MARK: - Game
-
-    private var gameScreen: some View {
-        VStack(spacing: 10) {
-            HStack {
-                offBadge(label: "White off", count: game.whiteOff, white: true)
-                Spacer()
-                Menu {
-                    Menu {
-                        Picker("Animation Speed", selection: $animSpeed) {
-                            ForEach(AnimationSpeed.allCases) { Text($0.rawValue).tag($0) }
-                        }
-                    } label: {
-                        Label("Animation Speed: \(animSpeed.rawValue)", systemImage: "speedometer")
-                    }
-                    // Pass & play flips the board each turn; let players turn that off.
-                    if game.isPassAndPlay {
-                        Toggle(isOn: $autoFlip) {
-                            Label("Flip board each turn", systemImage: "arrow.triangle.2.circlepath")
-                        }
-                    }
-                    Divider()
-                    Button(role: .destructive) { game.backToSetup() } label: {
-                        Label("Quit to main menu", systemImage: "house")
-                    }
-                } label: {
-                    Label("Menu", systemImage: "line.3.horizontal").font(.callout)
+        if args.contains("--demo") || args.contains("--demo-move") {
+            game.newGame(mode: .vsComputer, opponent: .medium,
+                         first: args.contains("--black") ? .second : .first)
+            route = .game
+        }
+        // Start a game and offer a resignation on the human's turn (verify accept/decline).
+        if args.contains("--resign-oin") || args.contains("--resign-mars") {
+            let level: ResignLevel = args.contains("--resign-mars") ? .mars : .oin
+            game.newGame(mode: args.contains("--pnp") ? .passAndPlay : .vsComputer,
+                         opponent: .hard, first: .first)
+            route = .game
+            Task { @MainActor in
+                for _ in 0..<16 {
+                    if game.canOffer { game.offerResign(level); break }
+                    try? await Task.sleep(nanoseconds: 400_000_000)
                 }
-                Spacer()
-                // Resign: offer the opponent a single (oin) or a mars (double).
-                Menu {
-                    Button { game.offerResign(.oin) } label: { Label("Offer single (oin)", systemImage: "flag") }
-                    Button(role: .destructive) { game.offerResign(.mars) } label: { Label("Offer mars (double)", systemImage: "flag.checkered") }
-                } label: {
-                    Label("Resign", systemImage: "flag.fill").font(.callout)
-                }
-                .disabled(!game.canOffer)
-                Spacer()
-                offBadge(label: "Black off", count: game.blackOff, white: false)
             }
-            .padding(.horizontal)
-            .onChange(of: autoFlip) { _, _ in game.refreshFlip() }
-
-            // Undo lives at the board's center bar (per the reference UI): a circular
-            // control that appears when the in-progress turn has a hop to take back.
-            BoardView().environmentObject(game).padding(.horizontal, 6)
-                .overlay {
-                    if game.canUndo {
-                        Button { game.undo() } label: {
-                            Image(systemName: "arrow.counterclockwise")
-                                .font(.system(size: 15, weight: .bold))
-                                .foregroundColor(.white)
-                                .frame(width: 32, height: 32)
-                                .background(Circle().fill(Color.black.opacity(0.6)))
-                                .overlay(Circle().stroke(Color.white.opacity(0.6), lineWidth: 1))
-                                .shadow(radius: 2)
+        }
+        // Play the human's turn out so the center Undo + Confirm controls can be verified.
+        if args.contains("--demo-move") {
+            Task { @MainActor in
+                for _ in 0..<30 {
+                    if game.phase == .awaitingHuman && !game.canConfirm && !game.isAnimating {
+                        let mask = game.startMasks.0 | game.startMasks.1
+                        if mask != 0 {
+                            let i = mask.trailingZeroBitCount
+                            game.tap(row: i / NardiGame.cols, col: i % NardiGame.cols)
                         }
-                        .transition(.scale.combined(with: .opacity))
                     }
+                    if game.canConfirm { break }
+                    try? await Task.sleep(nanoseconds: 400_000_000)
                 }
-                .animation(.easeInOut(duration: 0.15), value: game.canUndo)
-
-            Text(game.status).font(.callout).multilineTextAlignment(.center)
-                .frame(maxWidth: .infinity, minHeight: 24)
-
-            if game.pendingResign != nil {
-                // Pass & play: the opponent accepts (green check) or declines (red x).
-                HStack(spacing: 44) {
-                    Button { game.respondResign(accept: false) } label: {
-                        Image(systemName: "xmark.circle.fill").font(.system(size: 48)).foregroundStyle(.red)
-                    }
-                    Button { game.respondResign(accept: true) } label: {
-                        Image(systemName: "checkmark.circle.fill").font(.system(size: 48)).foregroundStyle(.green)
-                    }
+                if args.contains("--demo-undo") {
+                    try? await Task.sleep(nanoseconds: 2_000_000_000)
+                    game.undo()
                 }
-                .padding(.bottom, 6)
-            } else {
-                // Static control bar: dice · dice · Confirm · Replay. Nothing appears or
-                // disappears between moves — Replay simply greys out when there's no
-                // opponent move to re-watch.
-                HStack(spacing: 14) {
-                    // Two dice in try-order: the left (accent-ringed) is tried first when
-                    // a checker is tapped. Tapping either die reverses that order. A die
-                    // greys out the moment it has no legal start.
-                    ForEach(Array(game.orderedDice.enumerated()), id: \.offset) { _, d in
-                        DieButton(value: d.value, usable: d.hasStart, primary: d.isFirst) { game.toggleTryFirst() }
-                    }
-                    Button { game.confirm() } label: {
-                        Label("Confirm", systemImage: "checkmark").font(.callout)
-                    }
-                    .buttonStyle(.borderedProminent)
-                    .disabled(!game.canConfirm)
-                    Button { game.replayLastMove() } label: {
-                        Label(game.lastMoveDice.map { "Replay \($0.0)-\($0.1)" } ?? "Replay",
-                              systemImage: "play.circle").font(.callout)
-                    }
-                    .buttonStyle(.bordered)
-                    .disabled(!game.canReplay)
-                }
-                .padding(.bottom, 6)
             }
-
-            if case let .gameOver(message) = game.phase {
-                VStack(spacing: 8) {
-                    Text(message).font(.title2.bold())
-                    HStack(spacing: 14) {
-                        if game.hasReview {
-                            Button {
-                                // Open via the archived match so the computed review is cached.
-                                if let id = game.lastMatchID, let m = store.matches.first(where: { $0.id == id }) {
-                                    openReview(m)
-                                } else {
-                                    review = GameReview(log: game.reviewLog, reviewSide: game.reviewSide)
-                                }
-                            } label: { Label("Review", systemImage: "chart.line.uptrend.xyaxis") }
-                                .buttonStyle(.bordered)
-                        }
-                        Button("New Game") { game.backToSetup() }.buttonStyle(.borderedProminent)
-                    }
-                }
-                .padding(.bottom, 12)
+        }
+        // A spread-out mid-game position + a 6-3 roll (several legal moves) → verify top-3.
+        if args.contains("--analyze-mid") {
+            var b = [Int8](repeating: 0, count: 24)
+            b[0] = 11; b[3] = 1; b[5] = 1; b[7] = 1; b[9] = 1
+            b[12] = -15
+            analyze.devSetup(board: b, side: false, d1: 6, d2: 3)
+            route = .analyze
+            if args.contains("--analyze-swap") {
+                DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) { analyze.toggleTryFirst() }
             }
-            Spacer(minLength: 0)
         }
-        .padding(.top, 8)
-    }
-
-    private func offBadge(label: String, count: Int, white: Bool) -> some View {
-        VStack(spacing: 2) {
-            Text(label).font(.caption2).foregroundStyle(.secondary)
-            Text("\(count)").font(.headline.monospacedDigit())
-                .foregroundColor(white ? .primary : .primary)
+        // Die 6 has no legal start (blocked) but die 3 does — verify the no-start die greys.
+        if args.contains("--analyze-block") {
+            var b = [Int8](repeating: 0, count: 24)
+            b[0] = 13; b[1] = 2
+            b[6] = -2; b[7] = -2
+            b[12] = -11
+            analyze.devSetup(board: b, side: false, d1: 6, d2: 3)
+            route = .analyze
         }
-    }
-}
-
-private struct DieButton: View {
-    let value: Int
-    let usable: Bool                 // has a legal start this turn (else greyed)
-    var primary: Bool = false        // the die tried first (accent ring)
-    let action: () -> Void           // tapping reverses the try-order
-    var body: some View {
-        Button(action: action) {
-            Text(value > 0 ? "\(value)" : "–")
-                .font(.title.monospacedDigit().bold())
-                .frame(width: 52, height: 52)
-                .background(RoundedRectangle(cornerRadius: 8)
-                    .fill(usable ? Color(.systemGray5) : Color(.systemGray3)))
-                .foregroundColor(usable ? .primary : .secondary)
-                .overlay(RoundedRectangle(cornerRadius: 8)
-                    .stroke(primary ? Color.accentColor : Color.clear, lineWidth: 3))
-                .opacity(usable ? 1 : 0.6)
+        // Open the analyzer in review mode on a 1-move line, then Follow to its end
+        // (a non-terminal position) to verify you can keep playing past the end.
+        if args.contains("--review-end") {
+            var std = [Int8](repeating: 0, count: 24); std[0] = 15; std[12] = -15
+            var b2 = [Int8](repeating: 0, count: 24); b2[0] = 14; b2[11] = 1; b2[12] = -15
+            analyze.openForReview(board: std, side: false, anchor: false,
+                                  gameDice: [(6, 5)], gameLine: [std, b2])
+            route = .analyze
+            Task { @MainActor in
+                try? await Task.sleep(nanoseconds: 800_000_000)
+                analyze.followGameMove()
+            }
         }
-        // Always tappable (even when greyed): a tap just flips which die is tried first.
+        if args.contains("--analyze") || args.contains("--analyze-run") {
+            analyze.standardStart()
+            route = .analyze
+            if args.contains("--analyze-run") { analyze.startAnalysis() }
+        }
+        // Open analysis and play one sub-move programmatically (verify move-playing).
+        if args.contains("--analyze-move") || args.contains("--analyze-undo") {
+            analyze.standardStart()
+            analyze.startAnalysis()
+            route = .analyze
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.6) {
+                analyze.tap(row: 0, col: 0)
+                if args.contains("--analyze-undo") {
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) { analyze.undo() }
+                }
+            }
+        }
+        if args.contains("--review") || args.contains("--review-analyze") {
+            game.devAutoPlayAndReview()
+            reviewReturn = .home
+            review = GameReview(log: game.reviewLog, reviewSide: game.reviewSide)
+        }
     }
 }

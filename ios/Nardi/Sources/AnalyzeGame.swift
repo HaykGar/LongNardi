@@ -17,6 +17,9 @@ struct TopMove: Identifiable, Sendable {
 
 enum AnalyzePhase: Equatable { case editing, analyzing }
 
+/// Editor tool: place a white/black checker, or erase one.
+enum EditTool: Equatable { case white, black, erase }
+
 /// Analysis sandbox: build an arbitrary position in the editor, then set the dice
 /// and play moves out by hand, watching the eval swing. The evaluation is pinned
 /// to the side to move chosen at setup ("original side"); the board still flips to
@@ -29,7 +32,10 @@ final class AnalyzeGame: ObservableObject {
     nonisolated static let pieces = 15
 
     // Editor
-    @Published var activeColor: Bool = false      // false = white, true = black
+    @Published var editTool: EditTool = .white     // place white / black, or erase
+    /// Bridging accessor kept for the existing add-logic (false = white, true = black).
+    var activeColor: Bool { editTool == .black }
+    func setEditTool(_ t: EditTool) { editTool = t; status = "" }
     @Published var endgameWhite = false
     @Published var endgameBlack = false
     @Published var sideToMove: Bool = false        // who moves first in analysis
@@ -40,6 +46,10 @@ final class AnalyzeGame: ObservableObject {
     @Published private(set) var flipped = false
     @Published private(set) var phase: AnalyzePhase = .editing
     @Published private(set) var status = ""
+    /// True when this analysis was opened from game review (shows the "Dice from
+    /// game" follow + "Exit game review", and titles the screen accordingly).
+    @Published private(set) var isReviewSession = false
+    var modeLabel: String { isReviewSession ? "Game Review" : "Analysis" }
 
     // Analysis
     @Published private(set) var originalSide: Bool = false
@@ -143,6 +153,17 @@ final class AnalyzeGame: ObservableObject {
     func borneOff(_ black: Bool) -> Int { isEndgame(black) ? Self.pieces - placed(black) : 0 }
     func isEndgame(_ black: Bool) -> Bool { black ? endgameBlack : endgameWhite }
 
+    /// On-board checkers of a colour on the LIVE analysis board (not the editor bank).
+    private func onLiveBoard(_ black: Bool) -> Int {
+        board.reduce(0) { $0 + (black ? max(0, -Int($1)) : max(0, Int($1))) }
+    }
+    /// Borne-off counts for the board currently shown — analysis: 15 − on-board;
+    /// editor: the endgame-gated bank. Drives the bear-off trays / "Off n/15" badge.
+    var whiteOff: Int { phase == .analyzing ? Self.pieces - onLiveBoard(false) : borneOff(false) }
+    var blackOff: Int { phase == .analyzing ? Self.pieces - onLiveBoard(true)  : borneOff(true) }
+    var whiteEndgame: Bool { whiteOff > 0 }
+    var blackEndgame: Bool { blackOff > 0 }
+
     // MARK: - Editor
 
     func clearBoard() {
@@ -172,6 +193,7 @@ final class AnalyzeGame: ObservableObject {
     }
 
     func tapCellEditor(row: Int, col: Int) {
+        if editTool == .erase { longPressCellEditor(row: row, col: col); return }
         let black = activeColor
         guard bank(black) > 0 else { status = "\(black ? "Black" : "White") bank is empty."; return }
         let idx = row * Self.cols + col
@@ -235,6 +257,7 @@ final class AnalyzeGame: ObservableObject {
         }
         originalSide = sideToMove
         currentSide = sideToMove
+        isReviewSession = false
         flipped = flipFor(currentSide)                 // on-move player's head sits top-right
         editorBoard.withUnsafeBufferPointer { _ = nardi_set_position(handle, $0.baseAddress, sideToMove ? 1 : 0) }
         board = engineBoard()
@@ -257,6 +280,7 @@ final class AnalyzeGame: ObservableObject {
 
     func backToEditor() {
         phase = .editing
+        isReviewSession = false
         board = editorBoard
         resetTurnState()            // also abandons any in-flight search (bumps searchGen)
         onGameLine = false          // editor isn't on a game line; avoids reading the engine here
@@ -275,6 +299,7 @@ final class AnalyzeGame: ObservableObject {
         board = b
         originalSide = anchor          // eval frame = reviewed player
         currentSide = side             // who actually moves here
+        isReviewSession = true
         flipped = flipFor(side)
         b.withUnsafeBufferPointer { _ = nardi_set_position(handle, $0.baseAddress, side ? 1 : 0) }
         history = []
@@ -636,6 +661,49 @@ final class AnalyzeGame: ObservableObject {
         setDice()
     }
 
+    /// Analyzer die stepper (slot 0 = first-try box, 1 = second). Maps the display
+    /// slot to the engine die so the steppers stay coupled to the shown order, then
+    /// re-applies via the existing dice path.
+    func stepDie(slot: Int, by delta: Int) {
+        guard phase == .analyzing, !isAnimating, !movedThisTurn, !isTerminal, !useGameDice else { return }
+        let clamp = { (v: Int) in max(1, min(6, v)) }
+        if dieIndex(forSlot: slot) == 0 { die1 = clamp(die1 + delta) } else { die2 = clamp(die2 + delta) }
+        diceChanged()
+    }
+
+    /// "Roll random" — display setup only (no game rules leak into Swift). Rolling
+    /// means exploring freely, so unlock the game-dice follow first.
+    func randomizeDice() {
+        guard phase == .analyzing, !isAnimating, !movedThisTurn, !isTerminal else { return }
+        if useGameDice { useGameDice = false }
+        die1 = Int.random(in: 1...6)
+        die2 = Int.random(in: 1...6)
+        setDice()
+    }
+
+    /// Editor die stepper (before analysis; clamps the values consumed by
+    /// startAnalysis -> autoApplyDice). `which`: 0 = D1, 1 = D2.
+    func stepEditorDie(_ which: Int, by delta: Int) {
+        let clamp = { (v: Int) in max(1, min(6, v)) }
+        if which == 0 { die1 = clamp(die1 + delta) } else { die2 = clamp(die2 + delta) }
+    }
+
+    /// The frame the analysis eval is pinned to (chosen at setup), for labelling.
+    var originalSideName: String { originalSide ? "Black" : "White" }
+
+    /// Pip counts for the current EDITOR board, computed on the idle eval handle
+    /// (editing phase only). (0,0) when the position can't be set.
+    var editorPipCounts: (white: Int, black: Int) {
+        guard phase == .editing else { return (0, 0) }
+        let ok = editorBoard.withUnsafeBufferPointer {
+            nardi_set_position(evalHandle, $0.baseAddress, 0) == NARDI_OK
+        }
+        guard ok else { return (0, 0) }
+        var pips = [Int32](repeating: 0, count: 2)
+        guard nardi_pip_counts(evalHandle, &pips) == NARDI_OK else { return (0, 0) }
+        return (Int(pips[0]), Int(pips[1]))
+    }
+
     /// Toggle locking the dice to the reviewed game's roll at this relative turn.
     func setUseGameDice(_ on: Bool) {
         guard phase == .analyzing, !isAnimating, !movedThisTurn, hasGameDice else { return }
@@ -849,7 +917,7 @@ final class AnalyzeGame: ObservableObject {
         let moverSign = Self.sign(currentSide)   // the side making the move (turn not switched yet)
         isAnimating = true
         var disp = board
-        let dur = UInt64(BoardCanvas.flightDuration * 1_000_000_000)
+        let dur = UInt64(AnimationSpeed.flightDuration * 1_000_000_000)
         for m in subs {
             if let (r, c) = m.from { disp[r * Self.cols + c] -= moverSign }
             board = disp

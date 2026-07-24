@@ -106,3 +106,28 @@ final class MatchStore: ObservableObject {
         try? data.write(to: url, options: .atomic)
     }
 }
+
+// MARK: - Home stats (presentational aggregation over stored matches)
+
+extension MatchStore {
+    /// Matches that count toward the player's record: only vs-computer games are a
+    /// personal win/loss. Pass&play (two humans) and logged self-play are excluded.
+    private var ratedMatches: [SavedMatch] { matches.filter { $0.opponentRaw != nil } }
+
+    var wins: Int { ratedMatches.filter(\.reviewedSideWon).count }
+
+    /// 0...1; 0 when there are no rated games yet.
+    var winRate: Double {
+        let n = ratedMatches.count
+        return n == 0 ? 0 : Double(wins) / Double(n)
+    }
+    /// Whole-percent win rate for display.
+    var winRatePercent: Int { Int((winRate * 100).rounded()) }
+
+    /// Consecutive most-recent wins (rated games only; matches are newest-first).
+    var currentStreak: Int {
+        var n = 0
+        for m in ratedMatches { if m.reviewedSideWon { n += 1 } else { break } }
+        return n
+    }
+}

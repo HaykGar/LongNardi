@@ -118,6 +118,19 @@ final class GameReview: ObservableObject {
         return points[pointIndex...].map { $0.board }
     }
 
+    /// Pip counts for the scrubbed position at `index`, from the engine (idle eval
+    /// handle — used only during compute(), free afterward; @MainActor).
+    func pipCounts(at index: Int) -> (white: Int, black: Int) {
+        guard index >= 0, index < points.count else { return (0, 0) }
+        let p = points[index]
+        p.board.withUnsafeBufferPointer {
+            _ = nardi_set_position(evalHandle, $0.baseAddress, p.sideToMove ? 1 : 0)
+        }
+        var pips = [Int32](repeating: 0, count: 2)
+        guard nardi_pip_counts(evalHandle, &pips) == NARDI_OK else { return (0, 0) }
+        return (Int(pips[0]), Int(pips[1]))
+    }
+
     /// Async so the "Analyzing…" spinner stays live: the engine calls run on the
     /// main actor (it isn't thread-safe), but we yield between turns.
     func compute() async {
