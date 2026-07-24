@@ -178,9 +178,7 @@ struct TutorialView: View {
         .onAppear {
             if !started {
                 started = true
-                // vs-computer, human second → the computer opens with an animated
-                // move, landing us on the human's first (interactive) turn.
-                game.newGame(mode: .vsComputer, opponent: .medium, first: .second)
+                game.setupTutorial()   // fixed position + dice, instant, no bot
             }
             if startStep > 0 { step = min(startStep, steps.count - 1) }
         }
@@ -201,7 +199,7 @@ struct TutorialView: View {
     // Interactive board (dice + on-board ✓ come from BoardView) + undo/status/replay.
     private var boardArea: some View {
         VStack(spacing: 6) {
-            BoardView()
+            BoardView(alwaysShowConfirm: true)          // ✓ stays visible, greys until ready
                 .environmentObject(game)
                 .aspectRatio(1.95, contentMode: .fit)   // tight bounds → bigger board + snug glow
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -265,18 +263,20 @@ struct TutorialView: View {
         .transition(.opacity)
     }
 
+    // Illustrative only — the options don't fire (resigning would end the tutorial
+    // game). The popup just shows where resign lives; tapping an option dismisses it.
     private var resignPopover: some View {
         ParchmentCard(width: 200) {
             VStack(alignment: .leading, spacing: 8) {
                 SectionLabel(text: "Offer to resign", color: Palette.parchmentInk.opacity(0.6))
-                Button { menuResign = false; game.offerResign(.oin) } label: {
+                Button { menuResign = false } label: {
                     Label("Single (oin)", systemImage: "flag").font(ThemeFont.bodyStrong)
                         .frame(maxWidth: .infinity, alignment: .leading)
                         .padding(.vertical, 8).padding(.horizontal, 10)
                         .background(RoundedRectangle(cornerRadius: 9).fill(Palette.parchmentEdge.opacity(0.1)))
                 }
                 .buttonStyle(.plain).foregroundStyle(Palette.parchmentInk)
-                Button { menuResign = false; game.offerResign(.mars) } label: {
+                Button { menuResign = false } label: {
                     Label("Mars (double)", systemImage: "flag.checkered").font(ThemeFont.bodyStrong)
                         .frame(maxWidth: .infinity, alignment: .leading)
                         .padding(.vertical, 8).padding(.horizontal, 10)
@@ -354,7 +354,7 @@ struct TutorialView: View {
             return CGRect(x: b.midX - 58, y: b.midY - 30, width: 116, height: 60)
         case .confirm:
             guard let b = bounds(.greenDots) else { return nil }
-            return CGRect(x: b.midX - 52, y: b.midY + b.height * 0.19 - 22, width: 104, height: 44)
+            return CGRect(x: b.midX - 34, y: b.midY + b.height * 0.19 - 21, width: 68, height: 42)
         default:
             return bounds(t)
         }

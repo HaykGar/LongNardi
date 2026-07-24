@@ -4,6 +4,7 @@ import SwiftUI
 /// vector `BoardCanvas` and routes taps / dice-toggle / confirm back to the game.
 struct BoardView: View {
     @EnvironmentObject var game: NardiGame
+    var alwaysShowConfirm = false          // tutorial: keep the ✓ present but greyed
     @AppStorage(BoardTheme.storageKey) private var boardThemeRaw = BoardTheme.green.rawValue
     @AppStorage(PipDisplay.storageKey) private var showPips = true
 
@@ -28,6 +29,7 @@ struct BoardView: View {
                 ? game.orderedDice.map { DieSpec(value: $0.value, hasStart: $0.hasStart, isFirst: $0.isFirst) }
                 : [],
             canConfirm: game.canConfirm,
+            alwaysShowConfirm: alwaysShowConfirm,
             onTap: { row, col in game.tap(row: row, col: col) },
             onToggleDice: { game.toggleTryFirst() },
             onConfirm: { game.confirm() }

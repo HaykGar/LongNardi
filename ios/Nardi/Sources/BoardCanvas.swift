@@ -27,6 +27,9 @@ struct BoardCanvas: View {
     var dice: [DieSpec] = []
     /// On-board confirm pill (play screen only), shown centred when true.
     var canConfirm: Bool = false
+    /// When true the ✓ pill is ALWAYS present, greyed + disabled unless canConfirm
+    /// (used by the tutorial so the control stays visible while being explained).
+    var alwaysShowConfirm: Bool = false
     var onTap: (Int, Int) -> Void
     var onLongPress: ((Int, Int) -> Void)? = nil
     var onToggleDice: (() -> Void)? = nil
@@ -99,11 +102,14 @@ struct BoardCanvas: View {
                     }
                 }
             }
-            if canConfirm {
-                Button { onConfirm?() } label: {
+            if canConfirm || alwaysShowConfirm {
+                Button { if canConfirm { onConfirm?() } } label: {
                     Image(systemName: "checkmark").font(.system(size: 18, weight: .heavy))
                 }
                 .buttonStyle(ConfirmPillButtonStyle())
+                .disabled(!canConfirm)
+                .grayscale(canConfirm ? 0 : 1)
+                .opacity(canConfirm ? 1 : 0.45)
                 .offset(y: size.height * 0.19)
             }
             // Pip badges drawn on TOP of the board (over the centre bar) so 3-digit

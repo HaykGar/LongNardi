@@ -100,7 +100,8 @@ struct ContentView: View {
         if args.contains("--history") || args.contains("--seed-history") { route = .history }
         if args.contains("--tutorial") { route = .tutorialChooser }
         if args.contains("--tour") { route = .tutorial }
-        if args.contains("--tour-undo") { tourStart = 3; route = .tutorial }   // dev: verify a chrome glow
+        if args.contains("--tour-undo") { tourStart = 3; route = .tutorial }      // dev: chrome glow
+        if args.contains("--tour-confirm") { tourStart = 2; route = .tutorial }   // dev: confirm glow
 
         if args.contains("--demo") || args.contains("--demo-move") {
             game.newGame(mode: .vsComputer, opponent: .medium,
