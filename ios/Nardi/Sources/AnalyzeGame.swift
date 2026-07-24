@@ -36,8 +36,6 @@ final class AnalyzeGame: ObservableObject {
     /// Bridging accessor kept for the existing add-logic (false = white, true = black).
     var activeColor: Bool { editTool == .black }
     func setEditTool(_ t: EditTool) { editTool = t; status = "" }
-    @Published var endgameWhite = false
-    @Published var endgameBlack = false
     @Published var sideToMove: Bool = false        // who moves first in analysis
     @Published private(set) var editorBoard: [Int8] = Array(repeating: 0, count: cells)
 
@@ -50,12 +48,15 @@ final class AnalyzeGame: ObservableObject {
     /// game" follow + "Exit game review", and titles the screen accordingly).
     @Published private(set) var isReviewSession = false
     var modeLabel: String { isReviewSession ? "Game Review" : "Analysis" }
+    /// True when the editor was opened via "Edit" from an active analysis, so
+    /// closing the editor returns to that analysis rather than exiting to Home.
+    @Published private(set) var cameFromAnalysis = false
 
     // Analysis
     @Published private(set) var originalSide: Bool = false
     @Published private(set) var currentSide: Bool = false
     @Published var die1 = 3
-    @Published var die2 = 5
+    @Published var die2 = 3          // default 3-3; edited in the analyzer, not the editor
     @Published private(set) var diceApplied = false
     // Stored (not computed off the engine) so SwiftUI can read it during render
     // without calling into the C++ engine on every layout pass.
@@ -151,7 +152,25 @@ final class AnalyzeGame: ObservableObject {
     }
     func bank(_ black: Bool) -> Int { Self.pieces - placed(black) }
     func borneOff(_ black: Bool) -> Int { isEndgame(black) ? Self.pieces - placed(black) : 0 }
-    func isEndgame(_ black: Bool) -> Bool { black ? endgameBlack : endgameWhite }
+
+    /// Every on-board checker of a colour sits in its home quadrant (bearing off is
+    /// possible), so a sub-15 count means the rest are already borne off.
+    func allHome(_ black: Bool) -> Bool {
+        for row in 0..<2 {
+            for col in 0..<Self.cols {
+                let v = Int(editorBoard[row * Self.cols + col])
+                let isThisColour = black ? (v < 0) : (v > 0)
+                if isThisColour && !Self.inHome(row: row, col: col, black: black) { return false }
+            }
+        }
+        return true
+    }
+    /// Auto-detected endgame: fewer than 15 on board AND all remaining are home
+    /// (so 15 − placed have been borne off). No manual toggle.
+    func isEndgame(_ black: Bool) -> Bool {
+        let p = placed(black)
+        return p > 0 && p < Self.pieces && allHome(black)
+    }
 
     /// On-board checkers of a colour on the LIVE analysis board (not the editor bank).
     private func onLiveBoard(_ black: Bool) -> Int {
@@ -177,7 +196,6 @@ final class AnalyzeGame: ObservableObject {
         var b = [Int8](repeating: 0, count: Self.cells)
         b[0] = 15            // white head (0,0)
         b[Self.cols] = -15   // black head (1,0)
-        endgameWhite = false; endgameBlack = false
         editorBoard = b; board = b
         status = ""
     }
@@ -185,7 +203,6 @@ final class AnalyzeGame: ObservableObject {
     /// Dev/testing: drop in a board + side + dice and start analysis (used by the
     /// --analyze-mid launch hook to reach a multi-move position).
     func devSetup(board b: [Int8], side: Bool, d1: Int, d2: Int) {
-        endgameWhite = false; endgameBlack = false
         editorBoard = b; board = b
         sideToMove = side
         die1 = d1; die2 = d2
@@ -202,10 +219,6 @@ final class AnalyzeGame: ObservableObject {
             status = "A point holds one colour only."
             return
         }
-        if isEndgame(black) && !Self.inHome(row: row, col: col, black: black) {
-            status = "Endgame: \(black ? "black" : "white") may only go in its home board."
-            return
-        }
         editorBoard[idx] = cur + Self.sign(black)
         board = editorBoard
         status = ""
@@ -220,30 +233,15 @@ final class AnalyzeGame: ObservableObject {
         status = ""
     }
 
-    /// When endgame is toggled ON, any of that colour outside its home board is
-    /// illegal; clear those so the position stays valid.
-    func setEndgame(_ black: Bool, _ on: Bool) {
-        if black { endgameBlack = on } else { endgameWhite = on }
-        guard on else { return }
-        var b = editorBoard
-        for row in 0..<2 {
-            for col in 0..<Self.cols where !Self.inHome(row: row, col: col, black: black) {
-                let idx = row * Self.cols + col
-                if b[idx] != 0 && (b[idx] > 0) == !black { b[idx] = 0 }   // this colour, outside home
-            }
-        }
-        editorBoard = b; board = b
-    }
-
-    /// nil when the position is valid to analyze; otherwise the reason.
+    /// nil when the position is valid to analyze; otherwise the reason. Endgame is
+    /// auto-detected: a sub-15 count is valid iff every remaining checker is home.
     var validationError: String? {
         for black in [false, true] {
             let p = placed(black), name = black ? "Black" : "White"
             if p == 0 { return "\(name) needs at least one checker." }
-            if isEndgame(black) {
-                if p > Self.pieces { return "\(name): too many checkers." }
-            } else if p != Self.pieces {
-                return "\(name): place all \(Self.pieces) (\(p) placed) or enable endgame."
+            if p > Self.pieces { return "\(name): too many checkers." }
+            if p < Self.pieces && !allHome(black) {
+                return "\(name): place all \(Self.pieces) (\(p) placed), or move the rest into the home board to bear off."
             }
         }
         return nil
@@ -266,7 +264,7 @@ final class AnalyzeGame: ObservableObject {
         gameDiceScript = []; gameLineBoards = []; hasGameDice = false; useGameDice = false; relTurn = 0   // free
         // A standard-opening start can be logged + reviewed as a full game.
         var std = [Int8](repeating: 0, count: Self.cells); std[0] = 15; std[Self.cols] = -15
-        startedFromStandard = (editorBoard == std && !endgameWhite && !endgameBlack)
+        startedFromStandard = (editorBoard == std)
         loggedTurns = []
         loggedSaved = false
         resetTurnState()
@@ -278,14 +276,20 @@ final class AnalyzeGame: ObservableObject {
         autoApplyDice()   // apply the default dice so play + eval show immediately
     }
 
-    func backToEditor() {
+    /// Enter the position editor. `fromAnalysis` = reached via the analyzer's "Edit"
+    /// (so the editor's close returns to the analysis, not Home).
+    func backToEditor(fromAnalysis: Bool = false) {
         phase = .editing
         isReviewSession = false
+        cameFromAnalysis = fromAnalysis
         board = editorBoard
         resetTurnState()            // also abandons any in-flight search (bumps searchGen)
         onGameLine = false          // editor isn't on a game line; avoids reading the engine here
         status = ""
     }
+
+    /// Return to analysis from the editor (re-analyzes the current editor position).
+    func resumeAnalysis() { startAnalysis() }
 
     /// Open the analyzer directly on a position (from game review), skipping the
     /// editor. `side` is the position's side to move (so moves play correctly);

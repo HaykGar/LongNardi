@@ -24,6 +24,7 @@ struct AnalyzeScreen: View {
                 topBar
                 if game.phase == .editing { EditorBody() } else { AnalysisBody() }
             }
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
             .padding(.top, 8)
             if menuOpen { menuPopover.padding(.leading, 16).padding(.top, 54) }
         }
@@ -37,17 +38,22 @@ struct AnalyzeScreen: View {
             Text(game.phase == .editing ? "Set Up Position" : game.modeLabel)
                 .font(ThemeFont.screenTitle).foregroundStyle(Palette.cream)
             Spacer()
-            if game.phase == .analyzing {
-                Button("Edit") { game.backToEditor() }
-                    .font(ThemeFont.bodyStrong).foregroundStyle(Palette.creamDim)
-                    .frame(width: 44)
-            } else {
-                Button("Close") { onExit() }
-                    .font(ThemeFont.bodyStrong).foregroundStyle(Palette.creamDim)
-                    .frame(width: 44)
-            }
+            rightBarButton.frame(width: 72, alignment: .trailing)
         }
         .padding(.horizontal, 16)
+    }
+
+    @ViewBuilder private var rightBarButton: some View {
+        if game.phase == .analyzing {
+            Button("Edit") { game.backToEditor(fromAnalysis: true) }
+                .font(ThemeFont.bodyStrong).foregroundStyle(Palette.creamDim)
+        } else if game.cameFromAnalysis {
+            Button { game.resumeAnalysis() } label: { Label("Back", systemImage: "chevron.left") }
+                .font(ThemeFont.bodyStrong).foregroundStyle(Palette.creamDim)
+        } else {
+            Button("Close") { onExit() }
+                .font(ThemeFont.bodyStrong).foregroundStyle(Palette.creamDim)
+        }
     }
 
     private var menuPopover: some View {
@@ -80,8 +86,8 @@ private struct EditorBody: View {
             VStack(spacing: 6) {
                 BoardCanvas(board: game.board, flipped: false, selected: nil,
                             whitePips: game.editorPipCounts.white, blackPips: game.editorPipCounts.black,
-                            whiteOff: game.whiteOff, blackOff: game.blackOff,
-                            whiteEndgame: game.whiteEndgame, blackEndgame: game.blackEndgame,
+                            whiteOff: game.borneOff(false), blackOff: game.borneOff(true),
+                            whiteEndgame: game.isEndgame(false), blackEndgame: game.isEndgame(true),
                             showPips: game.validationError == nil,
                             onTap: { r, c in game.tapCellEditor(row: r, col: c) },
                             onLongPress: { r, c in game.longPressCellEditor(row: r, col: c) })
@@ -90,65 +96,45 @@ private struct EditorBody: View {
             }
             .frame(maxWidth: .infinity)
 
-            ScrollView {
-                VStack(alignment: .leading, spacing: 12) {
-                    SectionLabel(text: "Place / Remove")
-                    SegmentedChips(options: [EditTool.white, .black, .erase], selection: $game.editTool,
-                                   context: .onDark) { t in t == .white ? "White" : t == .black ? "Black" : "Erase" }
-                    Text("On board — White \(game.placed(false)) · Black \(game.placed(true))")
-                        .font(ThemeFont.micro).foregroundStyle(Palette.muted)
+            VStack(spacing: 10) {
+                ScrollView {
+                    VStack(alignment: .leading, spacing: 12) {
+                        SectionLabel(text: "Place / Remove")
+                        SegmentedChips(options: [EditTool.white, .black, .erase], selection: $game.editTool,
+                                       context: .onDark) { t in t == .white ? "White" : t == .black ? "Black" : "Erase" }
+                        Text("On board — White \(game.placed(false)) · Black \(game.placed(true))")
+                            .font(ThemeFont.micro).foregroundStyle(Palette.muted)
 
-                    SectionLabel(text: "Dice")
-                    HStack(spacing: 16) {
-                        editorDie(0, value: game.die1)
-                        editorDie(1, value: game.die2)
+                        HStack {
+                            SectionLabel(text: "First to move")
+                            Spacer()
+                            SegmentedChips(options: [false, true], selection: $game.sideToMove, context: .onDark) {
+                                $0 ? "Black" : "White"
+                            }.frame(width: 150)
+                        }
+
+                        HStack(spacing: 10) {
+                            Button("Clear") { game.clearBoard() }.buttonStyle(GhostPillButtonStyle())
+                            Button("Std start") { game.standardStart() }.buttonStyle(GhostPillButtonStyle())
+                        }
+
+                        Text(game.validationError ?? (game.modelLoaded ? "Ready to analyze." : "⚠️ model blob missing"))
+                            .font(ThemeFont.caption)
+                            .foregroundStyle(game.canAnalyze ? Palette.winText : Palette.muted)
+                            .frame(maxWidth: .infinity, alignment: .leading)
                     }
-
-                    HStack(spacing: 14) {
-                        Toggle(isOn: Binding(get: { game.endgameWhite }, set: { game.setEndgame(false, $0) })) {
-                            Text("White endgame").font(ThemeFont.micro)
-                        }.toggleStyle(.diceFromGame)
-                        Toggle(isOn: Binding(get: { game.endgameBlack }, set: { game.setEndgame(true, $0) })) {
-                            Text("Black endgame").font(ThemeFont.micro)
-                        }.toggleStyle(.diceFromGame)
-                    }
-
-                    HStack {
-                        SectionLabel(text: "First to move")
-                        Spacer()
-                        SegmentedChips(options: [false, true], selection: $game.sideToMove, context: .onDark) {
-                            $0 ? "Black" : "White"
-                        }.frame(width: 150)
-                    }
-
-                    HStack(spacing: 10) {
-                        Button("Clear") { game.clearBoard() }.buttonStyle(GhostPillButtonStyle())
-                        Button("Std start") { game.standardStart() }.buttonStyle(GhostPillButtonStyle())
-                    }
-
-                    Text(game.validationError ?? (game.modelLoaded ? "Ready to analyze." : "⚠️ model blob missing"))
-                        .font(ThemeFont.caption)
-                        .foregroundStyle(game.canAnalyze ? Palette.winText : Palette.muted)
-                        .frame(maxWidth: .infinity, alignment: .leading)
-
-                    Button { game.startAnalysis() } label: { Label("Analyze", systemImage: "play.fill") }
-                        .buttonStyle(PrimaryCTAButtonStyle())
-                        .disabled(!game.canAnalyze)
-                        .opacity(game.canAnalyze ? 1 : 0.5)
+                    .padding(.trailing, 4)
                 }
-                .padding(.trailing, 4)
+                // Pinned so it never scrolls out of reach.
+                Button { game.startAnalysis() } label: { Label("Analyze", systemImage: "play.fill") }
+                    .buttonStyle(PrimaryCTAButtonStyle())
+                    .disabled(!game.canAnalyze)
+                    .opacity(game.canAnalyze ? 1 : 0.5)
             }
             .frame(width: 250)
         }
-        .padding(.horizontal, 16)
-    }
-
-    private func editorDie(_ which: Int, value: Int) -> some View {
-        HStack(spacing: 6) {
-            StepButton(symbol: "minus") { game.stepEditorDie(which, by: -1) }
-            DieFace(value: value, size: 40)
-            StepButton(symbol: "plus") { game.stepEditorDie(which, by: 1) }
-        }
+        .frame(maxHeight: .infinity)
+        .padding(.horizontal, 16).padding(.bottom, 10)
     }
 }
 
@@ -160,7 +146,7 @@ private struct AnalysisBody: View {
     @AppStorage(AnalyzerDisplay.showSuggestionsKey) private var showSuggestions = true
 
     var body: some View {
-        VStack(spacing: 8) {
+        VStack(spacing: 6) {
             if showEvalBar {
                 EvalBar(value: game.positionEval, anchor: game.originalSideName).padding(.horizontal, 16)
             }
@@ -170,18 +156,21 @@ private struct AnalysisBody: View {
                             whitePips: game.pipCounts.white, blackPips: game.pipCounts.black,
                             whiteOff: game.whiteOff, blackOff: game.blackOff,
                             whiteEndgame: game.whiteEndgame, blackEndgame: game.blackEndgame,
-                            onTap: { r, c in game.tap(row: r, col: c) })
+                            canConfirm: game.canConfirm,           // on-board ✓ pill when the turn is done
+                            onTap: { r, c in game.tap(row: r, col: c) },
+                            onConfirm: { game.confirm() })
                     .frame(maxWidth: .infinity)
 
                 rightPanel.frame(width: 236)
             }
-            .padding(.horizontal, 16)
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .padding(.horizontal, 16).padding(.bottom, 10)
         }
     }
 
     private var rightPanel: some View {
         VStack(spacing: 9) {
-            diceControls
+            diceControls                                 // fixed at the top
             if game.hasGameDice {
                 Toggle(isOn: Binding(get: { game.useGameDice }, set: { game.setUseGameDice($0) })) {
                     Text("Dice from game").font(ThemeFont.micro).foregroundStyle(Palette.accentSoft)
@@ -191,26 +180,33 @@ private struct AnalysisBody: View {
                 .padding(.horizontal, 11).padding(.vertical, 8)
                 .background(RoundedRectangle(cornerRadius: 10).fill(Palette.accentSoft.opacity(0.1)))
             }
-            if showSuggestions { engineMoves }
-            if game.canSaveLog {
-                Button { game.saveLoggedGame() } label: { Label("Save game to History", systemImage: "square.and.arrow.down") }
-                    .buttonStyle(PrimaryCTAButtonStyle(cornerRadius: 10, minHeight: 40))
+            // Scrolls, so the bottom bar below never moves with the suggestions list.
+            ScrollView {
+                VStack(spacing: 8) {
+                    if showSuggestions { engineMoves }
+                    if game.canSaveLog {
+                        Button { game.saveLoggedGame() } label: {
+                            Label("Save game to History", systemImage: "square.and.arrow.down")
+                        }
+                        .buttonStyle(PrimaryCTAButtonStyle(cornerRadius: 10, minHeight: 40))
+                    }
+                    HStack(spacing: 6) {
+                        if game.isThinking { ProgressView().controlSize(.mini) }
+                        Text(game.status).font(ThemeFont.micro).foregroundStyle(Palette.muted)
+                            .multilineTextAlignment(.center)
+                    }
+                    .frame(maxWidth: .infinity, minHeight: 16)
+                    if game.hasGameDice {
+                        Text(game.onGameLine ? "On the game line — Follow ▸"
+                                             : "Off the game line — Back to rejoin")
+                            .font(.system(size: 10, weight: .semibold))
+                            .foregroundStyle(game.onGameLine ? Palette.muted : Palette.accentSoft)
+                            .multilineTextAlignment(.center)
+                    }
+                }
             }
-            HStack(spacing: 6) {
-                if game.isThinking { ProgressView().controlSize(.mini) }
-                Text(game.status).font(ThemeFont.micro).foregroundStyle(Palette.muted)
-                    .multilineTextAlignment(.center)
-            }
-            .frame(maxWidth: .infinity, minHeight: 16)
-            if game.hasGameDice {
-                Text(game.onGameLine ? "On the game line — Follow ▸"
-                                     : "Off the game line — Back to rejoin")
-                    .font(.system(size: 10, weight: .semibold))
-                    .foregroundStyle(game.onGameLine ? Palette.muted : Palette.accentSoft)
-                    .multilineTextAlignment(.center)
-            }
-            Spacer(minLength: 0)
-            bottomControls
+            .frame(maxHeight: .infinity)
+            bottomControls                               // fixed at the bottom
         }
     }
 
@@ -264,19 +260,24 @@ private struct AnalysisBody: View {
         }
     }
 
+    // Back (left, fixed) · Pass (centre, when no legal move) · Follow (right, review only).
+    // Confirm is NOT here — it appears on the board centre when the turn is complete.
     private var bottomControls: some View {
         HStack(spacing: 10) {
-            if game.noLegalMoves { Button("Pass") { game.pass() }.buttonStyle(GhostPillButtonStyle()) }
             Button { game.undo() } label: { Label("Back", systemImage: "chevron.backward") }
                 .buttonStyle(GhostPillButtonStyle(disabled: !game.canUndo || game.isAnimating))
                 .disabled(!game.canUndo || game.isAnimating)
-            Button { game.confirm() } label: { Label("Confirm", systemImage: "checkmark") }
-                .buttonStyle(ConfirmPillButtonStyle())
-                .disabled(!game.canConfirm).opacity(game.canConfirm ? 1 : 0.5)
+            Spacer(minLength: 0)
+            if game.noLegalMoves {
+                Button("Pass") { game.pass() }.buttonStyle(GhostPillButtonStyle())
+            }
+            Spacer(minLength: 0)
             if game.hasGameDice {
                 Button { game.followGameMove() } label: { Image(systemName: "chevron.forward.2") }
                     .buttonStyle(GhostPillButtonStyle(disabled: !game.canFollowGame))
                     .disabled(!game.canFollowGame)
+            } else {
+                Color.clear.frame(width: 40, height: 1)   // keep Back anchored left
             }
         }
     }
@@ -308,8 +309,7 @@ struct EvalBar: View {
         let v = value
         let frac = v.map { Double(max(-2, min(2, $0)) + 2) / 4 } ?? 0.5
         return HStack(spacing: 10) {
-            Text("Eval · \(anchor)").font(ThemeFont.caption).foregroundStyle(Palette.muted)
-                .fixedSize()
+            Text("Eval · \(anchor)").font(ThemeFont.caption).foregroundStyle(Palette.muted).fixedSize()
             GeometryReader { geo in
                 ZStack(alignment: .leading) {
                     Capsule().fill(Color.white.opacity(0.12)).frame(height: 8)
@@ -319,8 +319,7 @@ struct EvalBar: View {
                 .frame(maxHeight: .infinity, alignment: .center)
             }.frame(height: 8)
             Text(v.map { String(format: "%+.3f", $0) } ?? "—")
-                .font(ThemeFont.evalValue).foregroundStyle((v ?? 0) >= 0 ? Palette.evalPos : Palette.evalNeg)
-                .fixedSize()
+                .font(ThemeFont.evalValue).foregroundStyle((v ?? 0) >= 0 ? Palette.evalPos : Palette.evalNeg).fixedSize()
         }
     }
 }

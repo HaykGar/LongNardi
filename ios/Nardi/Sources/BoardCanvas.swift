@@ -100,9 +100,11 @@ struct BoardCanvas: View {
                 }
             }
             if canConfirm {
-                Button { onConfirm?() } label: { Label("Confirm", systemImage: "checkmark") }
-                    .buttonStyle(ConfirmPillButtonStyle())
-                    .offset(y: size.height * 0.19)
+                Button { onConfirm?() } label: {
+                    Image(systemName: "checkmark").font(.system(size: 18, weight: .heavy))
+                }
+                .buttonStyle(ConfirmPillButtonStyle())
+                .offset(y: size.height * 0.19)
             }
             // Pip badges drawn on TOP of the board (over the centre bar) so 3-digit
             // counts never clip behind the leaves on smaller boards.
@@ -195,8 +197,10 @@ private struct PointView: View {
                     .fill(LinearGradient.vertical(vCol.isMultiple(of: 2) ? Palette.pointCream : Palette.pointDark,
                                                   (vCol.isMultiple(of: 2) ? Palette.pointCream : Palette.pointDark).opacity(0.72)))
                     .opacity(0.92)
-                if dot { StartDot(diameter: w * 0.26, atTop: downward, w: w, h: h) }
                 CheckerColumn(count: abs(v), white: v > 0, downward: downward, cellW: w, cellH: h)
+                // Drawn AFTER the checkers so it stays visible — startable points always
+                // hold checkers, so a dot under the stack would only show mid-animation.
+                if dot { StartDot(diameter: w * 0.28, atTop: downward, w: w, h: h) }
                 if isSel {
                     RoundedRectangle(cornerRadius: 4)
                         .stroke(Palette.selectionStroke, lineWidth: 2)
