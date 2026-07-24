@@ -25,9 +25,8 @@ struct GameView: View {
             RadialBackground(surface: theme.surface)
 
             BoardView().environmentObject(game)
-                .padding(.top, 10).padding(.bottom, 50).padding(.horizontal, 12)
+                .padding(.top, 10).padding(.bottom, 52).padding(.horizontal, 12)
 
-            statusLine
             topRightControls
             bottomBar
 
@@ -35,20 +34,6 @@ struct GameView: View {
             if case .gameOver = game.phase { gameOverPanel }
         }
         .onChange(of: autoFlip) { _, _ in game.refreshFlip() }
-    }
-
-    // MARK: Status (thin caption, top-centre)
-
-    private var statusLine: some View {
-        VStack {
-            Text(game.status)
-                .font(ThemeFont.caption).foregroundStyle(Palette.creamDim)
-                .multilineTextAlignment(.center)
-                .padding(.horizontal, 90).padding(.top, 6)
-                .frame(maxWidth: .infinity)
-            Spacer()
-        }
-        .allowsHitTesting(false)
     }
 
     // MARK: Top-right: resign + settings (always reachable)
@@ -118,28 +103,27 @@ struct GameView: View {
         .transition(.opacity)
     }
 
-    // MARK: Bottom bar: undo + replay (left)
+    // MARK: Bottom bar: undo (left, greys when inactive) · status (centre) · replay (right)
 
     private var bottomBar: some View {
         VStack {
             Spacer()
-            HStack(spacing: 10) {
-                if game.canUndo {
-                    CircleIconButton(systemName: "arrow.counterclockwise", kind: .wood, size: 38) {
-                        game.undo()
-                    }
-                    .transition(.scale.combined(with: .opacity))
-                }
+            HStack(spacing: 12) {
+                CircleIconButton(systemName: "arrow.counterclockwise", kind: .wood, size: 38,
+                                 disabled: !game.canUndo) { game.undo() }
+                Spacer(minLength: 8)
+                Text(game.status)
+                    .font(ThemeFont.caption).foregroundStyle(Palette.creamDim)
+                    .multilineTextAlignment(.center).lineLimit(2)
+                Spacer(minLength: 8)
                 Button { game.replayLastMove() } label: {
                     Label(game.lastMoveDice.map { "Replay \($0.0)-\($0.1)" } ?? "Replay",
                           systemImage: "play.circle")
                 }
                 .buttonStyle(GhostPillButtonStyle(disabled: !game.canReplay))
                 .disabled(!game.canReplay)
-                Spacer()
             }
-            .padding(.leading, 16).padding(.bottom, 10)
-            .animation(.easeInOut(duration: 0.15), value: game.canUndo)
+            .padding(.horizontal, 16).padding(.bottom, 10)
         }
     }
 
