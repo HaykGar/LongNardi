@@ -4,7 +4,7 @@ import SwiftUI
 /// separate overlay (@State review) that wins over `route`, reproducing v1's
 /// `if let review { … }` precedence so review open/close behaves identically.
 enum Route: Equatable {
-    case home, playSetup, game, analyze, history
+    case home, playSetup, game, analyze, history, tutorialChooser, tutorial
 }
 
 struct ContentView: View {
@@ -15,6 +15,7 @@ struct ContentView: View {
     @State private var route: Route = .home
     @State private var review: GameReview? = nil
     @State private var reviewReturn: Route = .history   // where "Done" lands after review
+    @State private var tourStart = 0                    // dev hook: tour step to open at
 
     var body: some View {
         Group {
@@ -27,9 +28,17 @@ struct ContentView: View {
                 switch route {
                 case .home:
                     HomeView(store: store,
-                             onPlay:    { route = .playSetup },
-                             onAnalyze: { analyze.backToEditor(); route = .analyze },
-                             onHistory: { route = .history })
+                             onPlay:     { route = .playSetup },
+                             onAnalyze:  { analyze.backToEditor(); route = .analyze },
+                             onHistory:  { route = .history },
+                             onTutorial: { route = .tutorialChooser })
+                case .tutorialChooser:
+                    TutorialChooserView(onQuickTour: { route = .tutorial },
+                                        onBack:      { route = .home })
+                case .tutorial:
+                    TutorialView(onSkip:         { route = .tutorialChooser },
+                                 onStartPlaying: { route = .playSetup },
+                                 startStep:      tourStart)
                 case .playSetup:
                     PlaySetupView(onStart: startGame, onBack: { route = .home })
                 case .game:
@@ -89,6 +98,9 @@ struct ContentView: View {
             openReview(m)
         }
         if args.contains("--history") || args.contains("--seed-history") { route = .history }
+        if args.contains("--tutorial") { route = .tutorialChooser }
+        if args.contains("--tour") { route = .tutorial }
+        if args.contains("--tour-undo") { tourStart = 3; route = .tutorial }   // dev: verify a chrome glow
 
         if args.contains("--demo") || args.contains("--demo-move") {
             game.newGame(mode: .vsComputer, opponent: .medium,

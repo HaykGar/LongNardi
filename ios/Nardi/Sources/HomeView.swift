@@ -8,8 +8,7 @@ struct HomeView: View {
     let onPlay: () -> Void
     let onAnalyze: () -> Void
     let onHistory: () -> Void
-
-    @State private var showTutorialToast = false
+    let onTutorial: () -> Void
 
     var body: some View {
         ZStack(alignment: .bottomLeading) {
@@ -52,8 +51,8 @@ struct HomeView: View {
             .padding(.leading, 36).padding(.trailing, 40)
             .frame(maxWidth: .infinity, maxHeight: .infinity)
 
-            // Quiet tutorial ribbon (coming soon)
-            Button { withAnimation { showTutorialToast = true } } label: {
+            // Quiet tutorial ribbon → the tutorial chooser.
+            Button(action: onTutorial) {
                 HStack(spacing: 8) {
                     Image(systemName: "sparkles")
                     Text("New to Nardi?").font(ThemeFont.caption)
@@ -63,16 +62,6 @@ struct HomeView: View {
             }
             .buttonStyle(RibbonButtonStyle())
             .padding(.leading, 36).padding(.bottom, 18)
-            .overlay(alignment: .topLeading) {
-                if showTutorialToast {
-                    ComingSoonToast(text: "Tutorial coming soon")
-                        .offset(y: -44)
-                        .task {
-                            try? await Task.sleep(nanoseconds: 2_000_000_000)
-                            withAnimation { showTutorialToast = false }
-                        }
-                }
-            }
         }
     }
 }
