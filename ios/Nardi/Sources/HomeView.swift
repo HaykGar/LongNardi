@@ -15,8 +15,10 @@ struct HomeView: View {
         ZStack(alignment: .bottomLeading) {
             RadialBackground(surface: .home)
 
-            HStack(alignment: .center, spacing: 30) {
-                // Left: wordmark, tagline, stats
+            HStack(alignment: .center, spacing: 24) {
+                // Left: wordmark, tagline, stats — a fixed-width block hugging the
+                // left edge (not stretched across the gap), so it sits far left like
+                // the mockup and leaves a clear gap before the cards.
                 VStack(alignment: .leading, spacing: 0) {
                     Text("Long Nardi")
                         .font(ThemeFont.wordmark).foregroundStyle(Palette.cream)
@@ -24,7 +26,7 @@ struct HomeView: View {
                         .padding(.vertical, 6)
                     Text("Play the classic tables game against a trained engine — or set up any position and explore the lines.")
                         .font(ThemeFont.bodyText).foregroundStyle(Palette.creamDim)
-                        .frame(maxWidth: 300, alignment: .leading)
+                        .fixedSize(horizontal: false, vertical: true)
                     HStack(spacing: 26) {
                         StatBlock(value: "\(store.wins)", label: "WINS")
                         StatBlock(value: "\(store.winRatePercent)%", label: "WIN RATE")
@@ -32,7 +34,9 @@ struct HomeView: View {
                     }
                     .padding(.top, 24)
                 }
-                .frame(maxWidth: .infinity, alignment: .leading)
+                .frame(width: 320, alignment: .leading)
+
+                Spacer(minLength: 20)   // flexible central gap → cards hug the right
 
                 // Right: action cards
                 VStack(spacing: 14) {
@@ -45,7 +49,7 @@ struct HomeView: View {
                 }
                 .frame(width: 400)
             }
-            .padding(.horizontal, 48)
+            .padding(.leading, 36).padding(.trailing, 40)
             .frame(maxWidth: .infinity, maxHeight: .infinity)
 
             // Quiet tutorial ribbon (coming soon)
@@ -58,7 +62,7 @@ struct HomeView: View {
                 }
             }
             .buttonStyle(RibbonButtonStyle())
-            .padding(.leading, 48).padding(.bottom, 18)
+            .padding(.leading, 36).padding(.bottom, 18)
             .overlay(alignment: .topLeading) {
                 if showTutorialToast {
                     ComingSoonToast(text: "Tutorial coming soon")
