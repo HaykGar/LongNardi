@@ -108,45 +108,42 @@ extension View {
     }
 }
 
-/// A guided, UI-only walkthrough over a static demo board. No engine involved —
-/// the board is a fixed illustrative position; each step glows one control and
-/// explains it. Next / Back / Restart, Skip (→ chooser), Start playing (→ setup).
+/// A guided walkthrough over a REAL, fully-interactive game (a tutorial-local
+/// NardiGame). The opponent opens with an animated move, so the player lands on
+/// their first turn able to tap checkers, reorder dice, undo, confirm, and replay
+/// exactly as in a normal game. Each step glows one control and explains it;
+/// Next / Back / Restart never gate play. Skip (→ chooser), Start playing (→ setup).
 struct TutorialView: View {
     let onSkip: () -> Void
     let onStartPlaying: () -> Void
     var startStep: Int = 0        // dev hook only; users always start at 0
+
+    @StateObject private var game = NardiGame()
     @AppStorage(BoardTheme.storageKey) private var boardThemeRaw = BoardTheme.green.rawValue
+    @AppStorage(AnimationSpeed.storageKey) private var speed: AnimationSpeed = .high
     @State private var step = 0
+    @State private var started = false
+    @State private var menuSettings = false
+    @State private var menuResign = false
 
     private var theme: BoardTheme { BoardTheme(rawValue: boardThemeRaw) ?? .green }
 
     private let steps: [TourStep] = [
         .init(target: .greenDots, title: "Tap to move",
-              body: "A green dot marks every checker you can move. Tap one, and it plays with your dice."),
+              body: "Your opponent just moved. A green dot marks every checker you can move — tap one to play it with your dice."),
         .init(target: .dice, title: "Your dice",
               body: "These are your dice. Tap either one to switch which value a tapped checker tries first."),
         .init(target: .confirm, title: "Confirm your turn",
-              body: "Once your turn is complete, the green ✓ appears in the middle — tap it to lock in your move."),
+              body: "Once your turn is complete, the green ✓ appears — tap it to lock in your move."),
         .init(target: .undo, title: "Undo",
               body: "Changed your mind? Undo takes back a hop before you confirm."),
         .init(target: .replay, title: "Replay",
-              body: "Replay re-plays your opponent's last move, so you never miss what they did."),
+              body: "Replay re-plays your opponent's last move — tap it to watch again."),
         .init(target: .settings, title: "Settings",
-              body: "Animation speed, flipping the board, and quitting to the menu all live here."),
+              body: "Animation speed and quitting to the menu live here."),
         .init(target: .resign, title: "Resign",
               body: "Offer to resign at any time — a single (oin) or a double (mars)."),
     ]
-
-    // Static demo position (purely illustrative; not engine-validated).
-    private let demoBoard: [Int8] = {
-        var b = [Int8](repeating: 0, count: 24)
-        b[0] = 2; b[3] = 2; b[5] = 3; b[7] = 2; b[10] = 3; b[11] = 3     // white 15
-        b[12] = -3; b[15] = -2; b[18] = -3; b[20] = -2; b[22] = -2; b[23] = -3  // black 15
-        return b
-    }()
-    private let demoMask = (1 << 0) | (1 << 3) | (1 << 5) | (1 << 7)     // green dots
-    private let demoDice = [DieSpec(value: 5, hasStart: true, isFirst: true),
-                            DieSpec(value: 3, hasStart: true)]
 
     private var current: TourStep { steps[min(step, steps.count - 1)] }
 
@@ -154,38 +151,39 @@ struct TutorialView: View {
         ZStack(alignment: .top) {
             RadialBackground(surface: theme.surface)
 
-            VStack(spacing: 6) {
+            VStack(spacing: 4) {
                 header
-                HStack(alignment: .center, spacing: 16) {
+                HStack(alignment: .center, spacing: 14) {
                     boardArea.frame(maxWidth: .infinity)
-                    coachCard.frame(width: 264)
+                    coachCard.frame(width: 240)
                 }
-                .padding(.horizontal, 16).padding(.bottom, 10)
+                .padding(.horizontal, 14).padding(.bottom, 8)
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
             }
 
-            // Top-right chrome (decorative, but glow-targetable).
-            HStack(spacing: 9) {
-                CircleIconButton(systemName: "flag.fill", kind: .resign) {}.tourAnchor(.resign)
-                CircleIconButton(systemName: "gearshape.fill",
-                                 kind: theme.id == "cognac" ? .woodLight : .wood) {}.tourAnchor(.settings)
-            }
-            .padding(.top, 12).padding(.trailing, 16)
-            .frame(maxWidth: .infinity, alignment: .topTrailing)
+            topRightChrome
         }
-        // The glow, positioned over the current step's element.
+        .environmentObject(game)
         .overlayPreferenceValue(TourAnchorKey.self) { anchors in
             GeometryReader { geo in
                 if let rect = glowRect(current.target, anchors, geo) {
-                    TourGlow()
-                        .frame(width: rect.width + 16, height: rect.height + 16)
+                    TourGlow(cornerRadius: current.target == .greenDots ? 14 : 22)
+                        .frame(width: rect.width + 8, height: rect.height + 8)
                         .position(x: rect.midX, y: rect.midY)
                         .allowsHitTesting(false)
                         .animation(.easeInOut(duration: 0.3), value: step)
                 }
             }
         }
-        .onAppear { if startStep > 0 { step = min(startStep, steps.count - 1) } }
+        .onAppear {
+            if !started {
+                started = true
+                // vs-computer, human second → the computer opens with an animated
+                // move, landing us on the human's first (interactive) turn.
+                game.newGame(mode: .vsComputer, opponent: .medium, first: .second)
+            }
+            if startStep > 0 { step = min(startStep, steps.count - 1) }
+        }
     }
 
     private var header: some View {
@@ -200,29 +198,94 @@ struct TutorialView: View {
         .padding(.horizontal, 16).padding(.top, 8)
     }
 
+    // Interactive board (dice + on-board ✓ come from BoardView) + undo/status/replay.
     private var boardArea: some View {
         VStack(spacing: 6) {
-            BoardCanvas(board: demoBoard, flipped: false, selected: nil,
-                        startMask: demoMask, whitePips: 167, blackPips: 167,
-                        showPips: true, theme: theme, dice: demoDice, canConfirm: true,
-                        onTap: { _, _ in })
-                .tourAnchor(.greenDots)   // whole board (tap-to-move / green dots)
+            BoardView()
+                .environmentObject(game)
+                .aspectRatio(1.95, contentMode: .fit)   // tight bounds → bigger board + snug glow
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                .tourAnchor(.greenDots)
 
             HStack(spacing: 12) {
-                CircleIconButton(systemName: "arrow.counterclockwise", kind: .wood, size: 38) {}
+                CircleIconButton(systemName: "arrow.counterclockwise", kind: .wood, size: 38,
+                                 disabled: !game.canUndo) { game.undo() }
                     .tourAnchor(.undo)
                 Spacer(minLength: 8)
-                Text("Your roll — 5 and 3").font(ThemeFont.caption).foregroundStyle(Palette.creamDim)
+                Text(game.status).font(ThemeFont.caption).foregroundStyle(Palette.creamDim)
+                    .lineLimit(1)
                 Spacer(minLength: 8)
-                Text(verbatim: "▶ Replay 4-2")
-                    .font(ThemeFont.bodyStrong).foregroundStyle(Palette.buttonInk)
-                    .padding(.horizontal, 16).padding(.vertical, 9)
-                    .background(Capsule().fill(Palette.fillWarm.opacity(0.07)))
-                    .overlay(Capsule().stroke(Palette.strokeWarm.opacity(0.18), lineWidth: 1))
-                    .tourAnchor(.replay)
+                Button { game.replayLastMove() } label: {
+                    Label(game.lastMoveDice.map { "Replay \($0.0)-\($0.1)" } ?? "Replay",
+                          systemImage: "play.circle")
+                }
+                .buttonStyle(GhostPillButtonStyle(disabled: !game.canReplay))
+                .disabled(!game.canReplay)
+                .tourAnchor(.replay)
             }
-            .padding(.horizontal, 8)
+            .padding(.horizontal, 4)
         }
+    }
+
+    private var topRightChrome: some View {
+        VStack(alignment: .trailing, spacing: 8) {
+            HStack(spacing: 9) {
+                CircleIconButton(systemName: "flag.fill", kind: .resign, disabled: !game.canOffer) {
+                    menuResign.toggle(); menuSettings = false
+                }
+                .tourAnchor(.resign)
+                CircleIconButton(systemName: "gearshape.fill",
+                                 kind: theme.id == "cognac" ? .woodLight : .wood) {
+                    menuSettings.toggle(); menuResign = false
+                }
+                .tourAnchor(.settings)
+            }
+            if menuSettings { settingsPopover }
+            if menuResign { resignPopover }
+            Spacer()
+        }
+        .padding(.top, 12).padding(.trailing, 16)
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topTrailing)
+    }
+
+    private var settingsPopover: some View {
+        ParchmentCard {
+            VStack(alignment: .leading, spacing: 10) {
+                SectionLabel(text: "Animation speed", color: Palette.parchmentInk.opacity(0.6))
+                SegmentedChips(options: AnimationSpeed.allCases, selection: $speed,
+                               context: .parchment) { $0.rawValue }
+                Divider().background(Palette.parchmentEdge.opacity(0.25))
+                Button { menuSettings = false; onSkip() } label: {
+                    Label("Quit tutorial", systemImage: "house")
+                        .font(ThemeFont.bodyStrong).foregroundStyle(Palette.destructiveInk)
+                }
+                .buttonStyle(.plain)
+            }
+        }
+        .transition(.opacity)
+    }
+
+    private var resignPopover: some View {
+        ParchmentCard(width: 200) {
+            VStack(alignment: .leading, spacing: 8) {
+                SectionLabel(text: "Offer to resign", color: Palette.parchmentInk.opacity(0.6))
+                Button { menuResign = false; game.offerResign(.oin) } label: {
+                    Label("Single (oin)", systemImage: "flag").font(ThemeFont.bodyStrong)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .padding(.vertical, 8).padding(.horizontal, 10)
+                        .background(RoundedRectangle(cornerRadius: 9).fill(Palette.parchmentEdge.opacity(0.1)))
+                }
+                .buttonStyle(.plain).foregroundStyle(Palette.parchmentInk)
+                Button { menuResign = false; game.offerResign(.mars) } label: {
+                    Label("Mars (double)", systemImage: "flag.checkered").font(ThemeFont.bodyStrong)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .padding(.vertical, 8).padding(.horizontal, 10)
+                        .background(RoundedRectangle(cornerRadius: 9).fill(Palette.destructiveInk.opacity(0.14)))
+                }
+                .buttonStyle(.plain).foregroundStyle(Palette.destructiveInk)
+            }
+        }
+        .transition(.opacity)
     }
 
     private var coachCard: some View {
@@ -234,7 +297,6 @@ struct TutorialView: View {
                 Text(current.body).font(.system(size: 13, weight: .semibold))
                     .foregroundStyle(Color(hex: 0x5A4426)).fixedSize(horizontal: false, vertical: true)
 
-                // progress dots
                 HStack(spacing: 6) {
                     ForEach(0..<steps.count, id: \.self) { i in
                         Circle().fill(i == step ? Palette.accentBottom : Palette.parchmentEdge.opacity(0.3))
@@ -289,10 +351,10 @@ struct TutorialView: View {
             return bounds(.greenDots)
         case .dice:
             guard let b = bounds(.greenDots) else { return nil }
-            return CGRect(x: b.midX - 58, y: b.midY - 32, width: 116, height: 64)
+            return CGRect(x: b.midX - 58, y: b.midY - 30, width: 116, height: 60)
         case .confirm:
             guard let b = bounds(.greenDots) else { return nil }
-            return CGRect(x: b.midX - 52, y: b.midY + b.height * 0.19 - 24, width: 104, height: 48)
+            return CGRect(x: b.midX - 52, y: b.midY + b.height * 0.19 - 22, width: 104, height: 44)
         default:
             return bounds(t)
         }
@@ -301,11 +363,11 @@ struct TutorialView: View {
 
 /// A pulsing accent glow ring drawn over the highlighted element.
 private struct TourGlow: View {
+    var cornerRadius: CGFloat = 16
     @State private var pulse = false
     var body: some View {
-        RoundedRectangle(cornerRadius: 16)
+        RoundedRectangle(cornerRadius: cornerRadius)
             .stroke(Palette.accentSoft, lineWidth: 3)
-            .background(RoundedRectangle(cornerRadius: 16).fill(Palette.accentSoft.opacity(0.12)))
             .shadow(color: Palette.accentSoft.opacity(0.8), radius: pulse ? 16 : 8)
             .opacity(pulse ? 1 : 0.75)
             .onAppear { withAnimation(.easeInOut(duration: 0.9).repeatForever(autoreverses: true)) { pulse = true } }
