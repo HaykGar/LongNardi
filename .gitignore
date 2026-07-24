@@ -51,3 +51,6 @@ DerivedData/
 !ios/Nardi/
 !ios/BOARD_ART_SPEC.txt
 DecisionEngine/weights/Checkpoints
+ios/NardiLandscapeUI_Sample.jpeg
+ios/UI_DESIGN_PLAN.md
+ios/UI_DESIGN_PLAN.pdf
