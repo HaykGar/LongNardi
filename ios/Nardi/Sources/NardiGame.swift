@@ -264,42 +264,33 @@ final class NardiGame: ObservableObject {
         advanceLoop()
     }
 
-    /// Deterministic, instant setup for the interactive tutorial: a fixed mid-game
-    /// position with the human (White) to move and several legal moves, fixed dice,
-    /// and a canned "opponent just moved" for Replay. Players are HUMAN/HUMAN so no
-    /// bot ever runs — nothing is computed, so the tour is instant and the coach
-    /// card's Next never waits on an auto-move.
+    /// Setup for the interactive tutorial: a fixed, spread mid-game position with
+    /// BLACK to move as a RANDOM opponent, so black plays a genuine (rules-correct,
+    /// both-dice) move that we can Replay accurately — we never script or play on
+    /// black's behalf. RANDOM needs no model/lookahead, so it's instant; the coach
+    /// card's Next stays decoupled from the animation. White (human) then moves,
+    /// with several legal moves available.
     func setupTutorial() {
-        mode = .passAndPlay
-        opponent = .medium
+        mode = .vsComputer
+        opponent = .medium                // label only; black plays RANDOM below
         matchSaved = true                 // never archive a tutorial game
         humanIsWhite = true
         modelLoaded = true
-        nardi_configure_players(handle, NARDI_HUMAN, NARDI_HUMAN)
+        nardi_configure_players(handle, NARDI_HUMAN, NARDI_RANDOM)   // white human, black random
 
         var b = [Int8](repeating: 0, count: Self.cells)
-        b[0] = 8; b[3] = 2; b[6] = 2; b[16] = 2; b[20] = 1   // white 15 (to move)
-        b[12] = -12; b[17] = -3                              // black 15
-        b.withUnsafeBufferPointer { _ = nardi_set_position(handle, $0.baseAddress, 0) }  // white to move
-        _ = nardi_set_dice(handle, 6, 3)
-
-        // Canned opponent (black) move that "just happened" — (1,3)→(1,5), a 2 —
-        // so Replay animates a real slide without any live computation.
-        var beforeOpp = b
-        beforeOpp[17] = -2; beforeOpp[15] = -1
-        lastMove = ReplayMove(before: beforeOpp,
-                              subs: [(from: (1, 3), to: (1, 5))],
-                              moverSign: -1, after: b, dice: (2, 1))
+        b[0] = 6; b[3] = 2; b[6] = 2; b[9] = 2; b[11] = 3            // white 15
+        b[12] = -6; b[15] = -2; b[18] = -2; b[21] = -2; b[23] = -3   // black 15
+        b.withUnsafeBufferPointer { _ = nardi_set_position(handle, $0.baseAddress, 1) }  // black to move
 
         selected = nil; flights = []; isAnimating = false
-        turnSubs = []; turnStartBoard = b; turnMoverSign = 1
+        turnSubs = []; lastMove = nil
         pendingResign = nil; lastMatchID = nil; reviewLog = []; humanTurnPre = nil
         tryFirst = false; canConfirm = false
         board = engineBoard()
-        flipped = desiredFlip()
+        flipped = desiredFlip()           // white (human) perspective
         refreshMeta()
-        phase = .awaitingHuman
-        status = "You to move — dice \(dice.0)-\(dice.1)."
+        advanceLoop()   // black plays a real random move (animated + recorded), then awaits human
     }
 
     // MARK: - Human interaction
