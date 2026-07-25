@@ -1,5 +1,37 @@
 import SwiftUI
 
+/// Frames of the play controls, published as SwiftUI anchors so an overlay — e.g.
+/// the tutorial's coach-mark glow — can highlight the REAL control wherever it lays
+/// out, with NO hardcoded rects. Generic: these views know nothing about the
+/// tutorial; they just advertise where their controls ended up. Gated behind a
+/// `publishAnchors` flag so the normal play screen pays nothing.
+enum PlayControl: Hashable { case board, dice, confirm, undo, replay, settings, resign }
+
+struct PlayAnchorKey: PreferenceKey {
+    static let defaultValue: [PlayControl: Anchor<CGRect>] = [:]
+    static func reduce(value: inout [PlayControl: Anchor<CGRect>],
+                       nextValue: () -> [PlayControl: Anchor<CGRect>]) {
+        value.merge(nextValue()) { _, n in n }
+    }
+}
+extension View {
+    /// Publish this view's bounds under `control` when `active` (no-op otherwise).
+    /// Attach it to the control BEFORE any `.position`/`.frame(alignment:)` that
+    /// places it — `.bounds` resolves the control's own final rect. Do NOT attach it
+    /// across a `.offset` (offset is render-only and the anchor keeps the pre-offset
+    /// layout frame).
+    ///
+    /// Uses `transformAnchorPreference` (MERGE), not `anchorPreference` (REPLACE): the
+    /// board control wraps the dice/confirm/undo controls, so a replacing write would
+    /// wipe the descendants' entries. Merging adds this control to whatever the
+    /// subtree already published, so nesting is safe.
+    func playAnchor(_ control: PlayControl, active: Bool) -> some View {
+        transformAnchorPreference(key: PlayAnchorKey.self, value: .bounds) { dict, anchor in
+            if active { dict[control] = anchor }
+        }
+    }
+}
+
 /// The reusable, fully-vector landscape board (mockup screens 1c/1d/2a/2b/2c).
 /// Pure presentation: it takes plain values + closures so the play screen
 /// (NardiGame), the analyzer (AnalyzeGame) and game review all render through it.
@@ -35,6 +67,9 @@ struct BoardCanvas: View {
     /// of the RIGHT half and Undo in the centre of the LEFT half.
     var centerHalfControls: Bool = false
     var canUndo: Bool = false
+    /// Publish real control frames via PlayAnchorKey (tutorial coach marks). Off in
+    /// normal play so it costs nothing.
+    var publishAnchors: Bool = false
     var onTap: (Int, Int) -> Void
     var onLongPress: ((Int, Int) -> Void)? = nil
     var onToggleDice: (() -> Void)? = nil
@@ -59,6 +94,7 @@ struct BoardCanvas: View {
             let rect = fittedRect(in: geo.size)
             boardContent(size: rect.size)
                 .frame(width: rect.width, height: rect.height)
+                .playAnchor(.board, active: publishAnchors)   // tight fitted-board rect
                 .position(x: rect.midX, y: rect.midY)
         }
     }
@@ -109,6 +145,7 @@ struct BoardCanvas: View {
                                 disabled: !d.hasStart, size: dieSize, onTap: onToggleDice)
                     }
                 }
+                .playAnchor(.dice, active: publishAnchors)
             }
             if canConfirm || alwaysShowConfirm {
                 let confirm = Button { if canConfirm { onConfirm?() } } label: {
@@ -118,6 +155,7 @@ struct BoardCanvas: View {
                 .disabled(!canConfirm)
                 .grayscale(canConfirm ? 0 : 1)
                 .opacity(canConfirm ? 1 : 0.45)
+                .playAnchor(.confirm, active: publishAnchors)
                 if centerHalfControls {
                     confirm.position(x: size.width * 0.75, y: size.height * 0.5)
                 } else {
@@ -128,13 +166,14 @@ struct BoardCanvas: View {
             if centerHalfControls, let onUndo {
                 CircleIconButton(systemName: "arrow.counterclockwise", kind: .wood, size: 40,
                                  disabled: !canUndo) { onUndo() }
+                    .playAnchor(.undo, active: publishAnchors)
                     .position(x: size.width * 0.25, y: size.height * 0.5)
             }
             // Pip badges drawn on TOP of the board (over the centre bar) so 3-digit
             // counts never clip behind the leaves on smaller boards.
             if showPips && (whitePips > 0 || blackPips > 0) {
-                PipBadge(count: oppPip).position(x: size.width / 2, y: size.height * 0.135)
-                PipBadge(count: perspPip).position(x: size.width / 2, y: size.height * 0.865)
+                PipBadge(count: oppPip, fontSize: size.height * 0.032).position(x: size.width / 2, y: size.height * 0.135)
+                PipBadge(count: perspPip, fontSize: size.height * 0.032).position(x: size.width / 2, y: size.height * 0.865)
             }
         }
         .coordinateSpace(name: "board")
@@ -405,9 +444,11 @@ private struct CenterBarView: View {
 /// A pip-count badge (drawn as a top overlay so it never clips behind the leaves).
 private struct PipBadge: View {
     let count: Int
+    var fontSize: CGFloat = 11   // scaled to the board so it shrinks with a smaller board
     var body: some View {
-        Text("\(count)").font(ThemeFont.pipBadge).foregroundStyle(Palette.pipBadgeInk)
-            .padding(.horizontal, 5).padding(.vertical, 2)
+        Text("\(count)").font(.system(size: fontSize, weight: .heavy).monospacedDigit())
+            .foregroundStyle(Palette.pipBadgeInk)
+            .padding(.horizontal, fontSize * 0.45).padding(.vertical, fontSize * 0.18)
             .background(Capsule().fill(Grad.pipBadge))
             .overlay(Capsule().stroke(Color.black.opacity(0.25), lineWidth: 0.5))
             .fixedSize()

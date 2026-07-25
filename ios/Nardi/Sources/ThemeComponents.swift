@@ -90,11 +90,12 @@ struct ConfirmPillButtonStyle: ButtonStyle {
 /// Dark ghost pill (Home "‹ Home" / History back / bottom-bar Replay).
 struct GhostPillButtonStyle: ButtonStyle {
     var disabled: Bool = false
+    var compact: Bool = false   // smaller font + padding (tutorial's tight left band)
     func makeBody(configuration: Configuration) -> some View {
         configuration.label
-            .font(ThemeFont.bodyStrong)
+            .font(compact ? .system(size: 11, weight: .bold) : ThemeFont.bodyStrong)
             .foregroundStyle(Palette.buttonInk)
-            .padding(.horizontal, 16).padding(.vertical, 9)
+            .padding(.horizontal, compact ? 6 : 16).padding(.vertical, compact ? 4 : 9)
             .background(Capsule().fill(Palette.fillWarm.opacity(0.07)))
             .overlay(Capsule().stroke(Palette.strokeWarm.opacity(0.18), lineWidth: 1))
             .opacity((disabled ? 0.4 : 1) * (configuration.isPressed ? 0.7 : 1))

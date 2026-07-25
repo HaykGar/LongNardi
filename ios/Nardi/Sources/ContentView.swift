@@ -102,6 +102,8 @@ struct ContentView: View {
         if args.contains("--tour") { route = .tutorial }
         if args.contains("--tour-undo") { tourStart = 3; route = .tutorial }      // dev: chrome glow
         if args.contains("--tour-confirm") { tourStart = 2; route = .tutorial }   // dev: confirm glow
+        if let i = args.firstIndex(of: "--tour-step"), i + 1 < args.count,        // dev: any glow step
+           let n = Int(args[i + 1]) { tourStart = n; route = .tutorial }
 
         if args.contains("--demo") || args.contains("--demo-move") {
             game.newGame(mode: .vsComputer, opponent: .medium,

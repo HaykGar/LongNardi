@@ -6,6 +6,7 @@ struct BoardView: View {
     @EnvironmentObject var game: NardiGame
     var alwaysShowConfirm = false          // tutorial: keep the ✓ present but greyed
     var centerHalfControls = false         // EXPERIMENTAL: on-board Undo/Confirm per half
+    var publishAnchors = false             // tutorial: publish control frames for coach marks
     @AppStorage(BoardTheme.storageKey) private var boardThemeRaw = BoardTheme.green.rawValue
     @AppStorage(PipDisplay.storageKey) private var showPips = true
 
@@ -33,6 +34,7 @@ struct BoardView: View {
             alwaysShowConfirm: alwaysShowConfirm,
             centerHalfControls: centerHalfControls,
             canUndo: game.canUndo,
+            publishAnchors: publishAnchors,
             onTap: { row, col in game.tap(row: row, col: col) },
             onToggleDice: { game.toggleTryFirst() },
             onConfirm: { game.confirm() },

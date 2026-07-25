@@ -96,34 +96,22 @@ private struct ChooserCardBody: View {
 
 // MARK: - Fast tour (mockup 3b)
 
-/// Which element the current coach-mark glows.
-enum TourTarget: Hashable { case greenDots, dice, confirm, undo, replay, settings, resign }
-
 private struct TourStep {
-    let target: TourTarget
+    let target: PlayControl        // which REAL control this step glows
     let title: String
     let body: String
 }
 
-/// Anchor-preference plumbing so the glow can sit exactly over the tagged element
-/// wherever it lays out.
-struct TourAnchorKey: PreferenceKey {
-    static var defaultValue: [TourTarget: Anchor<CGRect>] = [:]
-    static func reduce(value: inout [TourTarget: Anchor<CGRect>], nextValue: () -> [TourTarget: Anchor<CGRect>]) {
-        value.merge(nextValue()) { _, n in n }
-    }
-}
-extension View {
-    func tourAnchor(_ t: TourTarget) -> some View {
-        anchorPreference(key: TourAnchorKey.self, value: .bounds) { [t: $0] }
-    }
-}
-
 /// A guided walkthrough over a REAL, fully-interactive game (a tutorial-local
-/// NardiGame). The opponent opens with an animated move, so the player lands on
-/// their first turn able to tap checkers, reorder dice, undo, confirm, and replay
-/// exactly as in a normal game. Each step glows one control and explains it;
-/// Next / Back / Restart never gate play. Skip (→ chooser), Start playing (→ setup).
+/// NardiGame). It renders the SAME shared `PlaySurface` as the real play screen —
+/// given a smaller frame so the board self-fits smaller and the coach card sits
+/// beside it — so the tour can never drift from the game layout. Every coach-mark
+/// glow tracks the TRUE control via the anchors `PlaySurface` publishes
+/// (`publishAnchors`), so there are no hardcoded rects to re-sync: wherever a
+/// control lands and whatever its outline is, that is exactly what gets ringed.
+/// The player lands on their first turn able to tap checkers, reorder dice, undo,
+/// confirm, and replay exactly as in a normal game. Next / Back / Restart never
+/// gate play. Skip (→ chooser), Start playing (→ setup).
 struct TutorialView: View {
     let onSkip: () -> Void
     let onStartPlaying: () -> Void
@@ -140,7 +128,7 @@ struct TutorialView: View {
     private var theme: BoardTheme { BoardTheme(rawValue: boardThemeRaw) ?? .green }
 
     private let steps: [TourStep] = [
-        .init(target: .greenDots, title: "Tap to move",
+        .init(target: .board, title: "Tap to move",
               body: "Your opponent just moved. A green dot marks every checker you can move — tap one to play it with your dice. If possible, the checker will move by the dice on the left, otherwise it will move by the dice on the right."),
         .init(target: .dice, title: "Your dice",
               body: "What if I want to move by the other die first? These are your dice. Tap either one to switch which value a tapped checker tries first."),
@@ -165,23 +153,34 @@ struct TutorialView: View {
             VStack(spacing: 4) {
                 header
                 GeometryReader { geo in
-                    let coachW = min(260, max(196, geo.size.width * 0.29))
-                    HStack(alignment: .center, spacing: 14) {
-                        boardArea.frame(maxWidth: .infinity)
-                        coachCard.frame(width: coachW)
+                    let coachW = min(240, max(206, geo.size.width * 0.26))
+                    HStack(alignment: .center, spacing: 12) {
+                        // The REAL play layout (single source of truth). A smaller
+                        // frame makes the board self-fit smaller (BoardCanvas adapts —
+                        // no scaleEffect, so published anchors stay in true screen
+                        // coordinates). publishAnchors → glow tracks real controls.
+                        // Tighter bands + a compact replay reclaim width so the board
+                        // is as large as fits without touching the chrome or borders.
+                        PlaySurface(menuSettings: $menuSettings, menuResign: $menuResign,
+                                    alwaysShowConfirm: true, publishAnchors: true, drawBackground: false,
+                                    leftBand: 60, rightBand: 50, compactReplay: true,
+                                    settingsMenu: { settingsPopover }, resignMenu: { resignPopover })
+                            .environmentObject(game)
+                            .frame(maxWidth: .infinity, maxHeight: .infinity)
+                        coachCard
+                            .frame(width: coachW)
+                            .frame(maxHeight: geo.size.height)
                     }
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
                 }
-                .padding(.horizontal, 14).padding(.bottom, 8)
+                .padding(.horizontal, 10).padding(.bottom, 8)
             }
-
-            topRightChrome
         }
         .environmentObject(game)
-        .overlayPreferenceValue(TourAnchorKey.self) { anchors in
+        .overlayPreferenceValue(PlayAnchorKey.self) { anchors in
             GeometryReader { geo in
                 if let rect = glowRect(current.target, anchors, geo) {
-                    TourGlow(cornerRadius: current.target == .greenDots ? 14 : 22)
+                    TourGlow(cornerRadius: current.target == .board ? 14 : 22)
                         .frame(width: rect.width + 8, height: rect.height + 8)
                         .position(x: rect.midX, y: rect.midY)
                         .allowsHitTesting(false)
@@ -208,59 +207,6 @@ struct TutorialView: View {
             Color.clear.frame(width: 96, height: 1)
         }
         .padding(.horizontal, 16).padding(.top, 8)
-    }
-
-    // Interactive board (dice + on-board ✓ come from BoardView) + undo/status/replay.
-    private var boardArea: some View {
-        VStack(spacing: 6) {
-            BoardView(alwaysShowConfirm: true)          // ✓ stays visible, greys until ready
-                .environmentObject(game)
-                .aspectRatio(1.95, contentMode: .fit)   // tight bounds → bigger board + snug glow
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
-                .tourAnchor(.greenDots)
-
-            HStack(spacing: 12) {
-                CircleIconButton(systemName: "arrow.counterclockwise", kind: .wood, size: 38,
-                                 disabled: !game.canUndo) { game.undo() }
-                    .tourAnchor(.undo)
-                Spacer(minLength: 8)
-                Text(game.status).font(ThemeFont.caption).foregroundStyle(Palette.creamDim)
-                    .lineLimit(1)
-                Spacer(minLength: 8)
-                Button { game.replayLastMove() } label: {
-                    HStack(spacing: 5) {
-                        Image(systemName: "play.fill")
-                        if let d = game.lastMoveDice { Text("\(d.0)-\(d.1)") }
-                    }
-                }
-                .buttonStyle(GhostPillButtonStyle(disabled: !game.canReplay))
-                .disabled(!game.canReplay)
-                .tourAnchor(.replay)
-            }
-            .padding(.horizontal, 4)
-        }
-    }
-
-    private var topRightChrome: some View {
-        HStack(spacing: 9) {
-            CircleIconButton(systemName: "flag.fill", kind: .resign, disabled: !game.canOffer) {
-                menuResign.toggle(); menuSettings = false
-            }
-            .tourAnchor(.resign)
-            .popover(isPresented: $menuResign, arrowEdge: .top) {
-                resignPopover.presentationCompactAdaptation(.popover)
-            }
-            CircleIconButton(systemName: "gearshape.fill",
-                             kind: theme.id == "cognac" ? .woodLight : .wood) {
-                menuSettings.toggle(); menuResign = false
-            }
-            .tourAnchor(.settings)
-            .popover(isPresented: $menuSettings, arrowEdge: .top) {
-                settingsPopover.presentationCompactAdaptation(.popover)
-            }
-        }
-        .padding(.top, 12).padding(.trailing, 16)
-        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topTrailing)
     }
 
     private var settingsPopover: some View {
@@ -309,8 +255,14 @@ struct TutorialView: View {
                 Text("FAST TOUR · \(step + 1) / \(steps.count)")
                     .font(.system(size: 10, weight: .heavy)).tracking(0.5).foregroundStyle(Palette.accentBottom)
                 Text(current.title).font(ThemeFont.serif(18, .bold)).foregroundStyle(Palette.parchmentInk)
+                    .lineLimit(1).minimumScaleFactor(0.8)
+                // Adaptive: wraps freely, then scales down to fit the space the card
+                // is given rather than growing it unbounded — so a long step never
+                // makes the card too big or pushes it off-screen.
                 Text(current.body).font(.system(size: 13, weight: .semibold))
-                    .foregroundStyle(Color(hex: 0x5A4426)).fixedSize(horizontal: false, vertical: true)
+                    .foregroundStyle(Color(hex: 0x5A4426))
+                    .minimumScaleFactor(0.6)
+                    .frame(maxWidth: .infinity, alignment: .leading)
 
                 HStack(spacing: 6) {
                     ForEach(0..<steps.count, id: \.self) { i in
@@ -322,14 +274,17 @@ struct TutorialView: View {
 
                 HStack(spacing: 8) {
                     if step > 0 {
-                        Button("Back") { withAnimation { step -= 1 } }
+                        // Clamp, don't decrement: the index must reflect the slide it
+                        // IS, so rapid taps can never drive it out of range.
+                        Button("Back") { withAnimation { step = max(step - 1, 0) } }
                             .font(ThemeFont.bodyStrong).foregroundStyle(Color(hex: 0x6E4326))
                             .padding(.vertical, 9).padding(.horizontal, 14)
                             .background(RoundedRectangle(cornerRadius: 11).fill(Palette.parchmentEdge.opacity(0.12)))
                             .buttonStyle(.plain)
                     }
                     if step < steps.count - 1 {
-                        Button { withAnimation { step += 1 } } label: {
+                        // Clamp to the last slide so fast taps can't overshoot to "8/7".
+                        Button { withAnimation { step = min(step + 1, steps.count - 1) } } label: {
                             Text("Next ›").frame(maxWidth: .infinity)
                         }
                         .font(ThemeFont.buttonLabel).foregroundStyle(.white)
@@ -359,20 +314,11 @@ struct TutorialView: View {
         }
     }
 
-    private func glowRect(_ t: TourTarget, _ anchors: [TourTarget: Anchor<CGRect>], _ geo: GeometryProxy) -> CGRect? {
-        func bounds(_ k: TourTarget) -> CGRect? { anchors[k].map { geo[$0] } }
-        switch t {
-        case .greenDots:
-            return bounds(.greenDots)
-        case .dice:
-            guard let b = bounds(.greenDots) else { return nil }
-            return CGRect(x: b.midX - 58, y: b.midY - 30, width: 116, height: 60)
-        case .confirm:
-            guard let b = bounds(.greenDots) else { return nil }
-            return CGRect(x: b.midX - 34, y: b.midY + b.height * 0.19 - 21, width: 68, height: 42)
-        default:
-            return bounds(t)
-        }
+    /// Every glow reads the REAL control's published anchor — no magic numbers, so
+    /// the ring is always tight to whatever the control actually is, wherever the
+    /// shared layout puts it.
+    private func glowRect(_ t: PlayControl, _ anchors: [PlayControl: Anchor<CGRect>], _ geo: GeometryProxy) -> CGRect? {
+        anchors[t].map { geo[$0] }
     }
 }
 
