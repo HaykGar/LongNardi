@@ -30,10 +30,16 @@ struct BoardCanvas: View {
     /// When true the ✓ pill is ALWAYS present, greyed + disabled unless canConfirm
     /// (used by the tutorial so the control stays visible while being explained).
     var alwaysShowConfirm: Bool = false
+    /// EXPERIMENTAL (play screen only, easily revertible): shorten each slot's tap
+    /// target so it doesn't reach the board centre, then float Confirm in the centre
+    /// of the RIGHT half and Undo in the centre of the LEFT half.
+    var centerHalfControls: Bool = false
+    var canUndo: Bool = false
     var onTap: (Int, Int) -> Void
     var onLongPress: ((Int, Int) -> Void)? = nil
     var onToggleDice: (() -> Void)? = nil
     var onConfirm: (() -> Void)? = nil
+    var onUndo: (() -> Void)? = nil
 
     @State private var leftLeaf: CGRect = .zero    // captured in the "board" space
     @State private var rightLeaf: CGRect = .zero
@@ -80,11 +86,13 @@ struct BoardCanvas: View {
             HStack(spacing: leafGap) {
                 TrayView(count: oppOff, white: !perspWhite).frame(width: trayW)
                 LeafView(top: .topLeft, bot: .botLeft, board: board, flipped: flipped,
-                         selected: selected, startMask: startMask, onTap: onTap, onLongPress: onLongPress)
+                         selected: selected, startMask: startMask, shortTap: centerHalfControls,
+                         onTap: onTap, onLongPress: onLongPress)
                     .background(leafReader(false))
                 CenterBarView().frame(width: gutterW)
                 LeafView(top: .topRight, bot: .botRight, board: board, flipped: flipped,
-                         selected: selected, startMask: startMask, onTap: onTap, onLongPress: onLongPress)
+                         selected: selected, startMask: startMask, shortTap: centerHalfControls,
+                         onTap: onTap, onLongPress: onLongPress)
                     .background(leafReader(true))
                 TrayView(count: perspOff, white: perspWhite).frame(width: trayW)
             }
@@ -103,14 +111,24 @@ struct BoardCanvas: View {
                 }
             }
             if canConfirm || alwaysShowConfirm {
-                Button { if canConfirm { onConfirm?() } } label: {
+                let confirm = Button { if canConfirm { onConfirm?() } } label: {
                     Image(systemName: "checkmark").font(.system(size: 18, weight: .heavy))
                 }
                 .buttonStyle(ConfirmPillButtonStyle())
                 .disabled(!canConfirm)
                 .grayscale(canConfirm ? 0 : 1)
                 .opacity(canConfirm ? 1 : 0.45)
-                .offset(y: size.height * 0.19)
+                if centerHalfControls {
+                    confirm.position(x: size.width * 0.75, y: size.height * 0.5)
+                } else {
+                    confirm.offset(y: size.height * 0.19)
+                }
+            }
+            // EXPERIMENTAL: on-board Undo, centred in the LEFT half.
+            if centerHalfControls, let onUndo {
+                CircleIconButton(systemName: "arrow.counterclockwise", kind: .wood, size: 40,
+                                 disabled: !canUndo) { onUndo() }
+                    .position(x: size.width * 0.25, y: size.height * 0.5)
             }
             // Pip badges drawn on TOP of the board (over the centre bar) so 3-digit
             // counts never clip behind the leaves on smaller boards.
@@ -149,6 +167,7 @@ private struct LeafView: View {
     let flipped: Bool
     let selected: (Int, Int)?
     let startMask: Int
+    var shortTap: Bool = false
     let onTap: (Int, Int) -> Void
     let onLongPress: ((Int, Int) -> Void)?
 
@@ -168,10 +187,23 @@ private struct LeafView: View {
             ForEach(0..<6, id: \.self) { i in
                 PointView(quadrant: q, index: i, downward: downward,
                           board: board, flipped: flipped, selected: selected,
-                          startMask: startMask, onTap: onTap, onLongPress: onLongPress)
+                          startMask: startMask, shortTap: shortTap,
+                          onTap: onTap, onLongPress: onLongPress)
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
+    }
+}
+
+/// EXPERIMENTAL: a tap target that covers only the outer part of a slot (from the
+/// board edge inward), leaving the centre band free for the on-board buttons.
+private struct SlotTapShape: Shape {
+    var downward: Bool
+    var frac: CGFloat = 0.62
+    func path(in r: CGRect) -> Path {
+        let h = r.height * frac
+        let y = downward ? r.minY : r.maxY - h
+        return Path(CGRect(x: r.minX, y: y, width: r.width, height: h))
     }
 }
 
@@ -185,6 +217,7 @@ private struct PointView: View {
     let flipped: Bool
     let selected: (Int, Int)?
     let startMask: Int
+    var shortTap: Bool = false
     let onTap: (Int, Int) -> Void
     let onLongPress: ((Int, Int) -> Void)?
 
@@ -215,7 +248,7 @@ private struct PointView: View {
                 }
             }
             .frame(width: w, height: h)
-            .contentShape(Rectangle())
+            .contentShape(shortTap ? AnyShape(SlotTapShape(downward: downward)) : AnyShape(Rectangle()))
             .modifier(TapAndHold(onTap: { onTap(row, col) },
                                  onHold: onLongPress.map { lp in { lp(row, col) } }))
         }

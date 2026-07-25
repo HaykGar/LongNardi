@@ -11,52 +11,63 @@ struct TutorialChooserView: View {
     var body: some View {
         ZStack {
             RadialBackground(surface: .home)
-            HStack(alignment: .center, spacing: 30) {
-                VStack(alignment: .leading, spacing: 14) {
-                    Text("How to play").font(ThemeFont.serif(40, .bold)).foregroundStyle(Palette.cream)
-                    Text("Two ways in. Already know Long Nardi? Take the quick tour of the controls. New to the game? The full lesson walks the rules with you.")
-                        .font(ThemeFont.bodyText).foregroundStyle(Palette.creamDim)
-                        .frame(maxWidth: 300, alignment: .leading)
-                    Button(action: onBack) { Label("Back to Home", systemImage: "chevron.left") }
-                        .font(ThemeFont.caption).foregroundStyle(Palette.muted).buttonStyle(.plain)
-                        .padding(.top, 4)
-                }
-                .frame(width: 320, alignment: .leading)
+            // Device-adaptive: side margins, gap and the two column widths all scale
+            // with the screen, so the pair never smushes on a small phone nor sprawls
+            // on an iPad (mirrors HomeView).
+            GeometryReader { geo in
+                let w = geo.size.width
+                let sidePad = max(28, w * 0.05)
+                let gap = max(20, w * 0.03)
+                let avail = max(0, w - sidePad * 2 - gap)
+                let leftW = min(340, avail * 0.44)
+                let rightW = min(420, avail * 0.56)
 
-                Spacer(minLength: 20)
-
-                VStack(spacing: 14) {
-                    // Quick UI tour — built.
-                    Button(action: onQuickTour) {
-                        ChooserCardBody(icon: "bolt.fill", iconColor: .white, titleColor: .white,
-                                        title: "I know the rules",
-                                        subtitle: "Quick UI tour · ~30 seconds. Tapping, dice order, undo, replay & settings.",
-                                        subtitleColor: Color.white.opacity(0.85))
-                        .background(RoundedRectangle(cornerRadius: 18).fill(Grad.cta)
-                            .shadow(color: .black.opacity(0.45), radius: 8, y: 8))
+                HStack(alignment: .center, spacing: gap) {
+                    VStack(alignment: .leading, spacing: 14) {
+                        Text("How to play").font(ThemeFont.serif(40, .bold)).foregroundStyle(Palette.cream)
+                            .minimumScaleFactor(0.7).lineLimit(1)
+                        Text("Two ways in. Already know Long Nardi? Take the quick tour of the controls. New to the game? The full lesson walks the rules with you.")
+                            .font(ThemeFont.bodyText).foregroundStyle(Palette.creamDim)
+                            .fixedSize(horizontal: false, vertical: true)
+                        Button(action: onBack) { Label("Back to Home", systemImage: "chevron.left") }
+                            .font(ThemeFont.caption).foregroundStyle(Palette.muted).buttonStyle(.plain)
+                            .padding(.top, 4)
                     }
-                    .buttonStyle(.plain)
+                    .frame(width: leftW, alignment: .leading)
 
-                    // Full rules lesson — coming soon (disabled).
-                    ChooserCardBody(icon: "sparkles", iconColor: Palette.accentSoft, titleColor: Palette.cream,
-                                    title: "New to Nardi",
-                                    subtitle: "Full tutorial · rules + UI, taught through guided scenarios.",
-                                    subtitleColor: Palette.creamDim)
-                        .opacity(0.82)
-                        .overlay(alignment: .topTrailing) {
-                            Text("COMING SOON").font(.system(size: 9, weight: .heavy)).tracking(1)
-                                .foregroundStyle(Palette.accentSoft)
-                                .padding(.horizontal, 8).padding(.vertical, 4)
-                                .background(Capsule().fill(Palette.accentSoft.opacity(0.15)))
-                                .padding(14)
+                    VStack(spacing: 14) {
+                        // Quick UI tour — built.
+                        Button(action: onQuickTour) {
+                            ChooserCardBody(icon: "bolt.fill", iconColor: .white, titleColor: .white,
+                                            title: "I know the rules",
+                                            subtitle: "Quick UI tour · ~30 seconds. Tapping, dice order, undo, replay & settings.",
+                                            subtitleColor: Color.white.opacity(0.85))
+                            .background(RoundedRectangle(cornerRadius: 18).fill(Grad.cta)
+                                .shadow(color: .black.opacity(0.45), radius: 8, y: 8))
                         }
-                        .background(RoundedRectangle(cornerRadius: 18).fill(Grad.homeNavCard)
-                            .overlay(RoundedRectangle(cornerRadius: 18).stroke(Palette.strokeWarm.opacity(0.18), lineWidth: 1)))
+                        .buttonStyle(.plain)
+
+                        // Full rules lesson — coming soon (disabled).
+                        ChooserCardBody(icon: "sparkles", iconColor: Palette.accentSoft, titleColor: Palette.cream,
+                                        title: "New to Nardi",
+                                        subtitle: "Full tutorial · rules + UI, taught through guided scenarios.",
+                                        subtitleColor: Palette.creamDim)
+                            .opacity(0.82)
+                            .overlay(alignment: .topTrailing) {
+                                Text("COMING SOON").font(.system(size: 9, weight: .heavy)).tracking(1)
+                                    .foregroundStyle(Palette.accentSoft)
+                                    .padding(.horizontal, 8).padding(.vertical, 4)
+                                    .background(Capsule().fill(Palette.accentSoft.opacity(0.15)))
+                                    .padding(14)
+                            }
+                            .background(RoundedRectangle(cornerRadius: 18).fill(Grad.homeNavCard)
+                                .overlay(RoundedRectangle(cornerRadius: 18).stroke(Palette.strokeWarm.opacity(0.18), lineWidth: 1)))
+                    }
+                    .frame(width: rightW)
                 }
-                .frame(width: 400)
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                .padding(.horizontal, sidePad)
             }
-            .padding(.leading, 36).padding(.trailing, 40)
-            .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
     }
 }
@@ -130,9 +141,9 @@ struct TutorialView: View {
 
     private let steps: [TourStep] = [
         .init(target: .greenDots, title: "Tap to move",
-              body: "Your opponent just moved. A green dot marks every checker you can move — tap one to play it with your dice."),
+              body: "Your opponent just moved. A green dot marks every checker you can move — tap one to play it with your dice. If possible, the checker will move by the dice on the left, otherwise it will move by the dice on the right."),
         .init(target: .dice, title: "Your dice",
-              body: "These are your dice. Tap either one to switch which value a tapped checker tries first."),
+              body: "What if I want to move by the other die first? These are your dice. Tap either one to switch which value a tapped checker tries first."),
         .init(target: .confirm, title: "Confirm your turn",
               body: "Once your turn is complete, the green ✓ appears — tap it to lock in your move."),
         .init(target: .undo, title: "Undo",
@@ -142,7 +153,7 @@ struct TutorialView: View {
         .init(target: .settings, title: "Settings",
               body: "Animation speed and quitting to the menu live here."),
         .init(target: .resign, title: "Resign",
-              body: "Offer to resign at any time — a single (oin) or a double (mars)."),
+              body: "Offer to resign at any time — a single (oin) or a double (mars). If a computer opponent evaluates its position as strong enough, it may decline your offer of oin, and only accept a mars."),
     ]
 
     private var current: TourStep { steps[min(step, steps.count - 1)] }
@@ -153,12 +164,15 @@ struct TutorialView: View {
 
             VStack(spacing: 4) {
                 header
-                HStack(alignment: .center, spacing: 14) {
-                    boardArea.frame(maxWidth: .infinity)
-                    coachCard.frame(width: 240)
+                GeometryReader { geo in
+                    let coachW = min(260, max(196, geo.size.width * 0.29))
+                    HStack(alignment: .center, spacing: 14) {
+                        boardArea.frame(maxWidth: .infinity)
+                        coachCard.frame(width: coachW)
+                    }
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
                 }
                 .padding(.horizontal, 14).padding(.bottom, 8)
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
             }
 
             topRightChrome
@@ -214,8 +228,10 @@ struct TutorialView: View {
                     .lineLimit(1)
                 Spacer(minLength: 8)
                 Button { game.replayLastMove() } label: {
-                    Label(game.lastMoveDice.map { "Replay \($0.0)-\($0.1)" } ?? "Replay",
-                          systemImage: "play.circle")
+                    HStack(spacing: 5) {
+                        Image(systemName: "play.fill")
+                        if let d = game.lastMoveDice { Text("\(d.0)-\(d.1)") }
+                    }
                 }
                 .buttonStyle(GhostPillButtonStyle(disabled: !game.canReplay))
                 .disabled(!game.canReplay)
@@ -226,66 +242,65 @@ struct TutorialView: View {
     }
 
     private var topRightChrome: some View {
-        VStack(alignment: .trailing, spacing: 8) {
-            HStack(spacing: 9) {
-                CircleIconButton(systemName: "flag.fill", kind: .resign, disabled: !game.canOffer) {
-                    menuResign.toggle(); menuSettings = false
-                }
-                .tourAnchor(.resign)
-                CircleIconButton(systemName: "gearshape.fill",
-                                 kind: theme.id == "cognac" ? .woodLight : .wood) {
-                    menuSettings.toggle(); menuResign = false
-                }
-                .tourAnchor(.settings)
+        HStack(spacing: 9) {
+            CircleIconButton(systemName: "flag.fill", kind: .resign, disabled: !game.canOffer) {
+                menuResign.toggle(); menuSettings = false
             }
-            if menuSettings { settingsPopover }
-            if menuResign { resignPopover }
-            Spacer()
+            .tourAnchor(.resign)
+            .popover(isPresented: $menuResign, arrowEdge: .top) {
+                resignPopover.presentationCompactAdaptation(.popover)
+            }
+            CircleIconButton(systemName: "gearshape.fill",
+                             kind: theme.id == "cognac" ? .woodLight : .wood) {
+                menuSettings.toggle(); menuResign = false
+            }
+            .tourAnchor(.settings)
+            .popover(isPresented: $menuSettings, arrowEdge: .top) {
+                settingsPopover.presentationCompactAdaptation(.popover)
+            }
         }
         .padding(.top, 12).padding(.trailing, 16)
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topTrailing)
     }
 
     private var settingsPopover: some View {
-        ParchmentCard {
-            VStack(alignment: .leading, spacing: 10) {
-                SectionLabel(text: "Animation speed", color: Palette.parchmentInk.opacity(0.6))
-                SegmentedChips(options: AnimationSpeed.allCases, selection: $speed,
-                               context: .parchment) { $0.rawValue }
-                Divider().background(Palette.parchmentEdge.opacity(0.25))
-                Button { menuSettings = false; onSkip() } label: {
-                    Label("Quit tutorial", systemImage: "house")
-                        .font(ThemeFont.bodyStrong).foregroundStyle(Palette.destructiveInk)
-                }
-                .buttonStyle(.plain)
+        VStack(alignment: .leading, spacing: 10) {
+            SectionLabel(text: "Animation speed", color: Palette.parchmentInk.opacity(0.6))
+            SegmentedChips(options: AnimationSpeed.allCases, selection: $speed,
+                           context: .parchment) { $0.rawValue }
+            Divider().background(Palette.parchmentEdge.opacity(0.25))
+            Button { menuSettings = false; onSkip() } label: {
+                Label("Quit tutorial", systemImage: "house")
+                    .font(ThemeFont.bodyStrong).foregroundStyle(Palette.destructiveInk)
             }
+            .buttonStyle(.plain)
         }
-        .transition(.opacity)
+        .padding(14).frame(width: 236).foregroundStyle(Palette.parchmentInk)
+        .background(Grad.parchment)
     }
 
     // Illustrative only — the options don't fire (resigning would end the tutorial
     // game). The popup just shows where resign lives; tapping an option dismisses it.
     private var resignPopover: some View {
-        ParchmentCard(width: 200) {
-            VStack(alignment: .leading, spacing: 8) {
-                SectionLabel(text: "Offer to resign", color: Palette.parchmentInk.opacity(0.6))
-                Button { menuResign = false } label: {
-                    Label("Single (oin)", systemImage: "flag").font(ThemeFont.bodyStrong)
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                        .padding(.vertical, 8).padding(.horizontal, 10)
-                        .background(RoundedRectangle(cornerRadius: 9).fill(Palette.parchmentEdge.opacity(0.1)))
-                }
-                .buttonStyle(.plain).foregroundStyle(Palette.parchmentInk)
-                Button { menuResign = false } label: {
-                    Label("Mars (double)", systemImage: "flag.checkered").font(ThemeFont.bodyStrong)
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                        .padding(.vertical, 8).padding(.horizontal, 10)
-                        .background(RoundedRectangle(cornerRadius: 9).fill(Palette.destructiveInk.opacity(0.14)))
-                }
-                .buttonStyle(.plain).foregroundStyle(Palette.destructiveInk)
+        VStack(alignment: .leading, spacing: 8) {
+            SectionLabel(text: "Offer to resign", color: Palette.parchmentInk.opacity(0.6))
+            Button { menuResign = false } label: {
+                Label("Single (oin)", systemImage: "flag").font(ThemeFont.bodyStrong)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(.vertical, 8).padding(.horizontal, 10)
+                    .background(RoundedRectangle(cornerRadius: 9).fill(Palette.parchmentEdge.opacity(0.1)))
             }
+            .buttonStyle(.plain).foregroundStyle(Palette.parchmentInk)
+            Button { menuResign = false } label: {
+                Label("Mars (double)", systemImage: "flag.checkered").font(ThemeFont.bodyStrong)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(.vertical, 8).padding(.horizontal, 10)
+                    .background(RoundedRectangle(cornerRadius: 9).fill(Palette.destructiveInk.opacity(0.14)))
+            }
+            .buttonStyle(.plain).foregroundStyle(Palette.destructiveInk)
         }
-        .transition(.opacity)
+        .padding(14).frame(width: 220).foregroundStyle(Palette.parchmentInk)
+        .background(Grad.parchment)
     }
 
     private var coachCard: some View {

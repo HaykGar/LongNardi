@@ -11,58 +11,78 @@ struct HomeView: View {
     let onTutorial: () -> Void
 
     var body: some View {
-        ZStack(alignment: .bottomLeading) {
+        ZStack {
             RadialBackground(surface: .home)
 
-            HStack(alignment: .center, spacing: 24) {
-                // Left: wordmark, tagline, stats — a fixed-width block hugging the
-                // left edge (not stretched across the gap), so it sits far left like
-                // the mockup and leaves a clear gap before the cards.
-                VStack(alignment: .leading, spacing: 0) {
-                    Text("Long Nardi")
-                        .font(ThemeFont.wordmark).foregroundStyle(Palette.cream)
-                        .minimumScaleFactor(0.6).lineLimit(1)
-                        .padding(.vertical, 6)
-                    Text("Play the classic tables game against a trained engine — or set up any position and explore the lines.")
-                        .font(ThemeFont.bodyText).foregroundStyle(Palette.creamDim)
-                        .fixedSize(horizontal: false, vertical: true)
-                    HStack(spacing: 26) {
-                        StatBlock(value: "\(store.wins)", label: "WINS")
-                        StatBlock(value: "\(store.winRatePercent)%", label: "WIN RATE")
-                        StatBlock(value: "\(store.currentStreak)", label: "STREAK")
+            // Device-adaptive: side margins + the gap scale with the screen, and the
+            // two blocks are capped and CENTRED as a pair — so they pull inward off
+            // the edges on a phone (iPhone 14) yet spread cleanly on an iPad.
+            GeometryReader { geo in
+                let w = geo.size.width
+                let sidePad = max(28, w * 0.055)
+                let gap = max(22, w * 0.038)
+                let avail = max(0, w - sidePad * 2 - gap)
+                let leftW = min(330, avail * 0.44)
+                let rightW = min(420, avail * 0.56)
+
+                ZStack(alignment: .bottomLeading) {
+                    Color.clear
+                    HStack(alignment: .center, spacing: gap) {
+                        leftBlock.frame(width: leftW, alignment: .leading)
+                        rightCards.frame(width: rightW)
                     }
-                    .padding(.top, 24)
-                }
-                .frame(width: 320, alignment: .leading)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)   // centres the pair
+                    .padding(.horizontal, sidePad)
 
-                Spacer(minLength: 20)   // flexible central gap → cards hug the right
-
-                // Right: action cards
-                VStack(spacing: 14) {
-                    ActionCard(title: "Play", subtitle: "Against the engine, or pass & play",
-                               systemImage: "play.fill", kind: .primary, action: onPlay)
-                    ActionCard(title: "Analyze", subtitle: "Set up a position & run the engine",
-                               systemImage: "scope", kind: .secondary, action: onAnalyze)
-                    ActionCard(title: "History", subtitle: "Review any past game",
-                               systemImage: "list.bullet", kind: .secondary, action: onHistory)
-                }
-                .frame(width: 400)
-            }
-            .padding(.leading, 36).padding(.trailing, 40)
-            .frame(maxWidth: .infinity, maxHeight: .infinity)
-
-            // Quiet tutorial ribbon → the tutorial chooser.
-            Button(action: onTutorial) {
-                HStack(spacing: 8) {
-                    Image(systemName: "sparkles")
-                    Text("New to Nardi?").font(ThemeFont.caption)
-                    Text("Take the tutorial ›").font(.system(size: 12, weight: .heavy))
-                        .foregroundStyle(Palette.accentSoft)
+                    tutorialRibbon
+                        .padding(.leading, sidePad).padding(.bottom, 18)
                 }
             }
-            .buttonStyle(RibbonButtonStyle())
-            .padding(.leading, 36).padding(.bottom, 18)
         }
+    }
+
+    // Left: wordmark, tagline, stats.
+    private var leftBlock: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            Text("Long Nardi")
+                .font(ThemeFont.wordmark).foregroundStyle(Palette.cream)
+                .minimumScaleFactor(0.6).lineLimit(1)
+                .padding(.vertical, 6)
+            Text("Play the classic tables game against a trained engine — or set up any position and explore the lines.")
+                .font(ThemeFont.bodyText).foregroundStyle(Palette.creamDim)
+                .fixedSize(horizontal: false, vertical: true)
+            HStack(spacing: 26) {
+                StatBlock(value: "\(store.wins)", label: "WINS")
+                StatBlock(value: "\(store.winRatePercent)%", label: "WIN RATE")
+                StatBlock(value: "\(store.currentStreak)", label: "STREAK")
+            }
+            .padding(.top, 24)
+        }
+    }
+
+    // Right: the three action cards.
+    private var rightCards: some View {
+        VStack(spacing: 14) {
+            ActionCard(title: "Play", subtitle: "Against the engine, or pass & play",
+                       systemImage: "play.fill", kind: .primary, action: onPlay)
+            ActionCard(title: "Analyze", subtitle: "Set up a position & run the engine",
+                       systemImage: "scope", kind: .secondary, action: onAnalyze)
+            ActionCard(title: "History", subtitle: "Review any past game",
+                       systemImage: "list.bullet", kind: .secondary, action: onHistory)
+        }
+    }
+
+    // Quiet tutorial ribbon → the tutorial chooser.
+    private var tutorialRibbon: some View {
+        Button(action: onTutorial) {
+            HStack(spacing: 8) {
+                Image(systemName: "sparkles")
+                Text("New to Nardi?").font(ThemeFont.caption)
+                Text("Take the tutorial ›").font(.system(size: 12, weight: .heavy))
+                    .foregroundStyle(Palette.accentSoft)
+            }
+        }
+        .buttonStyle(RibbonButtonStyle())
     }
 }
 

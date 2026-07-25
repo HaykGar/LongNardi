@@ -5,6 +5,7 @@ import SwiftUI
 struct BoardView: View {
     @EnvironmentObject var game: NardiGame
     var alwaysShowConfirm = false          // tutorial: keep the ✓ present but greyed
+    var centerHalfControls = false         // EXPERIMENTAL: on-board Undo/Confirm per half
     @AppStorage(BoardTheme.storageKey) private var boardThemeRaw = BoardTheme.green.rawValue
     @AppStorage(PipDisplay.storageKey) private var showPips = true
 
@@ -30,9 +31,12 @@ struct BoardView: View {
                 : [],
             canConfirm: game.canConfirm,
             alwaysShowConfirm: alwaysShowConfirm,
+            centerHalfControls: centerHalfControls,
+            canUndo: game.canUndo,
             onTap: { row, col in game.tap(row: row, col: col) },
             onToggleDice: { game.toggleTryFirst() },
-            onConfirm: { game.confirm() }
+            onConfirm: { game.confirm() },
+            onUndo: centerHalfControls ? { game.undo() } : nil
         )
     }
 }

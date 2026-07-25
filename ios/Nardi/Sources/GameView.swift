@@ -18,17 +18,32 @@ struct GameView: View {
     @State private var menuSettings = false
     @State private var menuResign = false
 
+    /// EXPERIMENTAL: when true, Undo/Confirm float in the centre of each board half
+    /// (tap targets shortened) instead of Undo living in the bottom bar. Flip to
+    /// false to revert to the classic bottom-bar Undo + centred Confirm.
+    private let centerHalfControls = true
+
+    // Felt bands kept clear of the board so the chrome never clips it: a LEFT band
+    // just wide enough for the centred Replay control (past the Dynamic Island,
+    // which the safe area already excludes) and a RIGHT band for the settings/resign
+    // column. Kept minimal so the board stretches as large as the aspect allows.
+    private let leftBand: CGFloat = 82
+    private let rightBand: CGFloat = 60
+
     private var theme: BoardTheme { BoardTheme(rawValue: boardThemeRaw) ?? .green }
 
     var body: some View {
         ZStack {
             RadialBackground(surface: theme.surface)
 
-            BoardView().environmentObject(game)
-                .padding(.top, 10).padding(.bottom, 52).padding(.horizontal, 12)
+            // Stretched as large as the aspect allows within the reserved bands.
+            BoardView(centerHalfControls: centerHalfControls).environmentObject(game)
+                .padding(.leading, leftBand).padding(.trailing, rightBand)
+                .padding(.vertical, 6)
 
             topRightControls
-            bottomBar
+            replayControl
+            statusBar
 
             if game.pendingResign != nil { resignResponse }
             if case .gameOver = game.phase { gameOverPanel }
@@ -39,91 +54,94 @@ struct GameView: View {
     // MARK: Top-right: resign + settings (always reachable)
 
     private var topRightControls: some View {
-        VStack(alignment: .trailing, spacing: 8) {
-            HStack(spacing: 9) {
-                CircleIconButton(systemName: "flag.fill", kind: .resign, disabled: !game.canOffer) {
-                    menuResign.toggle(); menuSettings = false
-                }
-                CircleIconButton(systemName: "gearshape.fill",
-                                 kind: theme.id == "cognac" ? .woodLight : .wood) {
-                    menuSettings.toggle(); menuResign = false
-                }
+        // Settings in the top-right corner with Resign directly under it. Each opens
+        // a native popover anchored to ITS OWN button (arrow points at it, taps
+        // outside dismiss) — the conventional iOS pattern.
+        VStack(spacing: 8) {
+            CircleIconButton(systemName: "gearshape.fill",
+                             kind: theme.id == "cognac" ? .woodLight : .wood) {
+                menuSettings.toggle(); menuResign = false
             }
-            if menuSettings { settingsPopover }
-            if menuResign { resignPopover }
-            Spacer()
+            .popover(isPresented: $menuSettings, arrowEdge: .top) {
+                settingsPopover.presentationCompactAdaptation(.popover)
+            }
+            CircleIconButton(systemName: "flag.fill", kind: .resign, disabled: !game.canOffer) {
+                menuResign.toggle(); menuSettings = false
+            }
+            .popover(isPresented: $menuResign, arrowEdge: .top) {
+                resignPopover.presentationCompactAdaptation(.popover)
+            }
         }
-        .padding(.top, 12).padding(.trailing, 16)
+        .padding(.top, 12).padding(.trailing, 4)
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topTrailing)
     }
 
     private var settingsPopover: some View {
-        ParchmentCard {
-            VStack(alignment: .leading, spacing: 10) {
-                SectionLabel(text: "Animation speed", color: Palette.parchmentInk.opacity(0.6))
-                SegmentedChips(options: AnimationSpeed.allCases, selection: $speed,
-                               context: .parchment) { $0.rawValue }
-                if game.isPassAndPlay {
-                    Toggle(isOn: $autoFlip) { Text("Flip board each turn").font(ThemeFont.bodyStrong) }
-                        .toggleStyle(.flip)
-                }
-                Toggle(isOn: $showPips) { Text("Show pip counts").font(ThemeFont.bodyStrong) }
+        VStack(alignment: .leading, spacing: 10) {
+            SectionLabel(text: "Animation speed", color: Palette.parchmentInk.opacity(0.6))
+            SegmentedChips(options: AnimationSpeed.allCases, selection: $speed,
+                           context: .parchment) { $0.rawValue }
+            if game.isPassAndPlay {
+                Toggle(isOn: $autoFlip) { Text("Flip board each turn").font(ThemeFont.bodyStrong) }
                     .toggleStyle(.flip)
-                Divider().background(Palette.parchmentEdge.opacity(0.25))
-                Button { menuSettings = false; onQuit() } label: {
-                    Label("Quit to main menu", systemImage: "house")
-                        .font(ThemeFont.bodyStrong).foregroundStyle(Palette.destructiveInk)
-                }
-                .buttonStyle(.plain)
             }
+            Toggle(isOn: $showPips) { Text("Show pip counts").font(ThemeFont.bodyStrong) }
+                .toggleStyle(.flip)
+            Divider().background(Palette.parchmentEdge.opacity(0.25))
+            Button { menuSettings = false; onQuit() } label: {
+                Label("Quit to main menu", systemImage: "house")
+                    .font(ThemeFont.bodyStrong).foregroundStyle(Palette.destructiveInk)
+            }
+            .buttonStyle(.plain)
         }
-        .transition(.opacity)
+        .padding(14).frame(width: 236).foregroundStyle(Palette.parchmentInk)
+        .background(Grad.parchment)
     }
 
     private var resignPopover: some View {
-        ParchmentCard(width: 200) {
-            VStack(alignment: .leading, spacing: 8) {
-                SectionLabel(text: "Offer to resign", color: Palette.parchmentInk.opacity(0.6))
-                Button { menuResign = false; game.offerResign(.oin) } label: {
-                    Label("Single (oin)", systemImage: "flag").font(ThemeFont.bodyStrong)
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                        .padding(.vertical, 8).padding(.horizontal, 10)
-                        .background(RoundedRectangle(cornerRadius: 9).fill(Palette.parchmentEdge.opacity(0.1)))
-                }
-                .buttonStyle(.plain).foregroundStyle(Palette.parchmentInk)
-                Button { menuResign = false; game.offerResign(.mars) } label: {
-                    Label("Mars (double)", systemImage: "flag.checkered").font(ThemeFont.bodyStrong)
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                        .padding(.vertical, 8).padding(.horizontal, 10)
-                        .background(RoundedRectangle(cornerRadius: 9).fill(Palette.destructiveInk.opacity(0.14)))
-                }
-                .buttonStyle(.plain).foregroundStyle(Palette.destructiveInk)
+        VStack(alignment: .leading, spacing: 8) {
+            SectionLabel(text: "Offer to resign", color: Palette.parchmentInk.opacity(0.6))
+            Button { menuResign = false; game.offerResign(.oin) } label: {
+                Label("Single (oin)", systemImage: "flag").font(ThemeFont.bodyStrong)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(.vertical, 8).padding(.horizontal, 10)
+                    .background(RoundedRectangle(cornerRadius: 9).fill(Palette.parchmentEdge.opacity(0.1)))
             }
+            .buttonStyle(.plain).foregroundStyle(Palette.parchmentInk)
+            Button { menuResign = false; game.offerResign(.mars) } label: {
+                Label("Mars (double)", systemImage: "flag.checkered").font(ThemeFont.bodyStrong)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(.vertical, 8).padding(.horizontal, 10)
+                    .background(RoundedRectangle(cornerRadius: 9).fill(Palette.destructiveInk.opacity(0.14)))
+            }
+            .buttonStyle(.plain).foregroundStyle(Palette.destructiveInk)
         }
-        .transition(.opacity)
+        .padding(14).frame(width: 220).foregroundStyle(Palette.parchmentInk)
+        .background(Grad.parchment)
     }
 
-    // MARK: Bottom bar: undo (left, greys when inactive) · status (centre) · replay (right)
+    // MARK: Replay (left felt band, centre height) + status (bottom centre)
 
-    private var bottomBar: some View {
+    private var replayControl: some View {
+        Button { game.replayLastMove() } label: {
+            HStack(spacing: 5) {
+                Image(systemName: "play.fill")
+                if let d = game.lastMoveDice { Text("\(d.0)-\(d.1)") }
+            }
+        }
+        .buttonStyle(GhostPillButtonStyle(disabled: !game.canReplay))
+        .disabled(!game.canReplay)
+        .padding(.leading, 2)
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)
+    }
+
+    private var statusBar: some View {
         VStack {
             Spacer()
-            HStack(spacing: 12) {
-                CircleIconButton(systemName: "arrow.counterclockwise", kind: .wood, size: 38,
-                                 disabled: !game.canUndo) { game.undo() }
-                Spacer(minLength: 8)
-                Text(game.status)
-                    .font(ThemeFont.caption).foregroundStyle(Palette.creamDim)
-                    .multilineTextAlignment(.center).lineLimit(2)
-                Spacer(minLength: 8)
-                Button { game.replayLastMove() } label: {
-                    Label(game.lastMoveDice.map { "Replay \($0.0)-\($0.1)" } ?? "Replay",
-                          systemImage: "play.circle")
-                }
-                .buttonStyle(GhostPillButtonStyle(disabled: !game.canReplay))
-                .disabled(!game.canReplay)
-            }
-            .padding(.horizontal, 16).padding(.bottom, 10)
+            Text(game.status)
+                .font(ThemeFont.caption).foregroundStyle(Palette.creamDim)
+                .multilineTextAlignment(.center).lineLimit(2)
+                .padding(.bottom, 8).padding(.horizontal, leftBand + rightBand)
         }
     }
 
