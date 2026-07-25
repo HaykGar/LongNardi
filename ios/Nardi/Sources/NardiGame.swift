@@ -22,6 +22,9 @@ enum Opponent: String, CaseIterable, Identifiable {
         case .hard: return "vzg0"
         }
     }
+    /// Persisted so a new game defaults to the difficulty last played (survives
+    /// game-over, quit-to-menu, and app restart). Written by PlaySetupView.
+    static let storageKey = "nardi.opponent"
 }
 
 enum GameMode: String, CaseIterable, Identifiable {
@@ -647,10 +650,13 @@ final class NardiGame: ObservableObject {
     /// Slide each sub-move in sequence (pure display; touches no engine state), one
     /// finishing before the next starts. The displayed board advances hop by hop so
     /// it matches the engine's true sequence (intermediate landings / bear-offs).
-    private func runFlights(_ move: ReplayMove) async {
+    private func runFlights(_ move: ReplayMove, holdStart: Bool = false) async {
         isAnimating = true
         var disp = move.before
         board = disp
+        // Replay: pause on the untouched starting position so the viewer can read
+        // where the move begins before the checkers start sliding.
+        if holdStart { try? await Task.sleep(nanoseconds: 500_000_000) }
         let dur = UInt64(AnimationSpeed.flightDuration * 1_000_000_000)
         for m in move.subs {
             if let (r, c) = m.from { disp[r * Self.cols + c] -= move.moverSign }   // lift off source
@@ -673,7 +679,7 @@ final class NardiGame: ObservableObject {
         guard canReplay, let lm = lastMove else { return }
         let replay = ReplayMove(before: lm.before, subs: lm.subs, moverSign: lm.moverSign,
                                 after: engineBoard(), dice: lm.dice)
-        Task { @MainActor in await runFlights(replay) }
+        Task { @MainActor in await runFlights(replay, holdStart: true) }
     }
 
     private func updateSelection() {

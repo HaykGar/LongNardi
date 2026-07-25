@@ -25,6 +25,9 @@ struct PlaySetupView: View {
     let onStart: (PlayConfig) -> Void
     let onBack: () -> Void
     @State private var cfg = PlayConfig()
+    // Default the opponent to the difficulty last played; picking a new one writes
+    // it straight back so it sticks across game-over, quit, and app restart.
+    @AppStorage(Opponent.storageKey) private var savedOpponent = Opponent.medium
 
     var body: some View {
         ZStack(alignment: .topLeading) {
@@ -60,7 +63,9 @@ struct PlaySetupView: View {
                     }
                     if cfg.mode == .vsComputer {
                         ChoiceCard(title: "Opponent") {
-                            SegmentedChips(options: Opponent.allCases, selection: $cfg.opponent,
+                            SegmentedChips(options: Opponent.allCases,
+                                           selection: Binding(get: { cfg.opponent },
+                                                              set: { cfg.opponent = $0; savedOpponent = $0 }),
                                            context: .onDark) { $0.rawValue }
                         }
                         ChoiceCard(title: "You play") {
@@ -79,6 +84,7 @@ struct PlaySetupView: View {
             .padding(.horizontal, 48)
             .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
+        .onAppear { cfg.opponent = savedOpponent }
     }
 }
 
