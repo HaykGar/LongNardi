@@ -7,25 +7,23 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
-		310BECB0AFD743059FD9BE38 /* Tutorial.swift in Sources */ = {isa = PBXBuildFile; fileRef = E73B7EF26E0645E78A5F1117 /* Tutorial.swift */; };
-		76B94F6447BC4814A6384136 /* Theme.swift in Sources */ = {isa = PBXBuildFile; fileRef = FBCD8BDFC7E54BE1B6934AA1 /* Theme.swift */; };
-		66CD1C67808E44439FC794E4 /* ThemeComponents.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9DF6163F2E4F47B58B55D666 /* ThemeComponents.swift */; };
-		264F9028DADA4972BDEFDD98 /* HomeView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 746387349D004C4BB4AFD7F7 /* HomeView.swift */; };
-		976A716E985D4E55BE233987 /* PlaySetupView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 16E29A11FED140708F0D766A /* PlaySetupView.swift */; };
-		A5A0E2D7AA1A40C69D54E12F /* GameView.swift in Sources */ = {isa = PBXBuildFile; fileRef = E2A47178D5CB43959CDA08BC /* GameView.swift */; };
 		0A7A739EA56A0B0FEB7D9154 /* BoardGeometry.swift in Sources */ = {isa = PBXBuildFile; fileRef = ED5CD05F09BEC43DA1951CD9 /* BoardGeometry.swift */; };
 		16351C7DBFC15EC385679093 /* target_model.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 3141307AA4FD796A56F53F57 /* target_model.cpp */; };
 		1DF780B0FA834F71D6666C70 /* ScenarioBuilder.cpp in Sources */ = {isa = PBXBuildFile; fileRef = ACCB10D4E4DECFD80073A74F /* ScenarioBuilder.cpp */; };
 		2482AC1CF1229D2288203941 /* ContentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B46C3D17F4E832D5E53C7FD9 /* ContentView.swift */; };
 		24C861C2267D14F7F4460BC9 /* Controller.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 3FF145EB25FA984CE37E574A /* Controller.cpp */; };
+		264F9028DADA4972BDEFDD98 /* HomeView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 746387349D004C4BB4AFD7F7 /* HomeView.swift */; };
+		310BECB0AFD743059FD9BE38 /* Tutorial.swift in Sources */ = {isa = PBXBuildFile; fileRef = E73B7EF26E0645E78A5F1117 /* Tutorial.swift */; };
 		34EE2D5A07CA6848387592E2 /* nardi_engine.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 7642ED3DE5F6029C6C91A269 /* nardi_engine.cpp */; };
 		3634EB00EFA248CAA1DAC779 /* scenario_config.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 508E1384769A3A9E5D9C60FE /* scenario_config.cpp */; };
 		4D65A533426CC78CE42A58ED /* NardiGame.swift in Sources */ = {isa = PBXBuildFile; fileRef = 01F62DB776C36817BE09C8FF /* NardiGame.swift */; };
 		5FC49CF67517D00EF650B383 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 5D2859C5F5ED3E955FE3FC02 /* Assets.xcassets */; };
 		631E7B3D02058011231C36AC /* WhitePiece.png in Resources */ = {isa = PBXBuildFile; fileRef = 0EBEA7F8D52DA4D6377E609B /* WhitePiece.png */; };
 		6595B2B117B6AFE77B298C43 /* MatchHistory.swift in Sources */ = {isa = PBXBuildFile; fileRef = A16C463430F13B031E9A889B /* MatchHistory.swift */; };
+		66CD1C67808E44439FC794E4 /* ThemeComponents.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9DF6163F2E4F47B58B55D666 /* ThemeComponents.swift */; };
 		6F3B9EE7D7AB25991DB6DEDE /* mlp.nardiw in Resources */ = {isa = PBXBuildFile; fileRef = 50052D657515F6934953D482 /* mlp.nardiw */; };
 		7165DA1C25805ACE93942EFB /* Auxilaries.cpp in Sources */ = {isa = PBXBuildFile; fileRef = A009723BB96A897463B1ED77 /* Auxilaries.cpp */; };
+		76B94F6447BC4814A6384136 /* Theme.swift in Sources */ = {isa = PBXBuildFile; fileRef = FBCD8BDFC7E54BE1B6934AA1 /* Theme.swift */; };
 		7D22BA59FF57A63DF1FCCB7F /* nardi_infer.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 7FDA8C8CC2A0304C25076A91 /* nardi_infer.cpp */; };
 		7E123BA56EFCD40CA5F3182B /* Game.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 2AA877872AA3DF84FEEB0231 /* Game.cpp */; };
 		7FF32E95649A63A9AB182BDD /* GameReview.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6CCDE22CC9B53D8AA83E5524 /* GameReview.swift */; };
@@ -33,8 +31,10 @@
 		81E683B3E3D62AC0CABB24E5 /* TerminalRW.cpp in Sources */ = {isa = PBXBuildFile; fileRef = F62D4F9C54F44AF2A8E3B777 /* TerminalRW.cpp */; };
 		83ABB7E4DB3CDD0242B4937C /* GameReviewView.swift in Sources */ = {isa = PBXBuildFile; fileRef = EA4393CD6F6B1F85374F3426 /* GameReviewView.swift */; };
 		8A3FBD5167E283291B94B160 /* Monitors.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 8F3FB1CA4772F473CC083831 /* Monitors.cpp */; };
+		976A716E985D4E55BE233987 /* PlaySetupView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 16E29A11FED140708F0D766A /* PlaySetupView.swift */; };
 		9EEC878DF19A9625BAD825E8 /* MatchHistoryView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 30E44A12FE22DBE48A6E7B6B /* MatchHistoryView.swift */; };
 		A2388A8107A937A1589BB3C1 /* res2.nardiw in Resources */ = {isa = PBXBuildFile; fileRef = 1FDF08E60073280F52765E18 /* res2.nardiw */; };
+		A5A0E2D7AA1A40C69D54E12F /* GameView.swift in Sources */ = {isa = PBXBuildFile; fileRef = E2A47178D5CB43959CDA08BC /* GameView.swift */; };
 		AC61D0B0B87EBC6313D5B35F /* AnalyzeScreen.swift in Sources */ = {isa = PBXBuildFile; fileRef = D9E0B1305AA3E1DA46FBCEB7 /* AnalyzeScreen.swift */; };
 		B4A27E8029C1FF7E68EC084D /* nardi_c_api.cpp in Sources */ = {isa = PBXBuildFile; fileRef = D79E60817EC9D8FDF512F41E /* nardi_c_api.cpp */; };
 		B68FD28F9245275C58336F2D /* BoardCanvas.swift in Sources */ = {isa = PBXBuildFile; fileRef = 624A360BD9F94A4FB19C571D /* BoardCanvas.swift */; };
@@ -51,15 +51,10 @@
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
-		E73B7EF26E0645E78A5F1117 /* Tutorial.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Tutorial.swift; sourceTree = "<group>"; };
-		FBCD8BDFC7E54BE1B6934AA1 /* Theme.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Theme.swift; sourceTree = "<group>"; };
-		9DF6163F2E4F47B58B55D666 /* ThemeComponents.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ThemeComponents.swift; sourceTree = "<group>"; };
-		746387349D004C4BB4AFD7F7 /* HomeView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HomeView.swift; sourceTree = "<group>"; };
-		16E29A11FED140708F0D766A /* PlaySetupView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PlaySetupView.swift; sourceTree = "<group>"; };
-		E2A47178D5CB43959CDA08BC /* GameView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GameView.swift; sourceTree = "<group>"; };
 		01F62DB776C36817BE09C8FF /* NardiGame.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NardiGame.swift; sourceTree = "<group>"; };
 		0D46AE31262F698E6A983D6D /* Board.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; path = Board.cpp; sourceTree = "<group>"; };
 		0EBEA7F8D52DA4D6377E609B /* WhitePiece.png */ = {isa = PBXFileReference; lastKnownFileType = image.png; path = WhitePiece.png; sourceTree = "<group>"; };
+		16E29A11FED140708F0D766A /* PlaySetupView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PlaySetupView.swift; sourceTree = "<group>"; };
 		1FDF08E60073280F52765E18 /* res2.nardiw */ = {isa = PBXFileReference; lastKnownFileType = file; path = res2.nardiw; sourceTree = "<group>"; };
 		2AA877872AA3DF84FEEB0231 /* Game.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; path = Game.cpp; sourceTree = "<group>"; };
 		2DA94F4764C4B0F3BB9D042A /* NardiApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NardiApp.swift; sourceTree = "<group>"; };
@@ -75,11 +70,13 @@
 		5D2859C5F5ED3E955FE3FC02 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		624A360BD9F94A4FB19C571D /* BoardCanvas.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BoardCanvas.swift; sourceTree = "<group>"; };
 		6CCDE22CC9B53D8AA83E5524 /* GameReview.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GameReview.swift; sourceTree = "<group>"; };
+		746387349D004C4BB4AFD7F7 /* HomeView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HomeView.swift; sourceTree = "<group>"; };
 		7642ED3DE5F6029C6C91A269 /* nardi_engine.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; path = nardi_engine.cpp; sourceTree = "<group>"; };
 		79D991F35317B7900EB8CAB9 /* AnalyzeGame.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AnalyzeGame.swift; sourceTree = "<group>"; };
 		7FDA8C8CC2A0304C25076A91 /* nardi_infer.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; path = nardi_infer.cpp; sourceTree = "<group>"; };
 		8F3FB1CA4772F473CC083831 /* Monitors.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; path = Monitors.cpp; sourceTree = "<group>"; };
 		9B46DC8A792B61279CDD99A6 /* ReaderWriter.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; path = ReaderWriter.cpp; sourceTree = "<group>"; };
+		9DF6163F2E4F47B58B55D666 /* ThemeComponents.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ThemeComponents.swift; sourceTree = "<group>"; };
 		A009723BB96A897463B1ED77 /* Auxilaries.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; path = Auxilaries.cpp; sourceTree = "<group>"; };
 		A16C463430F13B031E9A889B /* MatchHistory.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MatchHistory.swift; sourceTree = "<group>"; };
 		ACCB10D4E4DECFD80073A74F /* ScenarioBuilder.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; path = ScenarioBuilder.cpp; sourceTree = "<group>"; };
@@ -90,10 +87,13 @@
 		D79E60817EC9D8FDF512F41E /* nardi_c_api.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; path = nardi_c_api.cpp; sourceTree = "<group>"; };
 		D9E0B1305AA3E1DA46FBCEB7 /* AnalyzeScreen.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AnalyzeScreen.swift; sourceTree = "<group>"; };
 		DB6527A713831457F8C54E76 /* BlackPiece.png */ = {isa = PBXFileReference; lastKnownFileType = image.png; path = BlackPiece.png; sourceTree = "<group>"; };
+		E2A47178D5CB43959CDA08BC /* GameView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GameView.swift; sourceTree = "<group>"; };
 		E36FAE2739F4EB37BC8F69E4 /* Nardi.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Nardi.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		E73B7EF26E0645E78A5F1117 /* Tutorial.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Tutorial.swift; sourceTree = "<group>"; };
 		EA4393CD6F6B1F85374F3426 /* GameReviewView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GameReviewView.swift; sourceTree = "<group>"; };
 		ED5CD05F09BEC43DA1951CD9 /* BoardGeometry.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BoardGeometry.swift; sourceTree = "<group>"; };
 		F62D4F9C54F44AF2A8E3B777 /* TerminalRW.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; path = TerminalRW.cpp; sourceTree = "<group>"; };
+		FBCD8BDFC7E54BE1B6934AA1 /* Theme.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Theme.swift; sourceTree = "<group>"; };
 		FBF1A80B35EA4CCC48ADE398 /* mcts_node.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; path = mcts_node.cpp; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
@@ -344,7 +344,7 @@
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				CODE_SIGN_IDENTITY = "iPhone Developer";
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 12;
+				CURRENT_PROJECT_VERSION = 1;
 				DEVELOPMENT_TEAM = 74ZWUTSWK8;
 				GCC_PREPROCESSOR_DEFINITIONS = "$(inherited)";
 				HEADER_SEARCH_PATHS = (
@@ -356,7 +356,7 @@
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
-				MARKETING_VERSION = 1.2;
+				MARKETING_VERSION = 2.1;
 				PRODUCT_BUNDLE_IDENTIFIER = com.haykg.nardi;
 				SDKROOT = iphoneos;
 				SWIFT_OBJC_BRIDGING_HEADER = "Nardi/Bridge/Nardi-Bridging-Header.h";
@@ -435,7 +435,7 @@
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				CODE_SIGN_IDENTITY = "iPhone Developer";
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 12;
+				CURRENT_PROJECT_VERSION = 1;
 				DEVELOPMENT_TEAM = 74ZWUTSWK8;
 				GCC_PREPROCESSOR_DEFINITIONS = "$(inherited)";
 				HEADER_SEARCH_PATHS = (
@@ -447,7 +447,7 @@
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
-				MARKETING_VERSION = 1.2;
+				MARKETING_VERSION = 2.1;
 				PRODUCT_BUNDLE_IDENTIFIER = com.haykg.nardi;
 				SDKROOT = iphoneos;
 				SWIFT_OBJC_BRIDGING_HEADER = "Nardi/Bridge/Nardi-Bridging-Header.h";
