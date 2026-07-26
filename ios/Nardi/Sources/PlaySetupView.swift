@@ -28,6 +28,8 @@ struct PlaySetupView: View {
     // Default the opponent to the difficulty last played; picking a new one writes
     // it straight back so it sticks across game-over, quit, and app restart.
     @AppStorage(Opponent.storageKey) private var savedOpponent = Opponent.medium
+    // Same for the first-move choice, so first/second/random sticks like difficulty.
+    @AppStorage(FirstMove.storageKey) private var savedFirst = FirstMove.first
 
     var body: some View {
         ZStack(alignment: .topLeading) {
@@ -69,7 +71,9 @@ struct PlaySetupView: View {
                                            context: .onDark) { $0.rawValue }
                         }
                         ChoiceCard(title: "You play") {
-                            SegmentedChips(options: FirstMove.allCases, selection: $cfg.first,
+                            SegmentedChips(options: FirstMove.allCases,
+                                           selection: Binding(get: { cfg.first },
+                                                              set: { cfg.first = $0; savedFirst = $0 }),
                                            context: .onDark) { $0.shortLabel }
                         }
                     } else {
@@ -84,7 +88,7 @@ struct PlaySetupView: View {
             .padding(.horizontal, 48)
             .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
-        .onAppear { cfg.opponent = savedOpponent }
+        .onAppear { cfg.opponent = savedOpponent; cfg.first = savedFirst }
     }
 }
 

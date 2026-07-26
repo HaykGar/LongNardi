@@ -92,14 +92,16 @@ final class GameReview: ObservableObject {
     var reviewSideName: String { reviewSide ? "Black" : "White" }
 
     /// Total pips rolled by each colour over the whole game (both dice every roll,
-    /// passes included). Summed from the recorded turns — each point past the start
-    /// carries that turn's dice and mover — so it also works for a cached review.
+    /// passes included; a double counts as four dice — a 5-5 is 20 pips of possible
+    /// advancement, not 10). Summed from the recorded turns — each point past the
+    /// start carries that turn's dice and mover — so it also works for a cached review.
     var whiteDiceTotal: Int { diceTotal(black: false) }
     var blackDiceTotal: Int { diceTotal(black: true) }
     private func diceTotal(black: Bool) -> Int {
         points.reduce(0) { acc, p in
             guard let d = p.dice, p.mover == black else { return acc }
-            return acc + d.0 + d.1
+            // A double is four moves of that value, so it advances 4× the die.
+            return acc + (d.0 == d.1 ? d.0 * 4 : d.0 + d.1)
         }
     }
 

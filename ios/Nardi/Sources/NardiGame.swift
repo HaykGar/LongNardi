@@ -46,6 +46,9 @@ enum FirstMove: String, CaseIterable, Identifiable {
     case second = "I play second (Black)"
     case random = "Random"
     var id: String { rawValue }
+    /// Persisted so a new game defaults to the first-move choice last played
+    /// (survives game-over, quit-to-menu, and app restart). Written by PlaySetupView.
+    static let storageKey = "nardi.firstMove"
 }
 
 enum Phase: Equatable {
