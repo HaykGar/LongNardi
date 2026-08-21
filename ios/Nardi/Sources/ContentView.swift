@@ -67,17 +67,19 @@ struct ContentView: View {
 
     private func openReviewFromCurrentGame() {
         reviewReturn = .game
+        // The rollout this game has been running all along — usually already done.
+        let pending = game.counterfactual
         if let id = game.lastMatchID, let m = store.matches.first(where: { $0.id == id }) {
-            openReview(m)
+            openReview(m, pending: pending)
         } else {
-            review = GameReview(log: game.reviewLog, reviewSide: game.reviewSide)
+            review = GameReview(log: game.reviewLog, reviewSide: game.reviewSide, pending: pending)
         }
     }
 
     /// Open review for a stored match, reusing its cached review or computing + caching once.
-    private func openReview(_ match: SavedMatch) {
+    private func openReview(_ match: SavedMatch, pending: CounterfactualRunner? = nil) {
         review = GameReview(log: match.reviewTurns, reviewSide: match.reviewSide,
-                            cached: match.review,
+                            cached: match.review, pending: pending,
                             onComputed: { [weak store] data in store?.setReview(match.id, data) })
     }
 
@@ -180,6 +182,10 @@ struct ContentView: View {
             analyze.standardStart()
             route = .analyze
             if args.contains("--analyze-run") { analyze.startAnalysis() }
+            if args.contains("--black") {            // dev: editor with the Black chips selected
+                analyze.editTool = .black
+                analyze.sideToMove = true
+            }
         }
         // Open analysis and play one sub-move programmatically (verify move-playing).
         if args.contains("--analyze-move") || args.contains("--analyze-undo") {
@@ -197,6 +203,15 @@ struct ContentView: View {
             game.devAutoPlayAndReview()
             reviewReturn = .home
             review = GameReview(log: game.reviewLog, reviewSide: game.reviewSide)
+        }
+        // dev: play a real game (runner fed live), then open its review — it should
+        // appear with no rollout wait.
+        if args.contains("--live-review") {
+            Task { @MainActor in
+                await game.devLivePlayAndReview()
+                route = .game
+                openReviewFromCurrentGame()
+            }
         }
     }
 }

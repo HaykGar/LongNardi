@@ -187,6 +187,17 @@ final class NardiGame: ObservableObject {
     var reviewSide: Bool { mode == .vsComputer ? !humanIsWhite : false }
     var hasReview: Bool { !reviewLog.isEmpty }
 
+    /// The review's "computer in your seat" rollout, run DURING the game: it consumes
+    /// each turn as it's played (see CounterfactualRunner), so by the time the game
+    /// ends the answer is usually ready and Review opens without waiting on it.
+    private(set) var counterfactual: CounterfactualRunner? = nil
+
+    /// Record a completed turn for the review, and hand it to the live rollout.
+    private func logTurn(_ turn: ReviewTurn) {
+        reviewLog.append(turn)
+        counterfactual?.feed(turn)
+    }
+
     /// Combined startable squares (either die), for the green start dots.
     var startMaskCombined: Int { startMasks.0 | startMasks.1 }
     /// Whether a colour has begun bearing off (drives the "Off n/15" badges). The
@@ -251,6 +262,10 @@ final class NardiGame: ObservableObject {
             }
         }
         nardi_reset(handle)
+        // Start the review's rollout now so it runs alongside the game (reviewSide is
+        // settled above); it's fed each turn as it's played.
+        counterfactual?.cancel()
+        counterfactual = CounterfactualRunner(reviewSide: reviewSide)
         selected = nil
         flights = []
         isAnimating = false
@@ -292,6 +307,7 @@ final class NardiGame: ObservableObject {
         selected = nil; flights = []; isAnimating = false
         turnSubs = []; lastMove = nil
         pendingResign = nil; lastMatchID = nil; reviewLog = []; humanTurnPre = nil
+        counterfactual?.cancel(); counterfactual = nil   // tutorial games are never reviewed
         tryFirst = false; canConfirm = false
         board = engineBoard()
         flipped = desiredFlip()           // white (human) perspective
@@ -479,6 +495,9 @@ final class NardiGame: ObservableObject {
 
     /// Archive a resigned game (engine is NOT terminal, so winner/mars are explicit).
     private func saveResignedMatch(winnerWhite: Bool, mars: Bool) {
+        // A resignation ends the real game, not the hypothetical one: the rollout
+        // still plays its line out to a finish.
+        counterfactual?.close()
         guard !matchSaved, let save = onGameFinished else { return }
         matchSaved = true
         let id = UUID()
@@ -495,8 +514,8 @@ final class NardiGame: ObservableObject {
     /// engine board; confirm/finalize doesn't change the board, only the side).
     private func recordHumanTurn() {
         guard let pre = humanTurnPre else { return }
-        reviewLog.append(ReviewTurn(preBoard: pre.0, preSide: pre.1,
-                                    dice: humanTurnDice, postBoard: engineBoard(), moved: true))
+        logTurn(ReviewTurn(preBoard: pre.0, preSide: pre.1,
+                           dice: humanTurnDice, postBoard: engineBoard(), moved: true))
         humanTurnPre = nil
     }
 
@@ -545,13 +564,13 @@ final class NardiGame: ObservableObject {
                     status = "Engine error: " + String(cString: nardi_last_error(handle))
                     return
                 case NARDI_STEP_TURN_PASSED:
-                    reviewLog.append(ReviewTurn(preBoard: preBoard, preSide: preSide,
-                                                dice: dice, postBoard: preBoard, moved: false))
+                    logTurn(ReviewTurn(preBoard: preBoard, preSide: preSide,
+                                       dice: dice, postBoard: preBoard, moved: false))
                     status = "No legal moves — passing."
                     try? await Task.sleep(nanoseconds: 400_000_000)
                 default:                       // BotMoved (bot or forced auto-play)
-                    reviewLog.append(ReviewTurn(preBoard: preBoard, preSide: preSide,
-                                                dice: dice, postBoard: engineBoard(), moved: true))
+                    logTurn(ReviewTurn(preBoard: preBoard, preSide: preSide,
+                                       dice: dice, postBoard: engineBoard(), moved: true))
                     // Record this move for replay (mover = the side that just moved).
                     recordReplay(before: board, subs: recentMoves(),
                                  moverSign: preSide ? -1 : 1, after: engineBoard())
@@ -708,6 +727,7 @@ final class NardiGame: ObservableObject {
     /// Archive the just-finished game to the match history exactly once. The
     /// engine is in its terminal state here, so winner/mars read straight off it.
     private func saveMatchIfNeeded() {
+        counterfactual?.close()   // log is final: the rollout plays out its own tail
         guard !matchSaved, !reviewLog.isEmpty, let save = onGameFinished else { return }
         matchSaved = true
         let whiteWon = (nardi_current_player(handle) == 1)   // loser is to move at game end
@@ -724,6 +744,7 @@ final class NardiGame: ObservableObject {
 
     func backToSetup() {
         loopTask?.cancel()   // stop auto-play so it can't snap us back into the game
+        counterfactual?.cancel()   // no-op once the game ended; drops an abandoned game's work
         phase = .setup
     }
 
@@ -750,6 +771,59 @@ final class NardiGame: ObservableObject {
             }
         }
         return log
+    }
+
+    /// Dev/verification only: play a full game through the NORMAL turn pipeline —
+    /// so the live counterfactual runner is created, fed turn by turn, and closed at
+    /// game end — pacing the turns so the rollout really does wait on the game. Then
+    /// re-runs the same log from scratch and logs both outcomes: they must agree.
+    func devLivePlayAndReview() async {
+        newGame(mode: .vsComputer, opponent: .easy, first: .first)   // creates the runner
+        loopTask?.cancel()
+        nardi_configure_players(handle, NARDI_RANDOM, NARDI_GREEDY)  // both seats auto-play
+        nardi_reset(handle)
+        reviewLog = []
+
+        // Seconds per turn: how fast the game feeds the rollout. Real play is several
+        // seconds a turn; a tiny pace is the worst case (the rollout can't keep up).
+        let args = ProcessInfo.processInfo.arguments
+        let pace = args.firstIndex(of: "--pace").flatMap { i -> Double? in
+            i + 1 < args.count ? Double(args[i + 1]) : nil
+        } ?? 0.12
+
+        var guardCount = 0
+        while nardi_should_continue(handle) == 1 && guardCount < 600 {
+            guardCount += 1
+            let preBoard = engineBoard()
+            let preSide = (nardi_current_player(handle) == 1)
+            let step = nardi_advance(handle)
+            var d = [Int32](repeating: 0, count: 2); _ = nardi_dice(handle, &d)
+            let dv = (Int(d[0]), Int(d[1]))
+            if step == NARDI_STEP_TURN_PASSED {
+                logTurn(ReviewTurn(preBoard: preBoard, preSide: preSide, dice: dv,
+                                   postBoard: preBoard, moved: false))
+            } else if step == NARDI_STEP_BOT_MOVED {
+                logTurn(ReviewTurn(preBoard: preBoard, preSide: preSide, dice: dv,
+                                   postBoard: engineBoard(), moved: true))
+            } else {
+                break
+            }
+            try? await Task.sleep(nanoseconds: UInt64(pace * 1_000_000_000))
+        }
+
+        let live = counterfactual
+        saveMatchIfNeeded()          // closes the rollout and archives the match
+        board = engineBoard()
+        refreshMeta()
+        phase = .gameOver(message: outcomeMessage())
+
+        let t0 = Date()
+        let liveResult = await live?.result()
+        let waited = Date().timeIntervalSince(t0)
+        let fresh = await CounterfactualRunner(replaying: reviewLog, reviewSide: reviewSide).result()
+        print("[cf] turns=\(reviewLog.count) live=\(String(describing: liveResult)) " +
+              "fresh=\(String(describing: fresh)) waitAfterGame=\(String(format: "%.2f", waited))s " +
+              "match=\(liveResult?.reviewedWon == fresh?.reviewedWon && liveResult?.mars == fresh?.mars && liveResult?.finished == fresh?.finished)")
     }
 
     /// Dev/verification only: self-play to completion, recording the review log,
