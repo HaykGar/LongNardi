@@ -118,51 +118,76 @@ struct RibbonButtonStyle: ButtonStyle {
 
 enum ChipContext { case parchment, onDark }
 
+/// Fill/ink a chip takes when selected, so a White/Black picker can read as the
+/// checker it stands for instead of the generic wood highlight.
+struct ChipTint {
+    let fill: Color
+    let ink: Color
+
+    static let whiteChecker = ChipTint(fill: Color(hex: 0xEAD7AB), ink: Palette.whiteCheckerCountInk)
+    static let blackChecker = ChipTint(fill: Color(hex: 0x241812), ink: Palette.blackCheckerCountInk)
+}
+
 struct SegmentedChips<Option: Hashable>: View {
     let options: [Option]
     @Binding var selection: Option
     var context: ChipContext = .onDark
+    /// When non-nil for an option, that option's selected state uses the tint
+    /// plus a bright outline (the outline is what reads as "selected").
+    var tint: ((Option) -> ChipTint?)? = nil
     let label: (Option) -> String
 
     var body: some View {
         HStack(spacing: context == .parchment ? 6 : 9) {
             ForEach(options, id: \.self) { opt in
                 let on = (opt == selection)
+                let t = tint?(opt)
                 Text(label(opt))
                     .font(.system(size: context == .parchment ? 12 : 12.5, weight: .bold))
                     .lineLimit(1).minimumScaleFactor(0.7)
                     .frame(maxWidth: .infinity)
                     .padding(.vertical, context == .parchment ? 5 : 8)
-                    .background(chipBackground(on: on))
-                    .foregroundStyle(chipForeground(on: on))
-                    .overlay(chipBorder(on: on))
+                    .background(chipBackground(on: on, tint: t))
+                    .foregroundStyle(chipForeground(on: on, tint: t))
+                    .overlay(chipBorder(on: on, tint: t))
                     .contentShape(Rectangle())
                     .onTapGesture { selection = opt }
             }
         }
     }
 
-    @ViewBuilder private func chipBackground(on: Bool) -> some View {
-        switch context {
-        case .parchment:
-            RoundedRectangle(cornerRadius: 7)
-                .fill(on ? AnyShapeStyle(Color(hex: 0x6E4326))
-                         : AnyShapeStyle(Palette.parchmentEdge.opacity(0.12)))
-        case .onDark:
-            RoundedRectangle(cornerRadius: 10)
-                .fill(on ? AnyShapeStyle(Grad.woodFrame)
-                         : AnyShapeStyle(Palette.fillWarm.opacity(0.08)))
-                .shadow(color: on ? .black.opacity(0.4) : .clear, radius: 5, y: 3)
+    private var radius: CGFloat { context == .parchment ? 7 : 10 }
+
+    @ViewBuilder private func chipBackground(on: Bool, tint: ChipTint?) -> some View {
+        if let tint, on {
+            RoundedRectangle(cornerRadius: radius)
+                .fill(tint.fill)
+                .shadow(color: .black.opacity(0.4), radius: 5, y: 3)
+        } else {
+            switch context {
+            case .parchment:
+                RoundedRectangle(cornerRadius: 7)
+                    .fill(on ? AnyShapeStyle(Color(hex: 0x6E4326))
+                             : AnyShapeStyle(Palette.parchmentEdge.opacity(0.12)))
+            case .onDark:
+                RoundedRectangle(cornerRadius: 10)
+                    .fill(on ? AnyShapeStyle(Grad.woodFrame)
+                             : AnyShapeStyle(Palette.fillWarm.opacity(0.08)))
+                    .shadow(color: on ? .black.opacity(0.4) : .clear, radius: 5, y: 3)
+            }
         }
     }
-    private func chipForeground(on: Bool) -> Color {
+    private func chipForeground(on: Bool, tint: ChipTint?) -> Color {
+        if let tint, on { return tint.ink }
         switch context {
         case .parchment: return on ? Color(hex: 0xF5ECD6) : Color(hex: 0x6E4326)
         case .onDark:    return on ? Color(hex: 0xF5ECD6) : Palette.toastInk
         }
     }
-    @ViewBuilder private func chipBorder(on: Bool) -> some View {
-        if context == .onDark, !on {
+    @ViewBuilder private func chipBorder(on: Bool, tint: ChipTint?) -> some View {
+        if on, tint != nil {
+            RoundedRectangle(cornerRadius: radius).stroke(Palette.accentSoft, lineWidth: 2)
+        } else if context == .onDark, !on {
             RoundedRectangle(cornerRadius: 10).stroke(Palette.strokeWarm.opacity(0.2), lineWidth: 1)
         }
     }

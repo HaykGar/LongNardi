@@ -44,15 +44,27 @@ struct AnalyzeScreen: View {
     }
 
     @ViewBuilder private var rightBarButton: some View {
-        if game.phase == .analyzing {
+        if game.isReviewSession {
+            // A review is an analysis OF THE PLAYED GAME: no position editing, so the
+            // line can never be swapped for an abstract setup that has left the game.
+            Button("Done") { onExit() }
+                .font(ThemeFont.bodyStrong).foregroundStyle(Palette.creamDim)
+        } else if game.phase == .analyzing {
             Button("Edit") { game.backToEditor(fromAnalysis: true) }
                 .font(ThemeFont.bodyStrong).foregroundStyle(Palette.creamDim)
         } else if game.cameFromAnalysis {
             Button { game.resumeAnalysis() } label: { Label("Back", systemImage: "chevron.left") }
                 .font(ThemeFont.bodyStrong).foregroundStyle(Palette.creamDim)
         } else {
-            Button("Close") { onExit() }
-                .font(ThemeFont.bodyStrong).foregroundStyle(Palette.creamDim)
+            Button { onExit() } label: {
+                Image(systemName: "xmark")
+                    .font(.system(size: 15, weight: .bold))
+                    .foregroundStyle(Palette.creamDim)
+                    .frame(width: 44, height: 44)
+                    .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel("Close")
         }
     }
 
@@ -101,21 +113,25 @@ private struct EditorBody: View {
                     VStack(alignment: .leading, spacing: 12) {
                         SectionLabel(text: "Place / Remove")
                         SegmentedChips(options: [EditTool.white, .black, .erase], selection: $game.editTool,
-                                       context: .onDark) { t in t == .white ? "White" : t == .black ? "Black" : "Erase" }
+                                       context: .onDark,
+                                       tint: { t in t == .white ? .whiteChecker : t == .black ? .blackChecker : nil }) {
+                            t in t == .white ? "White" : t == .black ? "Black" : "Erase"
+                        }
                         Text("On board — White \(game.placed(false)) · Black \(game.placed(true))")
                             .font(ThemeFont.micro).foregroundStyle(Palette.muted)
 
                         HStack {
                             SectionLabel(text: "First to move")
                             Spacer()
-                            SegmentedChips(options: [false, true], selection: $game.sideToMove, context: .onDark) {
+                            SegmentedChips(options: [false, true], selection: $game.sideToMove, context: .onDark,
+                                           tint: { $0 ? .blackChecker : .whiteChecker }) {
                                 $0 ? "Black" : "White"
                             }.frame(width: 150)
                         }
 
                         HStack(spacing: 10) {
                             Button("Clear") { game.clearBoard() }.buttonStyle(GhostPillButtonStyle())
-                            Button("Std start") { game.standardStart() }.buttonStyle(GhostPillButtonStyle())
+                            Button("Standard Start") { game.standardStart() }.buttonStyle(GhostPillButtonStyle())
                         }
 
                         Text(game.validationError ?? (game.modelLoaded ? "Ready to analyze." : "⚠️ model blob missing"))

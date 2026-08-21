@@ -199,8 +199,13 @@ struct TutorialView: View {
 
     private var header: some View {
         HStack {
-            Button("‹ Skip tour", action: onSkip)
-                .font(ThemeFont.bodyStrong).foregroundStyle(Palette.creamDim).frame(width: 96, alignment: .leading)
+            Button(action: onSkip) {
+                Text("‹ Skip tour")
+                    .font(ThemeFont.bodyStrong).foregroundStyle(Palette.creamDim)
+                    .frame(width: 96, height: 40, alignment: .leading)
+                    .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
             Spacer()
             Text("Quick Tour").font(ThemeFont.serif(17, .bold)).foregroundStyle(Palette.cream)
             Spacer()
@@ -276,28 +281,37 @@ struct TutorialView: View {
                     if step > 0 {
                         // Clamp, don't decrement: the index must reflect the slide it
                         // IS, so rapid taps can never drive it out of range.
-                        Button("Back") { withAnimation { step = max(step - 1, 0) } }
-                            .font(ThemeFont.bodyStrong).foregroundStyle(Color(hex: 0x6E4326))
-                            .padding(.vertical, 9).padding(.horizontal, 14)
-                            .background(RoundedRectangle(cornerRadius: 11).fill(Palette.parchmentEdge.opacity(0.12)))
-                            .buttonStyle(.plain)
+                        // Padding/background live INSIDE the label so the whole
+                        // pill is the hit area, not just the glyphs.
+                        Button { withAnimation { step = max(step - 1, 0) } } label: {
+                            Text("Back")
+                                .font(ThemeFont.bodyStrong).foregroundStyle(Color(hex: 0x6E4326))
+                                .padding(.vertical, 9).padding(.horizontal, 14)
+                                .background(RoundedRectangle(cornerRadius: 11).fill(Palette.parchmentEdge.opacity(0.12)))
+                                .contentShape(RoundedRectangle(cornerRadius: 11))
+                        }
+                        .buttonStyle(.plain)
                     }
                     if step < steps.count - 1 {
                         // Clamp to the last slide so fast taps can't overshoot to "8/7".
                         Button { withAnimation { step = min(step + 1, steps.count - 1) } } label: {
-                            Text("Next ›").frame(maxWidth: .infinity)
+                            Text("Next ›")
+                                .font(ThemeFont.buttonLabel).foregroundStyle(.white)
+                                .frame(maxWidth: .infinity)
+                                .padding(.vertical, 10)
+                                .background(RoundedRectangle(cornerRadius: 11).fill(Grad.cta))
+                                .contentShape(RoundedRectangle(cornerRadius: 11))
                         }
-                        .font(ThemeFont.buttonLabel).foregroundStyle(.white)
-                        .padding(.vertical, 10)
-                        .background(RoundedRectangle(cornerRadius: 11).fill(Grad.cta))
                         .buttonStyle(.plain)
                     } else {
                         Button(action: onStartPlaying) {
-                            Label("Start playing", systemImage: "play.fill").frame(maxWidth: .infinity)
+                            Label("Start playing", systemImage: "play.fill")
+                                .font(ThemeFont.buttonLabel).foregroundStyle(.white)
+                                .frame(maxWidth: .infinity)
+                                .padding(.vertical, 10)
+                                .background(RoundedRectangle(cornerRadius: 11).fill(Grad.confirm))
+                                .contentShape(RoundedRectangle(cornerRadius: 11))
                         }
-                        .font(ThemeFont.buttonLabel).foregroundStyle(.white)
-                        .padding(.vertical, 10)
-                        .background(RoundedRectangle(cornerRadius: 11).fill(Grad.confirm))
                         .buttonStyle(.plain)
                     }
                 }
