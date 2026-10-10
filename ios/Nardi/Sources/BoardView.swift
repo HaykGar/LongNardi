@@ -18,7 +18,7 @@ struct BoardView: View {
             flipped: game.flipped,
             selected: game.selected,
             flights: game.flights,
-            startMask: game.startMaskCombined,
+            startMask: game.isReplaying ? 0 : game.startMaskCombined,
             whitePips: game.pipCounts.white,
             blackPips: game.pipCounts.black,
             whiteOff: game.whiteOff,
@@ -28,8 +28,14 @@ struct BoardView: View {
             showPips: showPips,
             theme: theme,
             dice: game.dice.0 > 0
-                ? game.orderedDice.map { DieSpec(value: $0.value, hasStart: $0.hasStart, isFirst: $0.isFirst) }
+                ? game.orderedDice.enumerated().map { i, d in
+                    // Physical die index: the first entry is the preferred die.
+                    let id = (i == 0) == (game.firstDieIndex == 0) ? 0 : 1
+                    return DieSpec(value: d.value, id: id, hasStart: d.hasStart, isFirst: d.isFirst)
+                }
                 : [],
+            rollSeq: game.rollSeq,
+            diceEmphasis: game.swapCount,
             canConfirm: game.canConfirm,
             alwaysShowConfirm: alwaysShowConfirm,
             centerHalfControls: centerHalfControls,

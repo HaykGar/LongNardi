@@ -4,7 +4,7 @@ import SwiftUI
 /// A position we can return to via arbitrary-history Undo. Restored with
 /// set_position (which bypasses the controller's per-turn undo, so undo works
 /// across confirmed moves too).
-private struct Snapshot { let board: [Int8]; let side: Bool }
+private struct Snapshot { let board: [Int8]; let side: Bool; let dice: (Int, Int) }
 
 /// An engine-recommended move shown in the analyzer: the end-board it reaches and a
 /// per-checker descriptor (e.g. "1 → 7, 12 → 17"). No eval is shown — these are
@@ -434,7 +434,7 @@ final class AnalyzeGame: ObservableObject {
             status = isTerminal ? "Position is terminal. Undo to continue."
                    : following ? "Following the game — \(currentSide ? "Black" : "White") to move."
                                : "\(currentSide ? "Black" : "White") to move."
-            autoApplyDice()
+            autoApplyDice(rollFree: true)
         }
         return true
     }
@@ -539,13 +539,15 @@ final class AnalyzeGame: ObservableObject {
     nonisolated private static func subMoveLabel(scratchHandle sh: OpaquePointer, preBoard: [Int8],
                                                  side: Bool, end: [Int8], _ d1: Int, _ d2: Int) -> String {
         preBoard.withUnsafeBufferPointer { _ = nardi_set_position(sh, $0.baseAddress, side ? 1 : 0) }
-        let m = Int(nardi_analyze_dice(sh, Int32(d1), Int32(d2)))
+        // Cheap roll + enumerate (no lookahead): re-ranking here with
+        // nardi_analyze_dice cost a full one-ply search per label (4x per position).
+        let m = Int(nardi_set_dice(sh, Int32(d1), Int32(d2)))
         var idx = -1
+        var b = [Int8](repeating: 0, count: cells)
         for j in 0..<max(0, m) {
-            var b = [Int8](repeating: 0, count: cells); var v: Float = 0
-            if nardi_analyzed_move(sh, Int32(j), &b, &v) == NARDI_OK, b == end { idx = j; break }
+            if nardi_option_board(sh, Int32(j), &b) == NARDI_OK, b == end { idx = j; break }
         }
-        guard idx >= 0, nardi_apply_analyzed_move(sh, Int32(idx)) == NARDI_OK else { return "—" }
+        guard idx >= 0, nardi_apply_human_move(sh, Int32(idx)) == NARDI_OK else { return "—" }
         var parts: [String] = []
         for k in 0..<max(0, Int(nardi_move_count(sh))) {
             var a = [Int32](repeating: -1, count: 4)
@@ -576,7 +578,9 @@ final class AnalyzeGame: ObservableObject {
             return
         }
         die1 = d1; die2 = d2          // reflect the applied dice in the UI / steppers
-        if turnStart == nil { turnStart = Snapshot(board: engineBoard(), side: currentSide) }
+        // Nothing moved yet this turn (setDice guards on it), so re-snapshot to keep
+        // the turn's latest dice for a later step-back.
+        turnStart = Snapshot(board: turnStart?.board ?? engineBoard(), side: currentSide, dice: (die1, die2))
 
         // Cheap, on the live handle: roll the dice + enumerate legal options so play
         // is enabled immediately (no model evaluation involved).
@@ -682,8 +686,13 @@ final class AnalyzeGame: ObservableObject {
         if useGameDice { useGameDice = false }
         die1 = Int.random(in: 1...6)
         die2 = Int.random(in: 1...6)
+        rollSeq &+= 1; rolledAt = Date()   // display only: replays the dice toss
         setDice()
     }
+    /// Bumped by "Roll random" so the dice views replay the toss animation.
+    @Published private(set) var rollSeq = 0
+    /// Last dice toss; checker taps wait until the dice have landed.
+    private var rolledAt = Date.distantPast
 
     /// Editor die stepper (before analysis; clamps the values consumed by
     /// startAnalysis -> autoApplyDice). `which`: 0 = D1, 1 = D2.
@@ -727,8 +736,15 @@ final class AnalyzeGame: ObservableObject {
     /// Entering a fresh turn (start / confirm / pass / step-back / follow): roll the
     /// new turn's dice. setDice() applies them immediately on the live handle (so the
     /// position is instantly playable) and debounces only the suggestion ranking.
-    private func autoApplyDice() {
+    /// `rollFree`: moving forward to a new turn on free dice rolls fresh ones (the
+    /// user can still step or re-roll them); start and step-back keep the set dice.
+    private func autoApplyDice(rollFree: Bool = false) {
         guard modelLoaded && !isTerminal else { return }
+        if rollFree && !useGameDice {
+            die1 = Int.random(in: 1...6)
+            die2 = Int.random(in: 1...6)
+            rollSeq &+= 1; rolledAt = Date()   // display only: replays the dice toss
+        }
         setDice()
     }
 
@@ -783,6 +799,7 @@ final class AnalyzeGame: ObservableObject {
     /// to the other. Mirrors the play screen exactly.
     func tap(row: Int, col: Int) {
         guard phase == .analyzing, diceApplied, !noLegalMoves, !isAnimating, !canConfirm else { return }
+        guard Date().timeIntervalSince(rolledAt) >= NardiGame.rollSettle else { return }   // dice still tumbling
         let bit = 1 << (row * Self.cols + col)
         let firstIdx = firstDieIndex
         let secondIdx = firstIdx == 0 ? 1 : 0
@@ -843,6 +860,7 @@ final class AnalyzeGame: ObservableObject {
             turnStart = nil
             resetTurnState()
             relTurn = max(0, relTurn - 1)
+            (die1, die2) = snap.dice                              // that turn's own roll
             if !loggedTurns.isEmpty { loggedTurns.removeLast() }   // keep the log in sync
             refreshGameLineFlag()
             isTerminal = false
@@ -870,7 +888,7 @@ final class AnalyzeGame: ObservableObject {
         positionEval = staticEval()
         status = isTerminal ? "Position is terminal. Undo to continue."
                             : "\(currentSide ? "Black" : "White") to move."
-        autoApplyDice()   // apply dice for the new side (game dice or free)
+        autoApplyDice(rollFree: true)   // apply dice for the new side (game dice or a fresh roll)
     }
 
     /// No legal move for the chosen dice: switch sides without moving (undoable).
@@ -888,7 +906,7 @@ final class AnalyzeGame: ObservableObject {
         positionEval = staticEval()
         canUndo = !history.isEmpty
         status = "Passed — \(currentSide ? "Black" : "White") to move."
-        autoApplyDice()
+        autoApplyDice(rollFree: true)
     }
 
     private func updateSelection() {

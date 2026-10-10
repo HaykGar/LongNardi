@@ -19,7 +19,13 @@ struct GameReviewView: View {
                 header
                 if !review.ready {
                     Spacer()
-                    ProgressView("Analyzing game…").tint(Palette.accentSoft).foregroundStyle(Palette.creamDim)
+                    VStack(spacing: 10) {
+                        Text("Analyzing game…").font(ThemeFont.micro).foregroundStyle(Palette.creamDim)
+                        ProgressView(value: review.progress).tint(Palette.accentSoft).frame(width: 220)
+                            .animation(Motion.anim(Motion.out(Motion.Duration.enter)), value: review.progress)
+                        Text("\(Int(review.progress * 100))%").font(ThemeFont.micro).foregroundStyle(Palette.muted)
+                            .monospacedDigit()
+                    }
                     Spacer()
                 } else {
                     content
@@ -63,6 +69,7 @@ struct GameReviewView: View {
                             whiteEndgame: wOff > 0, blackEndgame: bOff > 0,
                             onTap: { _, _ in })
                     .frame(maxWidth: .infinity)
+                    .overlay { reviewDice(pt) }
 
                 VStack(alignment: .leading, spacing: m.gap) {
                     evalBox(graphHeight: m.graphHeight)
@@ -78,6 +85,43 @@ struct GameReviewView: View {
             .frame(maxWidth: .infinity, maxHeight: .infinity)
             .padding(.horizontal, 16)
         }
+    }
+
+    /// The roll that produced this step, centred on the board (display-only; doubles
+    /// show four dice). Drawn as an overlay so BoardCanvas stays untouched. Each step
+    /// plays a quick flip (-14 deg -> 0, 0.84 -> 1).
+    @ViewBuilder
+    private func reviewDice(_ pt: ReviewPoint?) -> some View {
+        if let d = pt?.dice {
+            let values = d.0 == d.1 ? [d.0, d.0, d.0, d.0] : [d.0, d.1]
+            HStack(spacing: values.count == 4 ? 6 : 8) {
+                ForEach(values.indices, id: \.self) { i in
+                    DieFace(value: values[i], style: BoardTheme.green.dice, size: 31, cornerRadius: 7)
+                }
+            }
+            .keyframeAnimator(initialValue: DiceFlip(), trigger: index) { v, f in
+                // Clamp as a backstop: the flip only ever goes 0.84 -> 1.
+                v.rotationEffect(.degrees(f.angle)).scaleEffect(min(max(f.scale, 0.8), 1.02))
+            } keyframes: { _ in
+                // MoveKeyframe jumps to the start pose with no interpolation, and the
+                // spring starts at zero velocity. A 1 ms CubicKeyframe here derived an
+                // enormous tangent (and a retrigger mid-flight inherited the running
+                // velocity), so rapid stepping made the spring overshoot to giant dice.
+                KeyframeTrack(\.angle) {
+                    MoveKeyframe(Motion.reduceMotion ? 0 : -14)
+                    SpringKeyframe(0, duration: 0.27, spring: .snappy, startVelocity: 0)
+                }
+                KeyframeTrack(\.scale) {
+                    MoveKeyframe(Motion.reduceMotion ? 1 : 0.84)
+                    SpringKeyframe(1, duration: 0.27, spring: .snappy, startVelocity: 0)
+                }
+            }
+            .allowsHitTesting(false)
+        }
+    }
+
+    private func step(to i: Int) {
+        withMotion(Motion.out(0.16)) { index = i }
     }
 
     private func analyzerCTA(height: CGFloat) -> some View {
@@ -161,14 +205,17 @@ struct GameReviewView: View {
 
     private var scrubber: some View {
         HStack(spacing: 12) {
-            Button { index = max(0, index - 1) } label: { Image(systemName: "chevron.left") }
-                .buttonStyle(GhostPillButtonStyle(disabled: index == 0)).disabled(index == 0)
-            Slider(value: Binding(get: { Double(index) }, set: { index = Int($0.rounded()) }),
+            // No .disabled(): the ghost style deny-shakes at the ends, so the action guards.
+            Button { if index > 0 { step(to: index - 1) } } label: { Image(systemName: "chevron.left") }
+                .buttonStyle(GhostPillButtonStyle(disabled: index == 0))
+                .accessibilityRespondsToUserInteraction(index > 0)
+            Slider(value: Binding(get: { Double(index) }, set: { v in
+                        let i = Int(v.rounded()); if i != index { step(to: i) } }),
                    in: 0...Double(max(1, review.points.count - 1)), step: 1)
                 .tint(Palette.accentSoft)
-            Button { index = min(review.points.count - 1, index + 1) } label: { Image(systemName: "chevron.right") }
+            Button { if index < review.points.count - 1 { step(to: index + 1) } } label: { Image(systemName: "chevron.right") }
                 .buttonStyle(GhostPillButtonStyle(disabled: index >= review.points.count - 1))
-                .disabled(index >= review.points.count - 1)
+                .accessibilityRespondsToUserInteraction(index < review.points.count - 1)
         }
     }
 
@@ -208,6 +255,9 @@ private struct PanelMetrics {
 struct EvalGraph: View {
     let values: [Float?]
     let currentIndex: Int
+    /// Curve draw-in progress: 0 -> 1 over 720ms once values exist (the graph only
+    /// mounts after review points load, so onAppear is after the data arrives).
+    @State private var drawn: CGFloat = Motion.reduceMotion ? 1 : 0
     var body: some View {
         GeometryReader { geo in
             let w = geo.size.width, h = geo.size.height
@@ -225,12 +275,27 @@ struct EvalGraph: View {
                         let pt = CGPoint(x: x(i), y: y(v))
                         if started { p.addLine(to: pt) } else { p.move(to: pt); started = true }
                     }
-                }.stroke(Palette.accentSoft, lineWidth: 2.5)
-                Path { p in p.move(to: CGPoint(x: x(currentIndex), y: 0)); p.addLine(to: CGPoint(x: x(currentIndex), y: h)) }
-                    .stroke(Color.white.opacity(0.55), lineWidth: 1.5)
+                }
+                .trim(from: 0, to: drawn)
+                .stroke(Palette.accentSoft, style: .init(lineWidth: 2.5, lineCap: .round, lineJoin: .round))
+                // Cursor as an offset rectangle so index changes glide (animated by the caller).
+                Rectangle().fill(Color.white.opacity(0.55))
+                    .frame(width: 1.5, height: h)
+                    .position(x: 0, y: h / 2)
+                    .offset(x: x(currentIndex))
             }
         }
+        .onAppear {
+            guard drawn < 1, !values.isEmpty else { return }
+            withMotion(Motion.out(0.72)) { drawn = 1 }
+        }
     }
+}
+
+/// Keyframe values for the Review dice quick flip.
+private struct DiceFlip {
+    var angle: Double = 0
+    var scale: CGFloat = 1
 }
 
 extension Array {

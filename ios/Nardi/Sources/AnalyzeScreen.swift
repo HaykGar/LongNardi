@@ -119,6 +119,7 @@ private struct EditorBody: View {
                         }
                         Text("On board — White \(game.placed(false)) · Black \(game.placed(true))")
                             .font(ThemeFont.micro).foregroundStyle(Palette.muted)
+                            .numericSwap(game.placed(false) * 100 + game.placed(true))
 
                         HStack {
                             SectionLabel(text: "First to move")
@@ -138,14 +139,17 @@ private struct EditorBody: View {
                             .font(ThemeFont.caption)
                             .foregroundStyle(game.canAnalyze ? Palette.winText : Palette.muted)
                             .frame(maxWidth: .infinity, alignment: .leading)
+                            .textSwap(game.validationError ?? "")
                     }
                     .padding(.trailing, 4)
                 }
                 // Pinned so it never scrolls out of reach.
-                Button { game.startAnalysis() } label: { Label("Analyze", systemImage: "play.fill") }
-                    .buttonStyle(PrimaryCTAButtonStyle())
-                    .disabled(!game.canAnalyze)
-                    .opacity(game.canAnalyze ? 1 : 0.5)
+                // Invalid: 0.4 + the style's deny shake (no .disabled, so the press reaches it).
+                Button {
+                    if game.canAnalyze { game.startAnalysis() }
+                } label: { Label("Analyze", systemImage: "play.fill") }
+                    .buttonStyle(PrimaryCTAButtonStyle(isEnabled: game.canAnalyze))
+                    .opacity(game.canAnalyze ? 1 : 0.4)
             }
             .frame(width: 250)
         }
@@ -210,13 +214,13 @@ private struct AnalysisBody: View {
                         if game.isThinking { ProgressView().controlSize(.mini) }
                         Text(game.status).font(ThemeFont.micro).foregroundStyle(Palette.muted)
                             .multilineTextAlignment(.center)
+                            .textSwap(game.status)
                     }
                     .frame(maxWidth: .infinity, minHeight: 16)
-                    if game.hasGameDice {
-                        Text(game.onGameLine ? "On the game line — Follow ▸"
-                                             : "Off the game line — Back to rejoin")
+                    if game.hasGameDice && !game.onGameLine {
+                        Text("Off the game line — Back to rejoin")
                             .font(.system(size: 10, weight: .semibold))
-                            .foregroundStyle(game.onGameLine ? Palette.muted : Palette.accentSoft)
+                            .foregroundStyle(Palette.accentSoft)
                             .multilineTextAlignment(.center)
                     }
                 }
@@ -228,28 +232,32 @@ private struct AnalysisBody: View {
 
     @ViewBuilder private var diceControls: some View {
         let dice = game.orderedDice
+        let rollLocked = game.movedThisTurn || game.isAnimating || game.isTerminal
         HStack(spacing: 10) {
             dieWithSteppers(slot: 0, spec: dice[0])
             dieWithSteppers(slot: 1, spec: dice[1])
         }
-        Button { game.randomizeDice() } label: {
+        Button { if !rollLocked { game.randomizeDice() } } label: {
             Label("Roll random", systemImage: "arrow.triangle.2.circlepath")
                 .font(ThemeFont.caption).foregroundStyle(Palette.accentSoft)
                 .frame(maxWidth: .infinity).padding(.vertical, 8)
                 .background(RoundedRectangle(cornerRadius: 9).fill(Palette.fillWarm.opacity(0.08)))
                 .overlay(RoundedRectangle(cornerRadius: 9).stroke(Palette.strokeWarm.opacity(0.2), lineWidth: 1))
         }
-        .buttonStyle(.plain)
-        .disabled(game.movedThisTurn || game.isAnimating || game.isTerminal)
+        .buttonStyle(PressDepthButtonStyle(depth: .secondary, isEnabled: !rollLocked))
+        .opacity(rollLocked ? 0.4 : 1)
     }
 
     private func dieWithSteppers(slot: Int, spec: (value: Int, hasStart: Bool, isFirst: Bool)) -> some View {
         let locked = game.useGameDice || game.movedThisTurn || game.isAnimating || game.isTerminal
+        let step = { (d: Int) in if !locked { game.stepDie(slot: slot, by: d) } }
         return HStack(spacing: 4) {
-            StepButton(symbol: "minus") { game.stepDie(slot: slot, by: -1) }.disabled(locked).opacity(locked ? 0.4 : 1)
-            DieFace(value: spec.value, style: .classic, primary: spec.isFirst, disabled: !spec.hasStart,
-                    size: 38) { game.toggleTryFirst() }
-            StepButton(symbol: "plus") { game.stepDie(slot: slot, by: 1) }.disabled(locked).opacity(locked ? 0.4 : 1)
+            StepButton(symbol: "minus", isEnabled: !locked) { step(-1) }.opacity(locked ? 0.4 : 1)
+            RollingDie(value: spec.value, rollSeq: game.rollSeq, index: slot,
+                       delay: RollingDie.stagger(index: slot, diceCount: 2),
+                       style: .classic, primary: spec.isFirst, disabled: !spec.hasStart,
+                       size: 38, emphasis: game.tryFirst ? 1 : 0) { game.toggleTryFirst() }
+            StepButton(symbol: "plus", isEnabled: !locked) { step(1) }.opacity(locked ? 0.4 : 1)
         }
     }
 
@@ -270,28 +278,33 @@ private struct AnalysisBody: View {
                         .background(RoundedRectangle(cornerRadius: 10).fill(Palette.fillWarm.opacity(0.06)))
                         .overlay(RoundedRectangle(cornerRadius: 10).stroke(Palette.strokeWarm.opacity(0.14), lineWidth: 1))
                     }
-                    .buttonStyle(.plain).disabled(game.isAnimating)
+                    .buttonStyle(PressDepthButtonStyle(depth: .row, isEnabled: !game.isAnimating))
+                    .disabled(game.isAnimating)
                 }
             }
         }
     }
 
-    // Back (left, fixed) · Pass (centre, when no legal move) · Follow (right, review only).
+    // Back (left, fixed) · Pass (centre, when no legal move).
     // Confirm is NOT here — it appears on the board centre when the turn is complete.
     private var bottomControls: some View {
         HStack(spacing: 10) {
-            Button { game.undo() } label: { Label("Back", systemImage: "chevron.backward") }
-                .buttonStyle(GhostPillButtonStyle(disabled: !game.canUndo || game.isAnimating))
-                .disabled(!game.canUndo || game.isAnimating)
+            let backOff = !game.canUndo || game.isAnimating
+            Button { if !backOff { game.undo() } } label: {
+                Label("Back", systemImage: "chevron.backward")
+            }
+                .buttonStyle(GhostPillButtonStyle(disabled: backOff))
             Spacer(minLength: 0)
             if game.noLegalMoves {
                 Button("Pass") { game.pass() }.buttonStyle(GhostPillButtonStyle())
             }
             Spacer(minLength: 0)
             if game.hasGameDice {
-                Button { game.followGameMove() } label: { Image(systemName: "chevron.forward.2") }
-                    .buttonStyle(GhostPillButtonStyle(disabled: !game.canFollowGame))
-                    .disabled(!game.canFollowGame)
+                let nextOff = !game.canFollowGame || game.isAnimating
+                Button { if !nextOff { game.followGameMove() } } label: {
+                    HStack(spacing: 6) { Text("Next"); Image(systemName: "chevron.forward") }
+                }
+                    .buttonStyle(GhostPillButtonStyle(disabled: nextOff))
             } else {
                 Color.clear.frame(width: 40, height: 1)   // keep Back anchored left
             }
@@ -304,6 +317,7 @@ private struct AnalysisBody: View {
 /// A small wood +/- stepper button.
 struct StepButton: View {
     let symbol: String
+    var isEnabled: Bool = true
     let action: () -> Void
     var body: some View {
         Button(action: action) {
@@ -313,7 +327,7 @@ struct StepButton: View {
                 .background(RoundedRectangle(cornerRadius: 7).fill(Palette.fillWarm.opacity(0.09)))
                 .overlay(RoundedRectangle(cornerRadius: 7).stroke(Palette.strokeWarm.opacity(0.2), lineWidth: 1))
         }
-        .buttonStyle(.plain)
+        .buttonStyle(PressDepthButtonStyle(depth: .icon, isEnabled: isEnabled))
     }
 }
 
@@ -331,11 +345,14 @@ struct EvalBar: View {
                     Capsule().fill(Color.white.opacity(0.12)).frame(height: 8)
                     Capsule().fill((v ?? 0) >= 0 ? Grad.evalBar : LinearGradient.horizontal(Palette.lossFill[1], Palette.lossFill[0]))
                         .frame(width: max(0, geo.size.width * frac), height: 8)
+                        .animation(Motion.anim(Motion.out(Motion.Duration.enter)), value: frac)
                 }
                 .frame(maxHeight: .infinity, alignment: .center)
             }.frame(height: 8)
             Text(v.map { String(format: "%+.3f", $0) } ?? "—")
                 .font(ThemeFont.evalValue).foregroundStyle((v ?? 0) >= 0 ? Palette.evalPos : Palette.evalNeg).fixedSize()
+                .numericSwap(v)
+                .valueBump(v)
         }
     }
 }

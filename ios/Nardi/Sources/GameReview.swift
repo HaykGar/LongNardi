@@ -1,5 +1,6 @@
 import Foundation
 import SwiftUI
+import UIKit
 
 /// One scrubbable position in a reviewed game. Point 0 is the start; point i (>=1)
 /// is the position AFTER turn i. Evals are pinned to the reviewed player's frame.
@@ -70,13 +71,16 @@ struct CachedReviewPoint: Codable {
 /// blunder (largest best-vs-played lookahead gap). Owns its own engine.
 @MainActor
 final class GameReview: ObservableObject {
-    static let cols = 12
+    nonisolated static let cols = 12
     nonisolated static let cells = Int(NARDI_BOARD_CELLS)   // also read by the off-actor rollout
     /// Bump to invalidate every cached review (e.g. after retraining res2/vzg0).
     static let reviewVersion = 1
 
     @Published private(set) var points: [ReviewPoint] = []
     @Published private(set) var ready = false
+    /// 0…1 while computing: the mean of the per-move pass and the rollout.
+    @Published private(set) var progress: Double = 0
+    private var computing = false
     /// The rollout's result, in place before `ready` flips. nil means it produced no
     /// outcome at all (no model / empty log), not that it's still running.
     @Published private(set) var counterfactual: CounterfactualOutcome? = nil
@@ -154,8 +158,10 @@ final class GameReview: ObservableObject {
         return (Int(pips[0]), Int(pips[1]))
     }
 
-    /// Async so the "Analyzing…" spinner stays live: the engine calls run on the
-    /// main actor (it isn't thread-safe), but we yield between turns.
+    /// The per-move pass runs off the main actor on this review's own engine handles
+    /// (nothing else touches them until `ready`), so the UI stays responsive. The
+    /// work also outlives the Review screen: closing it doesn't cancel anything, and
+    /// leaving the app asks iOS for its extra background time.
     ///
     /// Nothing is shown until BOTH halves are done — the per-move analysis here and
     /// the counterfactual rollout — so the screen never presents a half-filled review
@@ -163,7 +169,9 @@ final class GameReview: ObservableObject {
     /// than queue: the rollout owns its own engine handle on a background queue, so
     /// the wait is the slower of the two, not their sum.
     func compute() async {
-        guard !ready, !log.isEmpty else { return }
+        guard !ready, !computing, !log.isEmpty else { return }
+        computing = true
+        defer { computing = false }
 
         // A complete cached review is instant — no engine work at all.
         if let c = cached, c.version == Self.reviewVersion, let cf = c.counterfactual {
@@ -189,6 +197,37 @@ final class GameReview: ObservableObject {
             return
         }
 
+        let bg = UIApplication.shared.beginBackgroundTask(withName: "review")
+        defer { if bg != .invalid { UIApplication.shared.endBackgroundTask(bg) } }
+
+        let moves = Progress()
+        let work = Task.detached(priority: .userInitiated) { [self] in analyzeMoves(moves) }
+        while !work.isCancelled {
+            let a = moves.value, b = rollout.progress
+            progress = (a + b) / 2
+            if a >= 1 && b >= 1 { break }
+            try? await Task.sleep(nanoseconds: 150_000_000)
+        }
+        let pts = await work.value
+        let cf = await rollout.result()
+        progress = 1
+
+        points = pts
+        counterfactual = cf
+        ready = true
+        // Hand the computed review back to be cached, so re-opening is instant.
+        onComputed?(CachedReview(version: Self.reviewVersion,
+                                 points: pts.map { CachedReviewPoint($0) }, counterfactual: cf))
+    }
+
+    /// Thread-safe 0…1 counter for the off-actor pass.
+    private final class Progress: @unchecked Sendable {
+        private let lock = NSLock(); private var v = 0.0
+        var value: Double { lock.lock(); defer { lock.unlock() }; return v }
+        func set(_ x: Double) { lock.lock(); v = x; lock.unlock() }
+    }
+
+    private nonisolated func analyzeMoves(_ progress: Progress) -> [ReviewPoint] {
         var pts: [ReviewPoint] = []
 
         // Point 0: the starting position (before the first recorded turn).
@@ -211,24 +250,16 @@ final class GameReview: ObservableObject {
                 blunderDelta: blunder, bestEval: best, playedEval: played,
                 label: t.moved ? describe(before: t.preBoard, after: t.postBoard, moverBlack: t.preSide)
                                : "pass"))
-            if k % 3 == 0 { await Task.yield() }   // let the UI breathe
+            progress.set(Double(k + 1) / Double(log.count))
         }
-
-        let cf = await rollout.result()
-
-        points = pts
-        counterfactual = cf
-        ready = true
-        // Hand the computed review back to be cached, so re-opening is instant.
-        onComputed?(CachedReview(version: Self.reviewVersion,
-                                 points: pts.map { CachedReviewPoint($0) }, counterfactual: cf))
+        return pts
     }
 
     // MARK: - Engine helpers
 
     /// Graph eval, from the well-calibrated res2 net (on the eval handle), pinned to
     /// the reviewed-player frame with the side-to-move + sign convention.
-    private func staticEval(_ board: [Int8], _ side: Bool) -> Float? {
+    private nonisolated func staticEval(_ board: [Int8], _ side: Bool) -> Float? {
         guard modelLoaded else { return nil }
         board.withUnsafeBufferPointer { _ = nardi_set_position(evalHandle, $0.baseAddress, side ? 1 : 0) }
         // Terminal positions report the exact game result (+1 normal, +2 mars) in
@@ -247,7 +278,7 @@ final class GameReview: ObservableObject {
 
     /// (delta, bestEval, playedEval) for a reviewed-player turn, all in the
     /// reviewed-player frame. nil delta when the move was forced (<=1 option).
-    private func blunderFor(_ t: ReviewTurn) -> (Float?, Float?, Float?) {
+    private nonisolated func blunderFor(_ t: ReviewTurn) -> (Float?, Float?, Float?) {
         guard modelLoaded else { return (nil, nil, nil) }
         t.preBoard.withUnsafeBufferPointer { _ = nardi_set_position(handle, $0.baseAddress, t.preSide ? 1 : 0) }
         let n = Int(nardi_analyze_dice(handle, Int32(t.dice.0), Int32(t.dice.1)))
@@ -269,12 +300,12 @@ final class GameReview: ObservableObject {
     /// so a recomputed counterfactual always tells the same story.
     // MARK: - Move descriptor (point numbers 1..24 along the mover's path)
 
-    private func pointNumber(row: Int, col: Int, black: Bool) -> Int {
+    private nonisolated func pointNumber(row: Int, col: Int, black: Bool) -> Int {
         let onHeadRow = (row == (black ? 1 : 0))
         return (onHeadRow ? col : Self.cols + col) + 1
     }
 
-    private func describe(before: [Int8], after: [Int8], moverBlack: Bool) -> String {
+    private nonisolated func describe(before: [Int8], after: [Int8], moverBlack: Bool) -> String {
         let s = Int(moverBlack ? -1 : 1)
         var srcs: [Int] = [], dsts: [Int] = []
         for row in 0..<2 {
@@ -326,6 +357,7 @@ final class CounterfactualRunner: @unchecked Sendable {
     private var done = false
     private var outcome: CounterfactualOutcome? = nil
     private var waiters: [CheckedContinuation<CounterfactualOutcome?, Never>] = []
+    private var fraction = 0.0              // rough 0…1: how far the rollout's leader has borne off
 
     /// Live game: turns are fed as they're played.
     init(reviewSide: Bool) {
@@ -378,6 +410,12 @@ final class CounterfactualRunner: @unchecked Sendable {
         return side == reviewSide && closed && !cancelled && turns.count == turnCount
     }
 
+    /// Rough 0…1 completion, for a progress bar.
+    var progress: Double {
+        cond.lock(); defer { cond.unlock() }
+        return done ? 1 : fraction
+    }
+
     /// The result, waiting for the rollout if it's still going.
     func result() async -> CounterfactualOutcome? {
         await withCheckedContinuation { cont in
@@ -422,6 +460,11 @@ final class CounterfactualRunner: @unchecked Sendable {
         while t < cap {
             board.withUnsafeBufferPointer { _ = nardi_set_position(handle, $0.baseAddress, side ? 1 : 0) }
             if nardi_is_terminal(handle) == 1 { break }
+            var pips = [Int32](repeating: 0, count: 2)
+            if nardi_pip_counts(handle, &pips) == NARDI_OK {   // 360 each at the start; 0 = won
+                let f = 1 - Double(min(pips[0], pips[1])) / 360
+                cond.lock(); fraction = max(fraction, f); cond.unlock()
+            }
 
             // Turns alternate strictly in both games (a pass is still a turn), so the
             // game's turn `t` is the same side as this one and its roll applies. This

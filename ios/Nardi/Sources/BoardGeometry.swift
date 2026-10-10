@@ -56,8 +56,16 @@ enum BoardMap {
     static func checkerDiameter(cellW: CGFloat, cellH: CGFloat) -> CGFloat {
         min(cellW * 0.82, cellH * 0.40)
     }
-    static let stackOverlap: CGFloat = 0.52   // fraction of a diameter each stacked checker advances
+    static let stackOverlap: CGFloat = 0.60   // fraction of a diameter each stacked checker advances
     static let maxShown = 5
+    static let stackInset: CGFloat = 2        // gap between the board edge and the base checker
+
+    /// Distance between consecutive checkers in a stack: 60% of a diameter, clamped
+    /// so a full (maxShown) stack never leaves its half of the board.
+    static func stackStep(d: CGFloat, cellH: CGFloat) -> CGFloat {
+        let fit = (cellH - d - 2 * stackInset) / CGFloat(maxShown - 1)
+        return max(0, min(d * stackOverlap, fit))
+    }
 }
 
 /// Uniform pixel metrics for the flight/replay animation, built from the two leaf
@@ -84,8 +92,19 @@ struct BoardMetrics {
         let cell = cellRect(row: row, col: col, flipped: flipped)
         let d = BoardMap.checkerDiameter(cellW: cell.width, cellH: cell.height)
         let down = v.vRow == 0
-        let y = down ? cell.minY + d / 2 + 2 : cell.maxY - d / 2 - 2
+        let y = down ? cell.minY + d / 2 + BoardMap.stackInset : cell.maxY - d / 2 - BoardMap.stackInset
         return (CGPoint(x: cell.midX, y: y), d, v.vCol >= 6)
+    }
+
+    /// Centre of stack slot `index` (0 = base) on a point — where the index-th
+    /// checker actually sits, capped at the last drawn slot.
+    func slotAnchor(row: Int, col: Int, flipped: Bool, index: Int) -> (pt: CGPoint, d: CGFloat, rightHalf: Bool)? {
+        guard let a = anchor(row: row, col: col, flipped: flipped) else { return nil }
+        let cell = cellRect(row: row, col: col, flipped: flipped)
+        let step = BoardMap.stackStep(d: a.d, cellH: cell.height)
+        let k = CGFloat(min(max(0, index), BoardMap.maxShown - 1))
+        let down = BoardMap.visual(row: row, col: col, flipped: flipped).vRow == 0
+        return (CGPoint(x: a.pt.x, y: a.pt.y + (down ? k : -k) * step), a.d, a.rightHalf)
     }
 }
 

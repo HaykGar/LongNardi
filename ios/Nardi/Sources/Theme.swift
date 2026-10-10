@@ -244,6 +244,54 @@ enum ThemeFont {
     static var statNumber  : Font { sans(24, .heavy).monospacedDigit() }
 }
 
+// MARK: - Motion tokens (handoff nardi-motion.js)
+
+/// Single source for every spring, easing and duration. Under Reduce Motion
+/// `Motion.anim` collapses everything to ~1ms.
+enum Motion {
+    // Springs
+    static let snappy = Animation.spring(response: 0.27, dampingFraction: 0.59)
+    static let bouncy = Animation.spring(response: 0.31, dampingFraction: 0.46)
+    static let gentle = Animation.spring(response: 0.38, dampingFraction: 0.78)
+
+    /// Timing-curve durations (seconds).
+    enum Duration {
+        static let tap: Double     = 0.08
+        static let quick: Double   = 0.14
+        static let base: Double    = 0.20
+        static let enter: Double   = 0.30
+        static let move: Double    = 0.30
+        static let moveLow: Double = 0.46
+        static let roll: Double    = 0.54
+        static let ripple: Double  = 0.34
+        static let shake: Double   = 0.28
+    }
+
+    // Easings
+    static func out(_ d: Double = Duration.base) -> Animation { .timingCurve(0.2, 0.8, 0.2, 1, duration: d) }
+    static func exit(_ d: Double = Duration.base) -> Animation { .timingCurve(0.5, 0, 0.9, 0.4, duration: d) }
+    static func inOut(_ d: Double = Duration.base) -> Animation { .timingCurve(0.45, 0, 0.2, 1, duration: d) }
+    static func press(_ d: Double = Duration.tap) -> Animation { .timingCurve(0.3, 0, 0.4, 1, duration: d) }
+    static func travel(_ d: Double = AnimationSpeed.flightDuration) -> Animation {
+        .timingCurve(0.32, 0.08, 0.18, 1, duration: d)
+    }
+
+    /// System Reduce Motion (for non-View code; views may also read
+    /// `@Environment(\.accessibilityReduceMotion)`).
+    static var reduceMotion: Bool { UIAccessibility.isReduceMotionEnabled }
+
+    /// Route an animation through Reduce Motion: returns ~1ms linear when on.
+    static func anim(_ a: Animation) -> Animation {
+        reduceMotion ? .linear(duration: 0.001) : a
+    }
+}
+
+/// `withAnimation` that honours Reduce Motion.
+@discardableResult
+func withMotion<R>(_ a: Animation, _ body: () throws -> R) rethrows -> R {
+    try withAnimation(Motion.anim(a), body)
+}
+
 // MARK: - Persisted user prefs (moved here from the old BoardCanvas.swift)
 
 /// User-selectable animation speed. High = quick slides; Low = slowed for clarity.
@@ -251,7 +299,11 @@ enum AnimationSpeed: String, CaseIterable, Identifiable {
     case high = "High"
     case low  = "Low"
     var id: String { rawValue }
-    var flightDuration: Double { self == .low ? 0.95 : 0.4 }
+    /// One checker slide (handoff: 300ms High, 460ms Low); ~instant under Reduce Motion.
+    var flightDuration: Double {
+        if Motion.reduceMotion { return 0.001 }
+        return self == .low ? Motion.Duration.moveLow : Motion.Duration.move
+    }
 
     static let storageKey = "nardi.animationSpeed"
     static var current: AnimationSpeed {

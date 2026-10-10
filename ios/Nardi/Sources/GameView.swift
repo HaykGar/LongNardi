@@ -25,11 +25,21 @@ struct GameView: View {
                         resignMenu: { resignPopover })
                 .environmentObject(game)
 
-            if game.pendingResign != nil { resignResponse }
-            if case .gameOver = game.phase { gameOverPanel }
+            if game.pendingResign != nil {
+                resignResponse.transition(.scale(scale: 0.9).combined(with: .opacity))
+            }
+            if isGameOver {
+                gameOverPanel
+                    .transition(.asymmetric(insertion: .scale(scale: 0.9).combined(with: .offset(y: 12)).combined(with: .opacity),
+                                            removal: .opacity))
+            }
         }
+        .animation(Motion.anim(Motion.gentle), value: isGameOver)
+        .animation(Motion.anim(Motion.gentle), value: game.pendingResign != nil)
         .onChange(of: autoFlip) { _, _ in game.refreshFlip() }
     }
+
+    private var isGameOver: Bool { if case .gameOver = game.phase { return true } else { return false } }
 
     // MARK: Popover content (injected into PlaySurface's Settings/Resign buttons)
 
@@ -87,9 +97,11 @@ struct GameView: View {
                 Button { game.respondResign(accept: false) } label: {
                     Image(systemName: "xmark.circle.fill").font(.system(size: 52)).foregroundStyle(.red)
                 }
+                .buttonStyle(PressDepthButtonStyle(depth: .icon))
                 Button { game.respondResign(accept: true) } label: {
                     Image(systemName: "checkmark.circle.fill").font(.system(size: 52)).foregroundStyle(.green)
                 }
+                .buttonStyle(PressDepthButtonStyle(depth: .icon))
             }
         }
         .padding(24)
@@ -104,6 +116,7 @@ struct GameView: View {
         return VStack(spacing: 14) {
             Text(message).font(ThemeFont.screenTitle).foregroundStyle(Palette.cream)
                 .multilineTextAlignment(.center)
+                .modifier(StaggerIn(index: 0))
             HStack(spacing: 12) {
                 if game.hasReview {
                     Button { onReview() } label: {
@@ -117,11 +130,27 @@ struct GameView: View {
                     .buttonStyle(PrimaryCTAButtonStyle(cornerRadius: 12, minHeight: 44))
                     .frame(width: 160)
             }
+            .modifier(StaggerIn(index: 1))
         }
         .padding(28)
         .background(RoundedRectangle(cornerRadius: 22).fill(Color.black.opacity(0.62)))
         .overlay(RoundedRectangle(cornerRadius: 22).stroke(Palette.strokeWarm.opacity(0.18), lineWidth: 1))
         .shadow(radius: 24)
+    }
+}
+
+/// Game-over contents fade up one after another once the panel has sprung in
+/// (110ms lead, 45ms apart).
+private struct StaggerIn: ViewModifier {
+    let index: Int
+    @State private var shown = false
+    func body(content: Content) -> some View {
+        content
+            .opacity(shown ? 1 : 0)
+            .offset(y: shown || Motion.reduceMotion ? 0 : 6)
+            .onAppear {
+                withMotion(Motion.out(Motion.Duration.enter).delay(0.11 + 0.045 * Double(index))) { shown = true }
+            }
     }
 }
 
@@ -212,18 +241,25 @@ struct PlaySurface<SettingsMenu: View, ResignMenu: View>: View {
             }
         }
         .buttonStyle(GhostPillButtonStyle(disabled: !game.canReplay, compact: compactReplay))
-        .disabled(!game.canReplay)
+        .accessibilityAddTraits(game.canReplay ? [] : .isStaticText)
         .playAnchor(.replay, active: publishAnchors)
         .padding(.leading, compactReplay ? 1 : 2)
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)
     }
 
+    private var yourTurn: Bool { game.phase == .awaitingHuman }
+
     private var statusBar: some View {
         VStack {
             Spacer()
             Text(game.status)
-                .font(ThemeFont.caption).foregroundStyle(Palette.creamDim)
+                .font(ThemeFont.caption)
+                .foregroundStyle(yourTurn ? Palette.cream : Palette.creamDim)
+                .shadow(color: Palette.confirmTop.opacity(yourTurn ? 0.7 : 0), radius: 6)
                 .multilineTextAlignment(.center).lineLimit(2)
+                .textSwap(game.status)
+                .valueBump(yourTurn, peak: 1.06)
+                .animation(Motion.anim(Motion.out()), value: yourTurn)
                 .padding(.bottom, 8).padding(.horizontal, leftBand + rightBand)
         }
     }

@@ -94,6 +94,13 @@ final class NardiGame: ObservableObject {
     // Tapping the dice flips it; it resets to the larger at the start of each turn.
     // The engine's own dice order is never touched — this is purely a UI choice.
     @Published private(set) var tryFirst = false
+    /// Bumped each time the engine produces a new roll (display-only trigger for the
+    /// dice toss — the same values can repeat, so the dice themselves can't key it).
+    @Published private(set) var rollSeq = 0
+    /// Last time the dice were tossed; checker taps wait until they've landed.
+    private var rolledAt = Date.distantPast
+    /// Bumped on every dice-order swap (drives the active die's emphasis bump).
+    @Published private(set) var swapCount = 0
     @Published private(set) var selected: (Int, Int)? = nil
     @Published private(set) var flipped = false
     @Published private(set) var phase: Phase = .setup
@@ -111,6 +118,8 @@ final class NardiGame: ObservableObject {
     // animates, so there's no per-frame progress to publish).
     @Published private(set) var flights: [Flight] = []
     @Published private(set) var isAnimating = false
+    /// True while Replay re-plays the opponent's move (start dots belong to the live turn, not the replayed board).
+    @Published private(set) var isReplaying = false
     // Replay: the last actual move animated (by EITHER side). Replay is offered only
     // while it's the other side's turn, so it always re-plays the opponent's move.
     private var lastMove: ReplayMove? = nil
@@ -323,6 +332,7 @@ final class NardiGame: ObservableObject {
     /// tell us which die can actually start from the tapped square.
     func tap(row: Int, col: Int) {
         guard phase == .awaitingHuman, !isAnimating, pendingResign == nil else { return }
+        guard Date().timeIntervalSince(rolledAt) >= Self.rollSettle else { return }   // dice still tumbling
         let bit = 1 << (row * Self.cols + col)
         let firstIdx = tryFirst ? 1 : 0
         let secondIdx = tryFirst ? 0 : 1
@@ -339,6 +349,7 @@ final class NardiGame: ObservableObject {
     func toggleTryFirst() {
         guard phase == .awaitingHuman, !isAnimating, pendingResign == nil else { return }
         tryFirst.toggle()
+        swapCount += 1
     }
 
     /// The die index (0/1) the UI tries first this turn (0 = the larger die).
@@ -548,6 +559,8 @@ final class NardiGame: ObservableObject {
                 let preSide = (nardi_current_player(handle) == 1)
                 let step = nardi_advance(handle)
                 refreshMeta()
+                // Every step except game-over / error came with a fresh roll.
+                if step != NARDI_STEP_GAME_OVER && step != NARDI_STEP_ERROR { rollSeq += 1; rolledAt = Date() }
                 // Only a BotMoved step applied a move (and recorded sub-moves); the
                 // other steps just rolled / passed / ended, so nothing to animate.
                 switch step {
@@ -580,12 +593,20 @@ final class NardiGame: ObservableObject {
                     let moverIsHuman = isPassAndPlay || (!preSide == humanIsWhite)
                     status = moverIsHuman ? "Auto-played \(dice.0)-\(dice.1)…"
                                           : "Opponent played \(dice.0)-\(dice.1)…"
+                    // Let the dice land before the checkers start moving.
+                    try? await Task.sleep(nanoseconds: UInt64(Self.rollSettle * 1_000_000_000))
+                    if Task.isCancelled { return }
                     await animateMoves()
                     if Task.isCancelled { return }   // resigned / quit while the move slid
                     try? await Task.sleep(nanoseconds: 200_000_000)
                 }
             }
         }
+    }
+
+    /// Toss length + the last die's stagger (see RollingDie), 0 under Reduce Motion.
+    static var rollSettle: Double {
+        Motion.reduceMotion ? 0 : Motion.Duration.roll + RollingDie.stagger(index: 1, diceCount: 2)
     }
 
     private func beginHumanTurn() {
@@ -688,7 +709,7 @@ final class NardiGame: ObservableObject {
             if let (r, c) = m.to { disp[r * Self.cols + c] += move.moverSign }      // land on dest
             flights = []
             board = disp
-            try? await Task.sleep(nanoseconds: 70_000_000)                          // brief gap between hops
+            try? await Task.sleep(nanoseconds: 55_000_000)                          // brief gap between hops
         }
         isAnimating = false
         board = move.after
@@ -701,7 +722,11 @@ final class NardiGame: ObservableObject {
         guard canReplay, let lm = lastMove else { return }
         let replay = ReplayMove(before: lm.before, subs: lm.subs, moverSign: lm.moverSign,
                                 after: engineBoard(), dice: lm.dice)
-        Task { @MainActor in await runFlights(replay, holdStart: true) }
+        Task { @MainActor in
+            isReplaying = true
+            await runFlights(replay, holdStart: true)
+            isReplaying = false
+        }
     }
 
     private func updateSelection() {

@@ -5,6 +5,15 @@ import SwiftUI
 /// `if let review { … }` precedence so review open/close behaves identically.
 enum Route: Equatable {
     case home, playSetup, game, analyze, history, tutorialChooser, tutorial
+
+    /// Navigation depth: moving deeper pushes in, moving shallower pulls back.
+    var depth: Int {
+        switch self {
+        case .home: return 0
+        case .playSetup, .analyze, .history, .tutorialChooser: return 1
+        case .game, .tutorial: return 2
+        }
+    }
 }
 
 struct ContentView: View {
@@ -12,12 +21,42 @@ struct ContentView: View {
     @EnvironmentObject var analyze: AnalyzeGame
     @EnvironmentObject var store: MatchStore
 
-    @State private var route: Route = .home
-    @State private var review: GameReview? = nil
+    @State private var route: Route = .home {
+        willSet { forward = newValue.depth > route.depth }
+    }
+    @State private var review: GameReview? = nil {
+        willSet { forward = newValue != nil }
+    }
+    /// Reviews still computing, by match — reopening one rejoins it instead of
+    /// starting over (closing Review doesn't stop the work).
+    @State private var running: [UUID: GameReview] = [:]
+    @State private var forward = true                    // direction of the last navigation
     @State private var reviewReturn: Route = .history   // where "Done" lands after review
     @State private var tourStart = 0                    // dev hook: tour step to open at
 
+    /// Screens slide in 16pt from the right going deeper (from the left going back).
+    /// The outgoing screen is removed un-animated: screens are full-bleed, so any
+    /// crossfade shows two screens (e.g. game board + review) through each other.
+    private var screenTransition: AnyTransition {
+        .asymmetric(insertion: .opacity.combined(with: .offset(x: forward ? 16 : -16))
+                        .combined(with: .scale(scale: 0.992)),
+                    removal: AnyTransition.opacity.animation(nil))
+    }
+
     var body: some View {
+        ZStack {
+            Color(hex: 0x150B04).ignoresSafeArea()   // dark backdrop under the fade-in
+            screen
+                .id(review != nil ? "review" : "\(route)")
+                .transition(screenTransition)
+        }
+        .animation(Motion.anim(Motion.out(Motion.Duration.enter)), value: route)
+        .animation(Motion.anim(Motion.out(Motion.Duration.enter)), value: review != nil)
+        .onAppear(perform: wireCallbacksAndDevHooks)
+    }
+
+    @ViewBuilder
+    private var screen: some View {
         Group {
             if let review {
                 GameReviewView(review: review,
@@ -55,7 +94,6 @@ struct ContentView: View {
                 }
             }
         }
-        .onAppear(perform: wireCallbacksAndDevHooks)
     }
 
     // MARK: - Actions
@@ -78,9 +116,13 @@ struct ContentView: View {
 
     /// Open review for a stored match, reusing its cached review or computing + caching once.
     private func openReview(_ match: SavedMatch, pending: CounterfactualRunner? = nil) {
-        review = GameReview(log: match.reviewTurns, reviewSide: match.reviewSide,
-                            cached: match.review, pending: pending,
-                            onComputed: { [weak store] data in store?.setReview(match.id, data) })
+        if let r = running[match.id], !r.ready { review = r; return }
+        let r = GameReview(log: match.reviewTurns, reviewSide: match.reviewSide,
+                           cached: match.review, pending: pending,
+                           onComputed: { [weak store] data in store?.setReview(match.id, data) })
+        running[match.id] = r
+        review = r
+        Task { await r.compute(); running[match.id] = nil }   // runs on even if Review closes
     }
 
     // MARK: - Dev / verification launch hooks (preserved from v1; destinations → route)

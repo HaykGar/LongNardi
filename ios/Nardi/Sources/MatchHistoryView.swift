@@ -17,31 +17,42 @@ struct HistoryView: View {
     var body: some View {
         ZStack {
             RadialBackground(surface: .history)
-            VStack(spacing: 12) {
+            VStack(spacing: 2) {
                 header
                 if store.matches.isEmpty {
                     emptyState
                 } else {
                     ScrollView {
-                        LazyVStack(spacing: 8) {
-                            ForEach(visible) { match in
+                        // Plain VStack (not Lazy) so each row's fade-up plays once,
+                        // not again whenever it scrolls back into view.
+                        VStack(spacing: 8) {
+                            ForEach(Array(visible.enumerated()), id: \.element.id) { i, match in
                                 Button { onReview(match) } label: { MatchRow(match: match) }
-                                    .buttonStyle(.plain)
+                                    .buttonStyle(PressDepthButtonStyle(depth: .row))
+                                    .modifier(FadeUpIn(delay: Double(i % 10) * 0.035))
                             }
                             if canShowMore {
-                                Button { withAnimation { shown = min(shown + 10, store.matches.count) } } label: {
+                                Button { withMotion(Motion.out()) { shown = min(shown + 10, store.matches.count) } } label: {
                                     Text("Show \(showMoreCount) more")
                                         .font(ThemeFont.bodyStrong).foregroundStyle(Palette.accentSoft)
                                         .frame(maxWidth: .infinity).padding(.vertical, 11)
                                         .background(RoundedRectangle(cornerRadius: 12).fill(Palette.fillWarm.opacity(0.06)))
                                 }
-                                .buttonStyle(.plain).padding(.top, 2)
+                                .buttonStyle(PressDepthButtonStyle(depth: .secondary)).padding(.top, 2)
                             }
                         }
                         .frame(maxWidth: 620)
                         .frame(maxWidth: .infinity)
-                        .padding(.horizontal, 24).padding(.bottom, 16)
+                        .padding(.horizontal, 24).padding(.top, 10).padding(.bottom, 24)
                     }
+                    // Soft top/bottom fades so rows dissolve under the fixed header.
+                    .mask(
+                        VStack(spacing: 0) {
+                            LinearGradient(colors: [.clear, .black], startPoint: .top, endPoint: .bottom).frame(height: 14)
+                            Color.black
+                            LinearGradient(colors: [.black, .clear], startPoint: .top, endPoint: .bottom).frame(height: 22)
+                        }
+                    )
                 }
             }
         }
@@ -126,5 +137,21 @@ private struct ResultChip: View {
                     .offset(x: 5, y: -5)
             }
         }
+    }
+}
+
+/// Row entrance: fade in with an 8pt rise, staggered by `delay`. Plays once.
+private struct FadeUpIn: ViewModifier {
+    let delay: Double
+    @State private var shown = Motion.reduceMotion
+
+    func body(content: Content) -> some View {
+        content
+            .opacity(shown ? 1 : 0)
+            .offset(y: shown ? 0 : 8)
+            .onAppear {
+                guard !shown else { return }
+                withMotion(Motion.out(Motion.Duration.enter).delay(delay)) { shown = true }
+            }
     }
 }

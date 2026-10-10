@@ -57,6 +57,12 @@ struct BoardCanvas: View {
     var theme: BoardTheme = .green
     /// On-board dice overlay (play screen only). Empty ⇒ no dice drawn.
     var dice: [DieSpec] = []
+    /// Bumped per new roll ⇒ the dice play their toss (0 / unchanged ⇒ static).
+    var rollSeq: Int = 0
+    /// Bumped per dice-order swap ⇒ the dice play their emphasis bump.
+    var diceEmphasis: Int = 0
+    /// Overrides the board-relative die size (Review uses a fixed 31pt die).
+    var diceSize: CGFloat? = nil
     /// On-board confirm pill (play screen only), shown centred when true.
     var canConfirm: Bool = false
     /// When true the ✓ pill is ALWAYS present, greyed + disabled unless canConfirm
@@ -78,6 +84,8 @@ struct BoardCanvas: View {
 
     @State private var leftLeaf: CGRect = .zero    // captured in the "board" space
     @State private var rightLeaf: CGRect = .zero
+    @State private var prevFlights: [Flight] = []  // to spot landings (for the ripple)
+    @State private var landings: [Landing] = []
 
     // Perspective helpers: the perspective player is White iff not flipped. Their
     // home is botRight (tray on the right); the opponent's home is topLeft (left).
@@ -135,27 +143,41 @@ struct BoardCanvas: View {
             .padding(framePad)
 
             // Overlays, all in the "board" coordinate space.
-            FlightLayer(flights: flights, flipped: flipped,
-                        metrics: BoardMetrics(leftLeaf: leftLeaf, rightLeaf: rightLeaf), theme: theme)
+            let trays = (left: CGRect(x: framePad, y: framePad, width: trayW, height: size.height - 2 * framePad),
+                         right: CGRect(x: W - framePad - trayW, y: framePad, width: trayW, height: size.height - 2 * framePad))
+            FlightLayer(flights: flights, flipped: flipped, board: board,
+                        metrics: BoardMetrics(leftLeaf: leftLeaf, rightLeaf: rightLeaf),
+                        trays: trays, trayCounts: (oppOff, perspOff), theme: theme)
+            ForEach(landings) { LandingRipple(landing: $0) }
 
             if !dice.isEmpty {
-                HStack(spacing: dieSize * 0.42) {
-                    ForEach(Array(dice.enumerated()), id: \.offset) { _, d in
-                        DieFace(value: d.value, style: theme.dice, primary: d.isFirst,
-                                disabled: !d.hasStart, size: dieSize, onTap: onToggleDice)
+                let dSize = diceSize ?? dieSize
+                HStack(spacing: dSize * 0.42) {
+                    // Key by physical die so a swap slides them; fall back to position
+                    // when ids repeat (e.g. four dice for doubles).
+                    let unique = Set(dice.map(\.id)).count == dice.count
+                    let keyed = dice.enumerated().map { (key: unique ? $0.element.id : 100 + $0.offset, i: $0.offset, d: $0.element) }
+                    ForEach(keyed, id: \.key) { e in
+                        let i = e.i, d = e.d
+                        RollingDie(value: d.value, rollSeq: rollSeq, index: unique ? d.id : i,
+                                   delay: RollingDie.stagger(index: i, diceCount: dice.count),
+                                   style: theme.dice, primary: d.isFirst, disabled: !d.hasStart,
+                                   size: dSize, emphasis: diceEmphasis, onTap: onToggleDice)
                     }
                 }
+                .animation(Motion.anim(Motion.snappy), value: dice.map(\.id))
                 .playAnchor(.dice, active: publishAnchors)
             }
             if canConfirm || alwaysShowConfirm {
                 let confirm = Button { if canConfirm { onConfirm?() } } label: {
                     Image(systemName: "checkmark").font(.system(size: 18, weight: .heavy))
                 }
-                .buttonStyle(ConfirmPillButtonStyle())
-                .disabled(!canConfirm)
+                .buttonStyle(ConfirmPillButtonStyle(isEnabled: canConfirm))
                 .grayscale(canConfirm ? 0 : 1)
                 .opacity(canConfirm ? 1 : 0.45)
+                .shadow(color: Palette.confirmTop.opacity(canConfirm ? 0.6 : 0), radius: 10)
                 .playAnchor(.confirm, active: publishAnchors)
+                .transition(.scale(scale: 0.6).combined(with: .opacity))
                 if centerHalfControls {
                     confirm.position(x: size.width * 0.75, y: size.height * 0.5)
                 } else {
@@ -176,7 +198,12 @@ struct BoardCanvas: View {
                 PipBadge(count: perspPip, fontSize: size.height * 0.032).position(x: size.width / 2, y: size.height * 0.865)
             }
         }
+        .animation(Motion.anim(Motion.bouncy), value: canConfirm)
         .coordinateSpace(name: "board")
+        .onChange(of: flights.map(\.id)) { _, ids in
+            spawnLandings(landed: prevFlights.filter { !ids.contains($0.id) })
+            prevFlights = flights
+        }
         .overlay(alignment: .topLeading) {
             if oppEndgame { OffBadge(count: oppOff).padding(W * 0.022) }
         }
@@ -186,6 +213,23 @@ struct BoardCanvas: View {
         .onPreferenceChange(LeafFrameKey.self) { d in
             if let l = d[false] { leftLeaf = l }
             if let r = d[true]  { rightLeaf = r }
+        }
+    }
+
+    /// A ripple where each finished flight touched down (skipped under Reduce Motion).
+    private func spawnLandings(landed: [Flight]) {
+        guard !Motion.reduceMotion else { return }
+        let m = BoardMetrics(leftLeaf: leftLeaf, rightLeaf: rightLeaf)
+        for f in landed {
+            guard let (r, c) = f.to else { continue }
+            let n = r * BoardMap.cols + c < board.count ? abs(Int(board[r * BoardMap.cols + c])) : 1
+            guard let a = m.slotAnchor(row: r, col: c, flipped: flipped, index: n - 1) else { continue }
+            let l = Landing(pt: a.pt, d: a.d)
+            landings.append(l)
+            Task { @MainActor in
+                try? await Task.sleep(nanoseconds: UInt64(Motion.Duration.ripple * 1_000_000_000) + 50_000_000)
+                landings.removeAll { $0.id == l.id }
+            }
         }
     }
 
@@ -278,7 +322,13 @@ private struct PointView: View {
                 CheckerColumn(count: abs(v), white: v > 0, downward: downward, cellW: w, cellH: h)
                 // Drawn AFTER the checkers so it stays visible — startable points always
                 // hold checkers, so a dot under the stack would only show mid-animation.
-                if dot { StartDot(diameter: w * 0.28, atTop: downward, w: w, h: h) }
+                ZStack {
+                    if dot {
+                        StartDot(diameter: w * 0.28, atTop: downward, count: abs(v), w: w, h: h)
+                            .transition(.scale(scale: 0.3).combined(with: .opacity))
+                    }
+                }
+                .animation(Motion.anim(dot ? Motion.bouncy : Motion.exit(Motion.Duration.quick)), value: dot)
                 if isSel {
                     RoundedRectangle(cornerRadius: 4)
                         .stroke(Palette.selectionStroke, lineWidth: 2)
@@ -332,16 +382,23 @@ struct Triangle: Shape {
 private struct StartDot: View {
     let diameter: CGFloat
     let atTop: Bool
+    let count: Int
     let w: CGFloat
     let h: CGFloat
     var body: some View {
+        // Sits just past the stack's outermost checker, so it never covers the count
+        // drawn on the base checker.
+        let d = BoardMap.checkerDiameter(cellW: w, cellH: h)
+        let shown = CGFloat(max(1, min(count, BoardMap.maxShown)))
+        let reach = BoardMap.stackInset + d + (shown - 1) * BoardMap.stackStep(d: d, cellH: h) + diameter / 2 + 1
+        let edge = min(reach, h - diameter / 2)
         Circle()
             .fill(RadialGradient(gradient: Palette.startDotStops, center: .init(x: 0.35, y: 0.3),
                                  startRadius: 0, endRadius: diameter * 0.6))
             .overlay(Circle().stroke(Color.white.opacity(0.85), lineWidth: 1))
             .frame(width: diameter, height: diameter)
             .shadow(color: .black.opacity(0.5), radius: 1, y: 0.5)
-            .position(x: w / 2, y: atTop ? diameter / 2 + 1 : h - diameter / 2 - 1)
+            .position(x: w / 2, y: atTop ? edge : h - edge)
     }
 }
 
@@ -376,14 +433,15 @@ private struct CheckerColumn: View {
     var body: some View {
         let d = BoardMap.checkerDiameter(cellW: cellW, cellH: cellH)
         let shown = min(count, BoardMap.maxShown)
+        let step = BoardMap.stackStep(d: d, cellH: cellH)
         ZStack {
             ForEach(0..<max(0, shown), id: \.self) { k in
-                let baseY = downward ? d / 2 + 2 : cellH - d / 2 - 2
-                let y = downward ? baseY + CGFloat(k) * d * BoardMap.stackOverlap
-                                 : baseY - CGFloat(k) * d * BoardMap.stackOverlap
+                let baseY = downward ? d / 2 + BoardMap.stackInset : cellH - d / 2 - BoardMap.stackInset
+                let y = downward ? baseY + CGFloat(k) * step : baseY - CGFloat(k) * step
                 ZStack {
                     CheckerView(white: white, d: d)
-                    if k == 0 && count > BoardMap.maxShown {
+                    // The count sits on the top checker (nearest the board centre).
+                    if k == shown - 1 && count > BoardMap.maxShown {
                         Text("\(count)").font(.system(size: d * 0.42, weight: .bold))
                             .foregroundColor(white ? Palette.whiteCheckerCountInk : Palette.blackCheckerCountInk)
                     }
@@ -412,13 +470,24 @@ private struct TrayView: View {
                         .overlay(RoundedRectangle(cornerRadius: 2)
                             .stroke((white ? Palette.trayChipWhiteEdge : Palette.trayChipBlackEdge).opacity(0.8), lineWidth: 0.5))
                         .frame(width: g.size.width * 0.62, height: chipH)
+                        .transition(.asymmetric(insertion: .modifier(active: ChipSquash(on: true), identity: ChipSquash(on: false)),
+                                                removal: .opacity))
                 }
             }
+            .animation(Motion.anim(Motion.bouncy), value: count)
             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottom)
             .padding(.vertical, g.size.height * 0.03)
         }
         .background(RoundedRectangle(cornerRadius: 5).fill(Grad.tray))
         .overlay(RoundedRectangle(cornerRadius: 5).stroke(Color.black.opacity(0.5), lineWidth: 1))
+    }
+}
+
+/// A newly borne-off chip lands squashed (wide + flat) and springs to shape.
+private struct ChipSquash: ViewModifier {
+    let on: Bool
+    func body(content: Content) -> some View {
+        content.scaleEffect(x: on ? 1.25 : 1, y: on ? 0.3 : 1, anchor: .bottom).opacity(on ? 0 : 1)
     }
 }
 
@@ -447,12 +516,14 @@ private struct PipBadge: View {
     var fontSize: CGFloat = 11   // scaled to the board so it shrinks with a smaller board
     var body: some View {
         Text("\(count)").font(.system(size: fontSize, weight: .heavy).monospacedDigit())
+            .numericSwap(count)
             .foregroundStyle(Palette.pipBadgeInk)
             .padding(.horizontal, fontSize * 0.45).padding(.vertical, fontSize * 0.18)
             .background(Capsule().fill(Grad.pipBadge))
             .overlay(Capsule().stroke(Color.black.opacity(0.25), lineWidth: 0.5))
             .fixedSize()
             .shadow(color: .black.opacity(0.4), radius: 1, y: 0.5)
+            .valueBump(count)
     }
 }
 
@@ -471,26 +542,46 @@ private struct OffBadge: View {
 private struct FlightLayer: View {
     let flights: [Flight]
     let flipped: Bool
+    let board: [Int8]
     let metrics: BoardMetrics
+    let trays: (left: CGRect, right: CGRect)
+    let trayCounts: (left: Int, right: Int)
     let theme: BoardTheme
     var body: some View {
         if metrics.ready {
             ForEach(flights) { f in
-                let aFrom = f.from.flatMap { metrics.anchor(row: $0.0, col: $0.1, flipped: flipped) }
-                let aTo   = f.to.flatMap   { metrics.anchor(row: $0.0, col: $0.1, flipped: flipped) }
+                // The source was already decremented and the destination not yet
+                // incremented, so each count is exactly the moving checker's slot.
+                let aFrom = f.from.flatMap { metrics.slotAnchor(row: $0.0, col: $0.1, flipped: flipped, index: count($0)) }
+                let aTo   = f.to.flatMap   { metrics.slotAnchor(row: $0.0, col: $0.1, flipped: flipped, index: count($0)) }
                 if let known = aFrom ?? aTo {
-                    let dir: CGFloat = known.rightHalf ? 1 : -1     // bear-off slides toward that half's tray
-                    let off = CGPoint(x: known.pt.x + dir * known.d * 2.2, y: known.pt.y)
+                    // Bear-off: that half's tray (the right half's home tray is on the right).
+                    let off = trayPoint(right: known.rightHalf)
                     FlightView(start: aFrom?.pt ?? off, end: aTo?.pt ?? off, d: known.d,
                                white: f.white, fadeOut: f.to == nil, fadeIn: f.from == nil)
                 }
             }
         }
     }
+
+    private func count(_ rc: (Int, Int)) -> Int {
+        let i = rc.0 * BoardMap.cols + rc.1
+        return i < board.count ? abs(Int(board[i])) : 0
+    }
+
+    /// The next free chip slot in a tray (chips stack up from the bottom).
+    private func trayPoint(right: Bool) -> CGPoint {
+        let t = right ? trays.right : trays.left
+        let n = CGFloat(min(right ? trayCounts.right : trayCounts.left, 14))
+        let chipH = max(3, t.height * 0.028), gap = t.height * 0.006
+        return CGPoint(x: t.midX, y: t.maxY - t.height * 0.03 - (n + 0.5) * (chipH + gap))
+    }
 }
 
-/// A single sliding checker that self-animates start→end on appear (framework-
+/// A single travelling checker that self-animates start→end on appear (framework-
 /// interpolated), so only this view redraws per frame — the board stays smooth.
+/// It lifts on an arc (scale + deeper shadow at the apex); a bear-off fades into
+/// the tray, an undone bear-off fades out of it.
 private struct FlightView: View {
     let start: CGPoint
     let end: CGPoint
@@ -498,11 +589,58 @@ private struct FlightView: View {
     let white: Bool
     let fadeOut: Bool
     let fadeIn: Bool
-    @State private var progressed = false
+    @State private var t: CGFloat = 0
     var body: some View {
+        let dist = hypot(end.x - start.x, end.y - start.y)
         CheckerView(white: white, d: d)
-            .opacity(fadeOut ? (progressed ? 0 : 1) : (fadeIn ? (progressed ? 1 : 0) : 1))
-            .position(progressed ? end : start)
-            .onAppear { withAnimation(.easeOut(duration: AnimationSpeed.flightDuration)) { progressed = true } }
+            .modifier(FlightPath(t: t, start: start, end: end,
+                                 lift: Motion.reduceMotion ? 0 : min(dist * 0.22, d * 1.1),
+                                 fadeOut: fadeOut, fadeIn: fadeIn))
+            .onAppear { withAnimation(Motion.travel()) { t = 1 } }
+    }
+}
+
+private struct FlightPath: ViewModifier, Animatable {
+    var t: CGFloat
+    let start: CGPoint
+    let end: CGPoint
+    let lift: CGFloat
+    let fadeOut: Bool
+    let fadeIn: Bool
+    var animatableData: CGFloat {
+        get { t }
+        set { t = newValue }
+    }
+    func body(content: Content) -> some View {
+        let arc = lift > 0 ? sin(.pi * t) : 0
+        let opacity = fadeOut ? 1 - max(0, (t - 0.6) / 0.4) : (fadeIn ? min(1, t / 0.4) : 1)
+        content
+            .scaleEffect(1 + 0.12 * arc)
+            .shadow(color: .black.opacity(0.3 * arc), radius: 2 + 6 * arc, y: 2 + 5 * arc)
+            .opacity(opacity)
+            .position(x: start.x + (end.x - start.x) * t,
+                      y: start.y + (end.y - start.y) * t - lift * arc)
+    }
+}
+
+/// Where a travelling checker touched down (drives a one-shot ripple).
+private struct Landing: Identifiable {
+    let id = UUID()
+    let pt: CGPoint
+    let d: CGFloat
+}
+
+private struct LandingRipple: View {
+    let landing: Landing
+    @State private var go = false
+    var body: some View {
+        Circle()
+            .stroke(Color.white.opacity(0.7), lineWidth: 1.5)
+            .frame(width: landing.d, height: landing.d)
+            .scaleEffect(go ? 1.7 : 0.95)
+            .opacity(go ? 0 : 0.8)
+            .position(landing.pt)
+            .allowsHitTesting(false)
+            .onAppear { withAnimation(Motion.out(Motion.Duration.ripple)) { go = true } }
     }
 }
