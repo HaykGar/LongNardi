@@ -114,7 +114,7 @@ private struct EditorBody: View {
                         SectionLabel(text: "Place / Remove")
                         SegmentedChips(options: [EditTool.white, .black, .erase], selection: $game.editTool,
                                        context: .onDark,
-                                       tint: { t in t == .white ? .whiteChecker : t == .black ? .blackChecker : nil }) {
+                                       tint: { _ in .parchment }) {
                             t in t == .white ? "White" : t == .black ? "Black" : "Erase"
                         }
                         Text("On board — White \(game.placed(false)) · Black \(game.placed(true))")
@@ -125,7 +125,7 @@ private struct EditorBody: View {
                             SectionLabel(text: "First to move")
                             Spacer()
                             SegmentedChips(options: [false, true], selection: $game.sideToMove, context: .onDark,
-                                           tint: { $0 ? .blackChecker : .whiteChecker }) {
+                                           tint: { _ in .parchment }) {
                                 $0 ? "Black" : "White"
                             }.frame(width: 150)
                         }

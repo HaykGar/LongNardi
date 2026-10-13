@@ -285,6 +285,8 @@ struct ChipTint {
 
     static let whiteChecker = ChipTint(fill: Color(hex: 0xEAD7AB), ink: Palette.whiteCheckerCountInk)
     static let blackChecker = ChipTint(fill: Color(hex: 0x241812), ink: Palette.blackCheckerCountInk)
+    /// The handoff's light selected chip: parchment fill, brown ink, amber outline.
+    static let parchment = ChipTint(fill: Color(hex: 0xEAD7AB), ink: Color(hex: 0x5B3F1E))
 }
 
 struct SegmentedChips<Option: Hashable>: View {
