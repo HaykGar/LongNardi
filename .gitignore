@@ -55,3 +55,6 @@ ios/NardiLandscapeUI_Sample.jpeg
 ios/UI_DESIGN_PLAN.md
 ios/UI_DESIGN_PLAN.pdf
 ios/design_handoff_nardi_motion_analyzer/
+
+# Supabase credentials for the iOS app (copy Supabase.example.xcconfig)
+ios/Config/Supabase.xcconfig

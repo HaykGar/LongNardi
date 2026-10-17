@@ -184,6 +184,13 @@ final class NardiGame: ObservableObject {
     /// to the match history. Injected by the app; nil disables archiving.
     var onGameFinished: ((SavedMatch) -> Void)?
     private var matchSaved = false   // guards against double-archiving one game
+    /// Called once when a real game finishes (bear-off or resignation) so the app
+    /// can hand it to the cloud uploader. Never called for abandoned games or the
+    /// dev/self-play hooks.
+    var onGameForUpload: ((FinishedGame) -> Void)?
+    /// True only for games started via newGame (real play), so dev hooks that
+    /// reuse the finish path never upload.
+    private var uploadEligible = false
     /// id of the SavedMatch for the just-finished game, so Review can open + cache it.
     @Published private(set) var lastMatchID: UUID? = nil
 
@@ -254,6 +261,7 @@ final class NardiGame: ObservableObject {
         self.mode = mode
         self.opponent = opponent
         matchSaved = false
+        uploadEligible = true
         switch mode {
         case .passAndPlay:
             nardi_configure_players(handle, NARDI_HUMAN, NARDI_HUMAN)
@@ -519,6 +527,7 @@ final class NardiGame: ObservableObject {
                         reviewSide: reviewSide,
                         winnerWhite: winnerWhite, mars: mars,
                         turns: reviewLog.map { SavedTurn($0) }))
+        handOffForUpload(winnerWhite: winnerWhite, mars: mars, resigned: true)
     }
 
     /// Append the just-completed human turn to the review log (post = current
@@ -765,6 +774,36 @@ final class NardiGame: ObservableObject {
                         reviewSide: reviewSide,
                         winnerWhite: whiteWon, mars: mars,
                         turns: reviewLog.map { SavedTurn($0) }))
+        handOffForUpload(winnerWhite: whiteWon, mars: mars, resigned: false)
+    }
+
+    /// Hand the just-archived game to the cloud uploader (seat 1 = the human vs
+    /// computer, White in pass & play; White always moves first).
+    private func handOffForUpload(winnerWhite: Bool, mars: Bool, resigned: Bool) {
+        guard uploadEligible, let upload = onGameForUpload else { return }
+        uploadEligible = false
+        let seat1White = isPassAndPlay ? true : humanIsWhite
+        let kind: OpponentKind
+        if isPassAndPlay {
+            kind = .localHuman
+        } else {
+            switch opponent {
+            case .easy: kind = .bot(.easy)
+            case .medium: kind = .bot(.medium)
+            case .hard: kind = .bot(.hard)
+            }
+        }
+        upload(FinishedGame(id: UUID(), opponent: kind, userFirst: seat1White,
+                            seat1Won: winnerWhite == seat1White, mars: mars,
+                            resigned: resigned, finishedAt: Date(),
+                            turns: recordedTurns()))
+    }
+
+    /// Adapter: the confirmed-turn record of the finished game in cloud format
+    /// (ADR 0002). The single integration point for #3.
+    func recordedTurns() -> [RecordedTurn] {
+        // TODO(#3): read engine turn record
+        return []
     }
 
     func backToSetup() {
@@ -804,6 +843,7 @@ final class NardiGame: ObservableObject {
     /// re-runs the same log from scratch and logs both outcomes: they must agree.
     func devLivePlayAndReview() async {
         newGame(mode: .vsComputer, opponent: .easy, first: .first)   // creates the runner
+        uploadEligible = false   // dev self-play: never upload
         loopTask?.cancel()
         nardi_configure_players(handle, NARDI_RANDOM, NARDI_GREEDY)  // both seats auto-play
         nardi_reset(handle)

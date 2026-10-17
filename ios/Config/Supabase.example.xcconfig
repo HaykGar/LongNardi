@@ -1,0 +1,5 @@
+// Copy to Config/Supabase.xcconfig (gitignored) and fill in from the Supabase
+// dashboard (Project Settings > API). `//` starts a comment in xcconfig files,
+// so the URL's slashes are split with $() as shown.
+SUPABASE_URL = https:/$()/YOUR-PROJECT-REF.supabase.co
+SUPABASE_ANON_KEY = YOUR-ANON-PUBLIC-KEY

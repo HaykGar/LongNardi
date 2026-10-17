@@ -131,6 +131,8 @@ struct ContentView: View {
         // MUST be first: devSeedHistory() calls onGameFinished synchronously, which
         // --seed-history-review then reads back from the store.
         game.onGameFinished = { [weak store] in store?.add($0) }
+        let uploader = GameUploader.shared
+        game.onGameForUpload = { uploader.submitInBackground($0) }
         analyze.onLogSaved = { [weak store] in store?.add($0) }
         let args = ProcessInfo.processInfo.arguments
 

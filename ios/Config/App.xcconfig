@@ -1,0 +1,4 @@
+// Base settings for the Nardi app target. Supabase credentials live in the
+// gitignored Supabase.xcconfig (copy Supabase.example.xcconfig). When it is
+// absent the uploader keeps finished games queued on disk and sends nothing.
+#include? "Supabase.xcconfig"
