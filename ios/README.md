@@ -41,7 +41,9 @@ scripts/supabase_setup_wizard.sh
 
 `.github/workflows/supabase-keepalive.yml` pings the project every 3 days so the
 free tier doesn't pause. App Store privacy answers and the policy draft live in
-`docs/privacy/app-store-privacy.md`.
+`docs/privacy/app-store-privacy.md`. Remaining manual steps, upkeep
+(pauses, GitHub's 60-day schedule rule) and example queries:
+`docs/cloud-game-history-runbook.md`.
 
 ## Layout
 

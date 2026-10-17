@@ -4,7 +4,8 @@
 create table if not exists public.games (
   id            uuid primary key,             -- generated on device
   seat1_user    uuid not null,                -- install ID (anonymous auth uid)
-  opponent_kind text not null check (opponent_kind in ('bot_easy','bot_medium','bot_hard','local_human','remote_human')),  -- 'bot_easy' | 'bot_medium' | 'bot_hard' | 'local_human' (later 'remote_human')
+  opponent_kind text not null                 -- who seat 1 played (adding a kind = alter the check; rows untouched)
+    check (opponent_kind in ('bot_easy','bot_medium','bot_hard','local_human','remote_human')),
   seat2_user    uuid,                         -- null unless opponent is an online human
   bot_model     text,                         -- e.g. 'heuristic', 'mlp', 'vzg0'; null for humans
   user_first    boolean not null,             -- seat 1 took the first turn

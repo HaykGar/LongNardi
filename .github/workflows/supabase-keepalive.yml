@@ -16,6 +16,11 @@ jobs:
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
         run: |
+          # Skip cleanly until scripts/supabase_setup_wizard.sh has set the secrets.
+          if [ -z "$SUPABASE_URL" ] || [ -z "$SUPABASE_ANON_KEY" ]; then
+            echo "::notice::SUPABASE_URL / SUPABASE_ANON_KEY not set; skipping keep-alive."
+            exit 0
+          fi
           curl -fsS -X POST "$SUPABASE_URL/rest/v1/rpc/keepalive" \
             -H "apikey: $SUPABASE_ANON_KEY" \
             -H "Content-Type: application/json" -d '{}'

@@ -485,7 +485,9 @@ void Game::StopRecording()
 }
 
 const std::vector<Game::RecordedTurn>& Game::TurnRecord() const
-{   return _turn_record;   }
+{
+    return _turn_record;
+}
 
 const std::vector<Game::LoggedMove>& Game::MoveLog() const
 {
