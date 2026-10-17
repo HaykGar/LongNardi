@@ -245,7 +245,7 @@ final class FakeTransport: GameUploadTransport, @unchecked Sendable {
 
 struct FakeNetworkError: Error {}
 
-/// The opt-out flag and the one-time consent banner, through UserDefaults (the
+/// The opt-out flag and the one-time consent notice, through UserDefaults (the
 /// same store the Settings toggle writes via @AppStorage).
 final class SharingConsentTests: XCTestCase {
     private var defaults: UserDefaults!
@@ -261,7 +261,7 @@ final class SharingConsentTests: XCTestCase {
     func testSharingDefaultsOnAndFollowsTheSettingsKey() {
         let consent = SharingConsent(defaults: defaults)
         XCTAssertTrue(consent.sharingEnabled)
-        defaults.set(false, forKey: "nardi.shareGameData")
+        defaults.set(false, forKey: SharingConsent.sharingKey)
         XCTAssertFalse(consent.sharingEnabled)
     }
 
@@ -281,14 +281,14 @@ final class SharingConsentTests: XCTestCase {
             GameUploader(directory: dir, transport: t, appVersion: "1", build: "1",
                          sharingEnabled: { SharingConsent(defaults: d).sharingEnabled })
         }
-        d.set(false, forKey: GameUploader.sharingDefaultsKey)   // toggle off in Settings
+        d.set(false, forKey: SharingConsent.sharingKey)   // toggle off in Settings
         let up = make()
         await up.submit(FinishedGame(id: UUID(), opponent: .bot(.hard), userFirst: true,
                                      seat1Won: true, mars: false, resigned: false,
                                      finishedAt: Date(), turns: []))
         await up.waitUntilIdle()
 
-        d.set(true, forKey: GameUploader.sharingDefaultsKey)    // toggle back on
+        d.set(true, forKey: SharingConsent.sharingKey)    // toggle back on
         let relaunched = make()
         await relaunched.retryPending()
         await relaunched.waitUntilIdle()

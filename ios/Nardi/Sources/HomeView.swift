@@ -124,7 +124,7 @@ struct HomeView: View {
 struct SettingsView: View {
     let onBack: () -> Void
     @AppStorage(AnimationSpeed.storageKey) private var speed: AnimationSpeed = .high
-    @AppStorage(GameUploader.sharingDefaultsKey) private var shareGameData = true
+    @AppStorage(SharingConsent.sharingKey) private var shareGameData = true
 
     var body: some View {
         ZStack {
@@ -236,7 +236,7 @@ struct ConsentNoticeView: View {
                 Image(systemName: "chart.bar.doc.horizontal")
                     .font(.system(size: 34, weight: .semibold))
                     .foregroundStyle(Palette.accentSoft)
-                Text(SharingConsent.bannerCopy)
+                Text(SharingConsent.noticeCopy)
                     .font(ThemeFont.bodyText).foregroundStyle(Palette.cream)
                     .multilineTextAlignment(.center)
                     .fixedSize(horizontal: false, vertical: true)

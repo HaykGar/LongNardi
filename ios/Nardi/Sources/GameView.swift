@@ -12,7 +12,7 @@ struct GameView: View {
     @AppStorage(AnimationSpeed.storageKey) private var speed: AnimationSpeed = .high
     @AppStorage(BoardFlip.storageKey) private var autoFlip = true
     @AppStorage(PipDisplay.storageKey) private var showPips = true
-    @AppStorage(GameUploader.sharingDefaultsKey) private var shareGameData = true
+    @AppStorage(SharingConsent.sharingKey) private var shareGameData = true
 
     @State private var menuSettings = false
     @State private var menuResign = false

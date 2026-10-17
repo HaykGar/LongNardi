@@ -7,9 +7,9 @@ struct NardiApp: App {
     @StateObject private var store = MatchStore()
 
     init() {
-        // dev: bring back the one-time sharing banner (before Home reads it).
-        if ProcessInfo.processInfo.arguments.contains("--reset-consent-banner") {
-            UserDefaults.standard.removeObject(forKey: SharingConsent.bannerDismissedKey)
+        // dev: bring back the one-time sharing notice.
+        if ProcessInfo.processInfo.arguments.contains("--reset-consent-notice") {
+            UserDefaults.standard.removeObject(forKey: SharingConsent.noticeAcknowledgedKey)
         }
     }
 
