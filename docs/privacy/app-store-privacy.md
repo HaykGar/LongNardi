@@ -89,5 +89,9 @@ The text exists twice, so any change goes to both:
    ```
 3. Wait about a minute, then check the live URL shows the new text.
 
-Keep the URL stable: App Store Connect points at it. If it ever has to move, update
+The same branch also serves the App Store **Support URL**,
+https://haykgar.github.io/LongNardi/support/ (`support/index.html`). It has no copy
+on `main`; edit it on `gh-pages` the same way.
+
+Keep the URLs stable: App Store Connect points at them. If it ever has to move, update
 **App Privacy → Privacy Policy URL** at the same time.
