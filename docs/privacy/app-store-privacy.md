@@ -29,7 +29,7 @@ App Store Connect → your app → **App Privacy** → Get Started / Edit.
 ## Privacy policy (draft)
 
 > **Nardi — Privacy Policy**
-> *Last updated: <date of release>*
+> *Last updated: October 16, 2026*
 >
 > **What we collect.** When a game finishes — by being played out or by
 > resignation — Nardi uploads a record of that game: the dice and moves of every
@@ -61,12 +61,12 @@ App Store Connect → your app → **App Privacy** → Get Started / Edit.
 > time. Games finished while it is off are never uploaded — not even if you turn it
 > back on later. Your match history on the device keeps working either way.
 >
-> **Contact.** Questions or deletion requests: <contact email>. Include your
+> **Contact.** Questions or deletion requests: nardi.master0@gmail.com. Include your
 > approximate play dates; because the data is anonymous we may not be able to
 > identify your games without the in-app ID.
 
 ### Before publishing
 
-- Fill in the release date and contact email.
+- Published at https://haykgar.github.io/LongNardi/privacy/ (`gh-pages` branch, `privacy/index.html`); edit both copies together.
 - Settings toggle label above must match the shipped copy (issue #5).
 - Re-check the collected fields against the uploader once issue #4 lands.
