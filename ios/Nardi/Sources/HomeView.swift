@@ -9,6 +9,9 @@ struct HomeView: View {
     let onAnalyze: () -> Void
     let onHistory: () -> Void
     let onTutorial: () -> Void
+    /// One-time "we share anonymous game data" notice; Home is the only screen
+    /// that ever shows it, so it can never sit over a game.
+    @State private var showConsentBanner = SharingConsent().showsBanner(onHome: true)
 
     var body: some View {
         ZStack {
@@ -25,8 +28,9 @@ struct HomeView: View {
                 let leftW = min(330, avail * 0.44)
                 let rightW = min(420, avail * 0.56)
 
-                ZStack(alignment: .bottomLeading) {
-                    Color.clear
+                // Hero above, bottom bar (ribbon + consent banner) below, in one
+                // VStack so the banner takes its own row and never covers a card.
+                VStack(spacing: 0) {
                     HStack(alignment: .center, spacing: gap) {
                         leftBlock.frame(width: leftW, alignment: .leading)
                         rightCards.frame(width: rightW)
@@ -34,8 +38,15 @@ struct HomeView: View {
                     .frame(maxWidth: .infinity, maxHeight: .infinity)   // centres the pair
                     .padding(.horizontal, sidePad)
 
-                    tutorialRibbon
-                        .padding(.leading, sidePad).padding(.bottom, 18)
+                    HStack(alignment: .bottom, spacing: gap) {
+                        tutorialRibbon
+                        Spacer(minLength: 0)
+                        if showConsentBanner {
+                            consentBanner.frame(maxWidth: rightW)
+                                .transition(.opacity)
+                        }
+                    }
+                    .padding(.horizontal, sidePad).padding(.bottom, 18)
                 }
             }
         }
@@ -70,6 +81,30 @@ struct HomeView: View {
             ActionCard(title: "History", subtitle: "Review any past game",
                        systemImage: "list.bullet", kind: .secondary, action: onHistory)
         }
+    }
+
+    // One-time sharing notice; ✕ dismisses it for good.
+    private var consentBanner: some View {
+        HStack(alignment: .center, spacing: 10) {
+            Image(systemName: "chart.bar.doc.horizontal")
+                .foregroundStyle(Palette.accentSoft)
+            Text(SharingConsent.bannerCopy)
+                .font(ThemeFont.caption).foregroundStyle(Palette.creamDim)
+                .fixedSize(horizontal: false, vertical: true)
+            Button {
+                SharingConsent().dismissBanner()
+                withMotion(Motion.out(Motion.Duration.enter)) { showConsentBanner = false }
+            } label: {
+                Image(systemName: "xmark").font(.system(size: 12, weight: .heavy))
+                    .foregroundStyle(Palette.cream)
+                    .frame(width: 30, height: 30).contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel("Dismiss")
+        }
+        .padding(.leading, 14).padding(.trailing, 4).padding(.vertical, 6)
+        .background(RoundedRectangle(cornerRadius: 14).fill(Grad.homeNavCard)
+            .overlay(RoundedRectangle(cornerRadius: 14).stroke(Palette.strokeWarm.opacity(0.18), lineWidth: 1)))
     }
 
     // Quiet tutorial ribbon → the tutorial chooser.

@@ -244,3 +244,58 @@ final class FakeTransport: GameUploadTransport, @unchecked Sendable {
 }
 
 struct FakeNetworkError: Error {}
+
+/// The opt-out flag and the one-time consent banner, through UserDefaults (the
+/// same store the Settings toggle writes via @AppStorage).
+final class SharingConsentTests: XCTestCase {
+    private var defaults: UserDefaults!
+    private let suite = "SharingConsentTests"
+
+    override func setUp() {
+        UserDefaults().removePersistentDomain(forName: suite)
+        defaults = UserDefaults(suiteName: suite)
+    }
+
+    override func tearDown() { UserDefaults().removePersistentDomain(forName: suite) }
+
+    func testSharingDefaultsOnAndFollowsTheSettingsKey() {
+        let consent = SharingConsent(defaults: defaults)
+        XCTAssertTrue(consent.sharingEnabled)
+        defaults.set(false, forKey: "nardi.shareGameData")
+        XCTAssertFalse(consent.sharingEnabled)
+    }
+
+    func testBannerShowsOnHomeUntilDismissedThenNeverAgain() {
+        XCTAssertTrue(SharingConsent(defaults: defaults).showsBanner(onHome: true))
+        SharingConsent(defaults: defaults).dismissBanner()
+        XCTAssertFalse(SharingConsent(defaults: defaults).showsBanner(onHome: true))
+    }
+
+    func testBannerNeverShowsOffHome() {
+        XCTAssertFalse(SharingConsent(defaults: defaults).showsBanner(onHome: false))
+    }
+
+    func testGamesFinishedWhileOptedOutViaSettingsNeverUploadEvenAfterOptingBackIn() async throws {
+        let dir = FileManager.default.temporaryDirectory
+            .appendingPathComponent("SharingConsentTests-\(UUID().uuidString)")
+        defer { try? FileManager.default.removeItem(at: dir) }
+        nonisolated(unsafe) let d = defaults!
+        let t = FakeTransport()
+        func make() -> GameUploader {
+            GameUploader(directory: dir, transport: t, appVersion: "1", build: "1",
+                         sharingEnabled: { SharingConsent(defaults: d).sharingEnabled })
+        }
+        d.set(false, forKey: GameUploader.sharingDefaultsKey)   // toggle off in Settings
+        let up = make()
+        await up.submit(FinishedGame(id: UUID(), opponent: .bot(.hard), userFirst: true,
+                                     seat1Won: true, mars: false, resigned: false,
+                                     finishedAt: Date(), turns: []))
+        await up.waitUntilIdle()
+
+        d.set(true, forKey: GameUploader.sharingDefaultsKey)    // toggle back on
+        let relaunched = make()
+        await relaunched.retryPending()
+        await relaunched.waitUntilIdle()
+        XCTAssertTrue(t.sentRows.isEmpty)
+    }
+}

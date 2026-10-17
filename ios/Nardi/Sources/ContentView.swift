@@ -136,6 +136,11 @@ struct ContentView: View {
         analyze.onLogSaved = { [weak store] in store?.add($0) }
         let args = ProcessInfo.processInfo.arguments
 
+        // dev: open the in-game Settings popover (verify the sharing toggle).
+        if args.contains("--game-settings") {
+            game.newGame(mode: .vsComputer, opponent: .medium, first: .first)
+            route = .game
+        }
         if args.contains("--seed-history") || args.contains("--seed-history-review") {
             game.devSeedHistory()
         }

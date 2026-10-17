@@ -2,10 +2,6 @@ import Foundation
 import Security
 
 extension GameUploader {
-    /// UserDefaults key for "Share anonymous game data" (default on). #5 binds
-    /// the Settings toggle to this key; it is read at queue time.
-    static let sharingDefaultsKey = "nardi.shareGameData"
-
     /// The app's uploader: Supabase transport from Info.plist (games stay queued
     /// silently when unconfigured). Retries pending games on first use (launch)
     /// and whenever the network returns.
@@ -16,9 +12,7 @@ extension GameUploader {
             transport: SupabaseTransport.Config.fromBundle().map { SupabaseTransport(config: $0) },
             appVersion: info["CFBundleShortVersionString"] as? String ?? "",
             build: info["CFBundleVersion"] as? String ?? "",
-            sharingEnabled: {
-                UserDefaults.standard.object(forKey: sharingDefaultsKey) as? Bool ?? true
-            })
+            sharingEnabled: { SharingConsent().sharingEnabled })
         Task.detached(priority: .utility) { await up.start() }
         return up
     }()
