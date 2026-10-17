@@ -67,7 +67,7 @@ void ScenarioBuilder::withBoard(const BoardConfig& b)
 
     std::stack<Game::TurnData> empty;
     std::swap(_game.history, empty);
-    _game.turn_record.clear();
+    _game._turn_record.clear();
 
     _game.emitted_game_over = false;
 }

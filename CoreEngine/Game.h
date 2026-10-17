@@ -285,7 +285,7 @@ class Game
         mutable std::vector<LoggedMove> _move_log;  // appended by EmitEvent when recording
         bool _recording = false;
 
-        std::vector<RecordedTurn> turn_record;      // appended on SwitchPlayer
+        std::vector<RecordedTurn> _turn_record;      // appended on SwitchPlayer
 
 
         // Getters

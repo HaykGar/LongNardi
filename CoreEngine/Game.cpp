@@ -24,7 +24,7 @@ Game::Game(const Game& other) : rng(std::random_device{}()), dist(1, 6), rw(null
 {
     mvs_this_turn = other.mvs_this_turn;
     history = other.history;
-    turn_record = other.turn_record;
+    _turn_record = other._turn_record;
     turn_number = other.turn_number;
     board = other.board;
     dice = other.dice;
@@ -386,8 +386,8 @@ status_codes Game::UndoCurrentTurn()
     }
     
     history.pop();
-    if(!turn_record.empty())
-        turn_record.pop_back();
+    if(!_turn_record.empty())
+        _turn_record.pop_back();
     times_dice_used[0] = 0;
     times_dice_used[1] = 0;
 
@@ -431,7 +431,7 @@ void Game::SwitchPlayer()
     times_dice_used[1] = 0;
 
     history.emplace(mvs_this_turn, dice);
-    turn_record.push_back({dice, mvs_this_turn});
+    _turn_record.push_back({dice, mvs_this_turn});
     mvs_this_turn.clear();
 
     EmitEvent(Event{ EventCode::TURN_SWITCH, std::monostate{}, GetSnapshot() });
@@ -485,7 +485,7 @@ void Game::StopRecording()
 }
 
 const std::vector<Game::RecordedTurn>& Game::TurnRecord() const
-{   return turn_record;   }
+{   return _turn_record;   }
 
 const std::vector<Game::LoggedMove>& Game::MoveLog() const
 {
