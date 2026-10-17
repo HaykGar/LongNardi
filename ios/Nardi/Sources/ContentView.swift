@@ -16,6 +16,25 @@ enum Route: Equatable {
     }
 }
 
+/// One-shot "tutorial seen" flag. Users upgrading from a build without it are
+/// recognised by any saved setting or match history and never redirected.
+enum FirstLaunch {
+    static let storageKey = "nardi.tutorialSeen"
+
+    /// True exactly once per install: marks the tutorial seen and reports whether
+    /// this launch should open it. UI tests / dev runs skip it unless `forced`.
+    static func claim(hasHistory: Bool, forced: Bool) -> Bool {
+        let d = UserDefaults.standard
+        guard !d.bool(forKey: storageKey) else { return false }
+        d.set(true, forKey: storageKey)
+        let settingKeys = [BoardTheme.storageKey, AnimationSpeed.storageKey, BoardFlip.storageKey,
+                           PipDisplay.storageKey, Opponent.storageKey, FirstMove.storageKey]
+        let existingUser = hasHistory || settingKeys.contains { d.object(forKey: $0) != nil }
+        if existingUser { return false }
+        return forced || ProcessInfo.processInfo.arguments.count <= 1
+    }
+}
+
 struct ContentView: View {
     @EnvironmentObject var game: NardiGame
     @EnvironmentObject var analyze: AnalyzeGame
@@ -78,7 +97,7 @@ struct ContentView: View {
                     TutorialChooserView(onQuickTour: { route = .tutorial },
                                         onBack:      { route = .home })
                 case .tutorial:
-                    TutorialView(onSkip:         { route = .tutorialChooser },
+                    TutorialView(onSkip:         { route = .home },
                                  onStartPlaying: { route = .playSetup },
                                  startStep:      tourStart)
                 case .playSetup:
@@ -138,6 +157,12 @@ struct ContentView: View {
         game.onGameForUpload = { uploader.submitInBackground($0) }
         analyze.onLogSaved = { [weak store] in store?.add($0) }
         let args = ProcessInfo.processInfo.arguments
+
+        // First-ever open lands in the Quick Tour, once. Dev hooks below still win.
+        if args.contains("--first-launch") { UserDefaults.standard.removeObject(forKey: FirstLaunch.storageKey) }
+        if FirstLaunch.claim(hasHistory: !store.matches.isEmpty, forced: args.contains("--first-launch")) {
+            route = .tutorial
+        }
 
         // dev: open the in-game Settings popover (verify the sharing toggle).
         if args.contains("--game-settings") {

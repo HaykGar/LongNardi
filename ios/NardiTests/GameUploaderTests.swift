@@ -27,7 +27,7 @@ final class GameUploaderTests: XCTestCase {
         FinishedGame(id: id, opponent: opponent, userFirst: userFirst,
                      seat1Won: seat1Won, mars: mars, resigned: resigned,
                      finishedAt: Date(timeIntervalSince1970: 1_790_000_000),
-                     turns: [RecordedTurn(dice: [5, 3], moves: [[0, 0], [5, 1]]),
+                     turns: [RecordedTurn(dice: [5, 3], moves: [.init(start: 0, dieIdx: 0), .init(start: 5, dieIdx: 1)]),
                              RecordedTurn(dice: [6, 6], moves: [])])
     }
 

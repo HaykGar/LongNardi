@@ -678,6 +678,25 @@ final class NardiGame: ObservableObject {
         return out
     }
 
+    /// The engine's confirmed-turn record for the current game, in play order
+    /// (undone sub-moves never appear). Read it once the game has finished.
+    /// Returns nil if any turn can't be read: a record with a gap can't be replayed.
+    func turnRecord() -> [RecordedTurn]? {
+        let count = nardi_turn_record_count(handle)
+        guard count >= 0 else { return nil }
+        var turns: [RecordedTurn] = []
+        for i in 0..<count {
+            var d = [Int32](repeating: 0, count: 2)
+            var m = [Int32](repeating: -1, count: 2 * Int(NARDI_MAX_TURN_MOVES))
+            var n: Int32 = 0
+            guard nardi_turn_record_get(handle, i, &d, &m, &n) == NARDI_OK else { return nil }
+            turns.append(RecordedTurn(
+                dice: d.map(Int.init),
+                moves: (0..<Int(n)).map { RecordedTurn.Move(start: Int(m[2 * $0]), dieIdx: Int(m[2 * $0 + 1])) }))
+        }
+        return turns
+    }
+
     /// Animate the last command's sub-moves (pure display). Replay recording is done
     /// by the callers (advanceLoop for the bot, confirm/tapDie for a human turn), not
     /// here, so a turn is recorded once as a whole rather than hop by hop.
@@ -793,17 +812,12 @@ final class NardiGame: ObservableObject {
             case .hard: kind = .bot(.hard)
             }
         }
+        // A record with a gap can't be replayed, so such a game isn't uploaded.
+        guard let turns = turnRecord() else { return }
         upload(FinishedGame(id: UUID(), opponent: kind, userFirst: seat1White,
                             seat1Won: winnerWhite == seat1White, mars: mars,
                             resigned: resigned, finishedAt: Date(),
-                            turns: recordedTurns()))
-    }
-
-    /// Adapter: the confirmed-turn record of the finished game in cloud format
-    /// (ADR 0002). The single integration point for #3.
-    func recordedTurns() -> [RecordedTurn] {
-        // TODO(#3): read engine turn record
-        return []
+                            turns: turns))
     }
 
     func backToSetup() {

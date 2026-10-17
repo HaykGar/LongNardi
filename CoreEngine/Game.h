@@ -144,6 +144,16 @@ class Game
         void StopRecording();    // disable (keeps the log for reading)
         const std::vector<LoggedMove>& MoveLog() const;
 
+        // Confirmed turns of this game, in play order: the dice (larger first) and
+        // the start-and-die sub-moves actually played. A pass has no moves; moves
+        // undone within a turn never appear. Separate from the animation MoveLog.
+        struct RecordedTurn
+        {
+            DieType dice;
+            MoveSequence moves;
+        };
+        const std::vector<RecordedTurn>& TurnRecord() const;
+
         // Friend class for testing
         friend class ScenarioBuilder;
 
@@ -274,6 +284,8 @@ class Game
 
         mutable std::vector<LoggedMove> _move_log;  // appended by EmitEvent when recording
         bool _recording = false;
+
+        std::vector<RecordedTurn> _turn_record;      // appended on SwitchPlayer
 
 
         // Getters

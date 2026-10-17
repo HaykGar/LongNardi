@@ -3,14 +3,37 @@ import Network
 
 // MARK: - Input
 
-/// One turn of a finished game in the cloud format (ADR 0002): the two dice plus
-/// the ordered engine-native moves `[start, die_idx]`. A pass has no moves.
-/// Encodes as `{"d":[a,b],"m":[[start,die_idx],...]}`.
+/// One confirmed turn from the engine's turn record. Encodes to the upload shape
+/// {"d":[die0,die1],"m":[[start,dieIdx],...]}: dice larger first, a pass has no moves.
 struct RecordedTurn: Codable, Equatable, Sendable {
-    var dice: [Int]
-    var moves: [[Int]]
+    /// One sub-move: `start` = row*12 + col (0..23), `dieIdx` indexes `dice`.
+    /// Encodes as the pair [start, dieIdx].
+    struct Move: Codable, Equatable, Sendable {
+        let start: Int
+        let dieIdx: Int
 
-    enum CodingKeys: String, CodingKey {
+        init(start: Int, dieIdx: Int) {
+            self.start = start
+            self.dieIdx = dieIdx
+        }
+
+        init(from decoder: Decoder) throws {
+            var c = try decoder.unkeyedContainer()
+            start = try c.decode(Int.self)
+            dieIdx = try c.decode(Int.self)
+        }
+
+        func encode(to encoder: Encoder) throws {
+            var c = encoder.unkeyedContainer()
+            try c.encode(start)
+            try c.encode(dieIdx)
+        }
+    }
+
+    let dice: [Int]
+    let moves: [Move]
+
+    private enum CodingKeys: String, CodingKey {
         case dice = "d"
         case moves = "m"
     }

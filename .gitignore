@@ -58,3 +58,5 @@ ios/design_handoff_nardi_motion_analyzer/
 
 # Supabase credentials for the iOS app (copy Supabase.example.xcconfig)
 ios/Config/Supabase.xcconfig
+# CI workflows (otherwise caught by the `.*` rule above).
+!.github/

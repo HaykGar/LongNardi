@@ -29,6 +29,22 @@ the project builds without the networks and every bot/analysis falls back to the
 retrain or add/rename a blob. `make_model.sh` needs the `DecisionEngine/venv`
 (PyTorch) and reads the `.pt` weights from `../DecisionEngine/weights/`.
 
+## Cloud game history (Supabase)
+
+Finished games upload anonymously to a Supabase project. One-time setup (create
+the project, enable anonymous sign-ins, apply `supabase/migrations/`, store the
+URL + anon key in `.env`, set the keep-alive GitHub secrets):
+
+```bash
+scripts/supabase_setup_wizard.sh
+```
+
+`.github/workflows/supabase-keepalive.yml` pings the project every 3 days so the
+free tier doesn't pause. App Store privacy answers and the policy draft live in
+`docs/privacy/app-store-privacy.md`. Remaining manual steps, upkeep
+(pauses, GitHub's 60-day schedule rule) and example queries:
+`docs/cloud-game-history-runbook.md`.
+
 ## Layout
 
 - `project.yml` — xcodegen spec; the app target compiles the pybind/SFML-free
