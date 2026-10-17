@@ -20,8 +20,8 @@ Tick these as they happen; the matching issue closes when its lines are done.
       update and delete all 401/403. Test row deleted.
 - [ ] **#2** `SUPABASE_URL` and `SUPABASE_ANON_KEY` repo secrets set.
 - [ ] **#2** Keep-alive manually dispatched on `main` and green.
-- [ ] **#6** Policy published (date + contact filled in), URL set in App Store Connect.
-- [ ] **#6** App Privacy label submitted per the checklist.
+- [x] **#6** Policy published (date + contact filled in), URL set in App Store Connect.
+- [x] **#6** App Privacy label submitted per the checklist.
 
 #6 only has to be done before the first release that uploads games (after #4/#5).
 Nothing in the app talks to Supabase until #4 lands, so merging before the

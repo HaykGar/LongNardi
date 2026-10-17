@@ -24,7 +24,7 @@ App Store Connect → your app → **App Privacy** → Get Started / Edit.
 - [ ] **Privacy Policy URL** set to the published copy of the policy below.
 - [ ] Publish the label, then confirm the entries on the app's product page
       preview.
-- [ ] Developer confirms the label entries were submitted (issue #6).
+- [x] Developer confirms the label entries were submitted (issue #6).
 
 ## Privacy policy (draft)
 
