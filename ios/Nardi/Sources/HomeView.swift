@@ -97,12 +97,12 @@ struct HomeView: View {
             } label: {
                 Image(systemName: "xmark").font(.system(size: 12, weight: .heavy))
                     .foregroundStyle(Palette.cream)
-                    .frame(width: 30, height: 30).contentShape(Rectangle())
+                    .frame(width: 44, height: 44).contentShape(Rectangle())
             }
             .buttonStyle(.plain)
-            .accessibilityLabel("Dismiss")
+            .accessibilityLabel("Dismiss data sharing notice")
         }
-        .padding(.leading, 14).padding(.trailing, 4).padding(.vertical, 6)
+        .padding(.leading, 14).padding(.trailing, 0).padding(.vertical, 0)
         .background(RoundedRectangle(cornerRadius: 14).fill(Grad.homeNavCard)
             .overlay(RoundedRectangle(cornerRadius: 14).stroke(Palette.strokeWarm.opacity(0.18), lineWidth: 1)))
     }
