@@ -18,8 +18,8 @@ Tick these as they happen; the matching issue closes when its lines are done.
 - [ ] **#2** Wizard run: project created, anonymous sign-ins on, migration applied.
 - [ ] **#2** RLS probe results were insert-own 201; other-seat insert, select,
       update and delete all 401/403. Test row deleted.
-- [ ] **#2** `SUPABASE_URL` and `SUPABASE_ANON_KEY` repo secrets set.
-- [ ] **#2** Keep-alive manually dispatched on `main` and green.
+- [x] **#2** `SUPABASE_URL` and `SUPABASE_ANON_KEY` repo secrets set.
+- [x] **#2** Keep-alive manually dispatched on `main` and green.
 - [x] **#6** Policy published (date + contact filled in), URL set in App Store Connect.
 - [x] **#6** App Privacy label submitted per the checklist.
 
