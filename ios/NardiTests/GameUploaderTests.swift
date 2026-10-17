@@ -140,6 +140,42 @@ final class GameUploaderTests: XCTestCase {
         XCTAssertTrue(later.sentRows.isEmpty)
     }
 
+    func testPermanentlyRejectedRowDoesNotBlockLaterGames() async throws {
+        let a = UUID(uuidString: "00000000-0000-0000-0000-00000000000A")!
+        let b = UUID(uuidString: "00000000-0000-0000-0000-00000000000B")!
+        let offline = makeUploader(nil)
+        await offline.submit(sampleGame(id: a))
+        await offline.submit(sampleGame(id: b))
+        await offline.waitUntilIdle()
+
+        let t = FakeTransport()
+        t.script = [.failure(UploadRejected(status: 400))]   // a's row is refused for good
+        let up = makeUploader(t)
+        await up.retryPending()
+        await up.waitUntilIdle()
+        XCTAssertEqual(try t.sentRows.map(json).map { $0["id"] as? String },
+                       [b.uuidString.lowercased()])
+
+        // The rejected row is set aside, not retried forever.
+        await up.retryPending()
+        await up.waitUntilIdle()
+        XCTAssertEqual(t.sentRows.count, 1)
+        XCTAssertTrue(FileManager.default.fileExists(atPath: dir
+            .appendingPathComponent("Rejected/\(a.uuidString).json").path))
+    }
+
+    func testUndecodableQueuedFileIsSetAsideNotDeleted() async throws {
+        try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        try Data("{\"future\":1}".utf8).write(to: dir.appendingPathComponent("odd.json"))
+        let t = FakeTransport()
+        let up = makeUploader(t)
+        await up.retryPending()
+        await up.waitUntilIdle()
+        XCTAssertTrue(t.sentRows.isEmpty)
+        XCTAssertTrue(FileManager.default.fileExists(atPath: dir
+            .appendingPathComponent("Rejected/odd.json").path))
+    }
+
     // MARK: - Opt-out
 
     func testOptedOutGamesAreNeverQueuedEvenAfterOptingBackIn() async throws {

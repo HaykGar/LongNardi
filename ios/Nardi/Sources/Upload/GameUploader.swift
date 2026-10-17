@@ -46,6 +46,12 @@ enum InsertOutcome: Sendable {
 }
 
 /// Where rows go. The real one is `SupabaseTransport`; tests use a fake.
+/// Thrown by a transport when the server refuses a row for good (a 4xx other
+/// than auth/timeout/rate-limit): retrying the same row can never succeed.
+struct UploadRejected: Error, Equatable {
+    let status: Int
+}
+
 protocol GameUploadTransport: Sendable {
     /// The anonymous install ID (auth uid) that owns seat 1.
     func installID() async throws -> String
@@ -226,16 +232,30 @@ actor GameUploader {
         for file in files {
             guard let data = try? Data(contentsOf: file),
                   let row = try? JSONDecoder().decode(GameRow.self, from: data) else {
-                try? FileManager.default.removeItem(at: file)   // unreadable: discard
+                setAside(file)   // unreadable (e.g. older/newer format): keep, don't send
                 continue
             }
             do {
                 _ = try await transport.insert(row: row.payload(seat1User: uid))
                 try? FileManager.default.removeItem(at: file)   // inserted or duplicate
+            } catch is UploadRejected {
+                setAside(file)   // permanent refusal: don't block the games behind it
             } catch {
                 return   // offline / server error: leave queued for the next retry
             }
         }
+    }
+}
+
+extension GameUploader {
+    /// Moves a queued file into `Rejected/` so it is never retried but not lost.
+    nonisolated func setAside(_ file: URL) {
+        let fm = FileManager.default
+        let rejected = file.deletingLastPathComponent().appendingPathComponent("Rejected", isDirectory: true)
+        try? fm.createDirectory(at: rejected, withIntermediateDirectories: true)
+        let dest = rejected.appendingPathComponent(file.lastPathComponent)
+        try? fm.removeItem(at: dest)
+        if (try? fm.moveItem(at: file, to: dest)) == nil { try? fm.removeItem(at: file) }
     }
 }
 

@@ -82,6 +82,11 @@ final class SupabaseTransport: GameUploadTransport, @unchecked Sendable {
         default:
             if String(data: body, encoding: .utf8)?.contains("23505") == true { return .duplicate }
             if status == 401 { setSession(nil, keepRefresh: true) }   // force a refresh next time
+            // Other 4xx (bad row, RLS, too large) will never succeed: tell the
+            // uploader to set the row aside. 408/429 and 5xx are transient.
+            if (400..<500).contains(status), ![401, 408, 429].contains(status) {
+                throw UploadRejected(status: status)
+            }
             throw TransportError.http(status)
         }
     }
@@ -91,8 +96,14 @@ final class SupabaseTransport: GameUploadTransport, @unchecked Sendable {
     private func validSession() async throws -> Session {
         let current = lock.withLock { cached }
         if let s = current, s.expiresAt > Date().addingTimeInterval(60) { return s }
-        if let s = current, let refreshed = try? await refresh(s.refreshToken) {
-            return refreshed
+        if let s = current {
+            do {
+                return try await refresh(s.refreshToken)
+            } catch TransportError.http(let status) where status == 400 || status == 401 {
+                // Refresh token definitively invalid: only now take a new identity.
+            }
+            // Any other failure (offline, 5xx, malformed) propagates: the game
+            // stays queued and the existing install ID is kept.
         }
         return try await signUpAnonymously()
     }
