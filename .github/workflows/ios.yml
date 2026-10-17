@@ -1,0 +1,18 @@
+# Builds the iOS app and runs its unit tests on every push and pull request,
+# and checks that dev launch-arg hooks stay out of Release builds.
+name: iOS
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  test:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Unit tests
+        run: ios/scripts/test.sh -quiet
+      - name: No dev hooks in Release
+        run: ios/scripts/check_release_hooks.sh

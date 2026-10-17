@@ -87,11 +87,20 @@ struct ContentView: View {
     }
 
     @ViewBuilder
+    /// dev: --review-analyze opens the review's analysis panel straight away.
+    private var devReviewAutoOpen: Bool {
+        #if DEBUG
+        return ProcessInfo.processInfo.arguments.contains("--review-analyze")
+        #else
+        return false
+        #endif
+    }
+
     private var screen: some View {
         Group {
             if let review {
                 GameReviewView(review: review,
-                               autoOpen: ProcessInfo.processInfo.arguments.contains("--review-analyze"),
+                               autoOpen: devReviewAutoOpen,
                                onExit: { self.review = nil; route = reviewReturn })
                     .environmentObject(analyze)
             } else {
@@ -185,10 +194,16 @@ struct ContentView: View {
             }
         }
         #endif
-        let firstRunFlow = args.count <= 1 || args.contains("--first-launch") || args.contains("--reset-consent-notice")
+        #if DEBUG
+        let forcedFirstRun = args.contains("--first-launch")
+        let devFirstRun = forcedFirstRun || args.contains("--reset-consent-notice")
+        #else
+        let forcedFirstRun = false, devFirstRun = false
+        #endif
+        let firstRunFlow = args.count <= 1 || devFirstRun
         if firstRunFlow {
             tourPending = FirstLaunch.tourPending(hasHistory: !store.matches.isEmpty,
-                                                  forced: args.contains("--first-launch"))
+                                                  forced: forcedFirstRun)
             if SharingConsent().noticePending { route = .consent }
             else if tourPending { route = .tutorial }
         }

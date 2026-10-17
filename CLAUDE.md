@@ -11,3 +11,7 @@ Default five labels: `needs-triage`, `needs-info`, `ready-for-agent`, `ready-for
 ### Domain docs
 
 Single-context: `GLOSSARY.md` + `docs/adr/` at the repo root. See `docs/agents/domain.md`.
+
+## iOS
+
+Build, test and simulator notes: `ios/README.md`. Review rules: `CODING_STANDARDS.md`.

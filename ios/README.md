@@ -7,27 +7,27 @@ header — no Objective-C++ shim, no Python, no SFML.
 
 ## Build (command line)
 
-Requires full Xcode (not just Command Line Tools), `xcodegen`, and the iOS
-**simulator runtime** (Xcode ▸ Settings ▸ Components, or `xcodebuild
--downloadPlatform iOS`).
+Requires full Xcode and the iOS **simulator runtime** (Xcode ▸ Settings ▸
+Components). `Nardi.xcodeproj` is checked in and edited directly; there is no
+xcodegen spec.
 
 ```sh
-cd ios
-./scripts/make_model.sh          # exports the bundled .nardiw value networks
-xcodegen generate                # writes Nardi.xcodeproj (picks up the new blobs)
-open Nardi.xcodeproj             # or build from CLI:
-xcodebuild -project Nardi.xcodeproj -scheme Nardi \
-  -destination 'platform=iOS Simulator,name=iPhone 16' build
+ios/scripts/test.sh                  # unit tests (NardiTests); SIM="iPhone 17 Pro" to pick
+ios/scripts/check_release_hooks.sh   # Release build has no dev launch-arg hooks
 ```
 
-**Order matters on a fresh checkout.** The `.nardiw` value networks are
-generated artifacts and are **gitignored** (`*.nardiw`), so they don't exist
-after a clone. `xcodegen` only adds the blobs that are present on disk when it
-runs, so you must run `make_model.sh` *before* `xcodegen generate` — otherwise
-the project builds without the networks and every bot/analysis falls back to the
-"model blob missing" state. Re-run both (make_model, then xcodegen) whenever you
-retrain or add/rename a blob. `make_model.sh` needs the `DecisionEngine/venv`
-(PyTorch) and reads the `.pt` weights from `../DecisionEngine/weights/`.
+Both scripts point at `/Applications/Xcode.app` when the active developer dir
+is Command Line Tools; for other `xcodebuild`/`simctl` calls prefix
+`DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer`. CI runs both
+(`.github/workflows/ios.yml`).
+
+The `.nardiw` value networks in `Nardi/Resources/` are checked in. After
+retraining, regenerate them with `./scripts/make_model.sh` (needs the
+`DecisionEngine/venv` and the `.pt` weights in `../DecisionEngine/weights/`).
+
+Supabase credentials for uploads live in the gitignored
+`Config/Supabase.xcconfig`: run `scripts/supabase_setup_wizard.sh --app-only`
+from the repo root. Without it the app builds and queues games but never sends.
 
 ## Cloud game history (Supabase)
 
