@@ -917,6 +917,28 @@ final class NardiGame: ObservableObject {
         phase = .gameOver(message: outcomeMessage())
     }
 
+    /// Dev/screenshots only: a realistic board `plies` turns into a self-played
+    /// game, at the first turn from there on with White to move.
+    func devSelfPlayBoard(plies: Int) -> [Int8] {
+        let log = selfPlayLog()
+        return (log.dropFirst(plies).first { !$0.preSide } ?? log.first)?.preBoard ?? engineBoard()
+    }
+
+    /// Dev/screenshots only: a vs-computer game resumed from a self-played
+    /// mid-game position, White (human) to roll. Never uploaded or reviewed.
+    func devMidGame(plies: Int) {
+        let b = devSelfPlayBoard(plies: plies)   // before newGame: self-play reconfigures players
+        newGame(mode: .vsComputer, opponent: .medium, first: .first)
+        loopTask?.cancel()                       // newGame's loop hasn't run yet
+        uploadEligible = false
+        matchSaved = true
+        counterfactual?.cancel(); counterfactual = nil
+        b.withUnsafeBufferPointer { _ = nardi_set_position(handle, $0.baseAddress, 0) }
+        board = engineBoard()
+        refreshMeta()
+        advanceLoop()
+    }
+
     /// Dev/verification only: self-play a few games with varied mode/opponent
     /// labels and archive them, so the History tab has data to render.
     func devSeedHistory() {

@@ -280,6 +280,16 @@ struct ContentView: View {
                 DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) { analyze.toggleTryFirst() }
             }
         }
+        // dev (screenshots): a real self-played mid-game position, `--game-mid N` on the
+        // game screen or `--analyze-game N` in the analyzer (with a 6-4 roll); N = plies in.
+        if let i = args.firstIndex(of: "--game-mid"), i + 1 < args.count, let n = Int(args[i + 1]) {
+            game.devMidGame(plies: n)
+            route = .game
+        }
+        if let i = args.firstIndex(of: "--analyze-game"), i + 1 < args.count, let n = Int(args[i + 1]) {
+            analyze.devSetup(board: game.devSelfPlayBoard(plies: n), side: false, d1: 6, d2: 4)
+            route = .analyze
+        }
         // Die 6 has no legal start (blocked) but die 3 does — verify the no-start die greys.
         if args.contains("--analyze-block") {
             var b = [Int8](repeating: 0, count: 24)

@@ -33,7 +33,17 @@ struct GameReviewView: View {
             }
             .padding(.top, 8)
         }
-        .task { await review.compute(); if autoOpen { openAnalyzer() } }
+        .task {
+            await review.compute()
+            #if DEBUG
+            // dev (screenshots): --review-at N opens the scrubber at turn N.
+            let args = ProcessInfo.processInfo.arguments
+            if let i = args.firstIndex(of: "--review-at"), i + 1 < args.count, let n = Int(args[i + 1]) {
+                index = max(0, min(n, review.points.count - 1))
+            }
+            #endif
+            if autoOpen { openAnalyzer() }
+        }
         .fullScreenCover(isPresented: $showAnalyzer) {
             AnalyzeScreen(onExit: { showAnalyzer = false }).environmentObject(analyze)
         }
