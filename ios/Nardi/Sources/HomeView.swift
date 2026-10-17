@@ -39,18 +39,18 @@ struct HomeView: View {
                     .frame(maxWidth: .infinity, maxHeight: .infinity)   // centres the pair
                     .padding(.horizontal, sidePad)
 
-                    // Banner (left, while shown) · Settings + Tutorial (right-aligned).
+                    // Settings + Tutorial (left) · Banner (right, while shown).
                     HStack(alignment: .bottom, spacing: gap) {
-                        if showConsentBanner {
-                            consentBanner.frame(maxWidth: leftW + gap)
-                                .transition(.opacity)
-                        }
-                        Spacer(minLength: 0)
                         HStack(spacing: 10) {
                             settingsRibbon
                             tutorialRibbon
                         }
                         .fixedSize()
+                        Spacer(minLength: 0)
+                        if showConsentBanner {
+                            consentBanner.frame(maxWidth: leftW + gap)
+                                .transition(.opacity)
+                        }
                     }
                     .padding(.horizontal, sidePad).padding(.bottom, 18)
                 }
