@@ -6,9 +6,9 @@ extension GameUploader {
     static let sharingDefaultsKey = "nardi.shareGameData"
 }
 
-/// The user's choice about sharing anonymous game data, plus the one-time Home
-/// banner that tells them about it. Both live in UserDefaults. Local match
-/// history never consults this — opting out only stops cloud uploads.
+/// The user's choice about sharing anonymous game data, plus the one-time notice
+/// page that tells them about it. Both live in UserDefaults. Local game history
+/// never consults this — opting out only stops cloud uploads.
 struct SharingConsent {
     static let bannerDismissedKey = "nardi.shareBannerDismissed"
 
@@ -22,10 +22,8 @@ struct SharingConsent {
         defaults.object(forKey: GameUploader.sharingDefaultsKey) as? Bool ?? true
     }
 
-    /// The banner appears only on Home, and only until it is dismissed once.
-    func showsBanner(onHome: Bool) -> Bool {
-        onHome && !defaults.bool(forKey: Self.bannerDismissedKey)
-    }
+    /// The notice shows on launch until it is acknowledged once.
+    var noticePending: Bool { !defaults.bool(forKey: Self.bannerDismissedKey) }
 
-    func dismissBanner() { defaults.set(true, forKey: Self.bannerDismissedKey) }
+    func acknowledgeNotice() { defaults.set(true, forKey: Self.bannerDismissedKey) }
 }

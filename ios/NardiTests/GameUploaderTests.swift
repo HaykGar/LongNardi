@@ -265,14 +265,10 @@ final class SharingConsentTests: XCTestCase {
         XCTAssertFalse(consent.sharingEnabled)
     }
 
-    func testBannerShowsOnHomeUntilDismissedThenNeverAgain() {
-        XCTAssertTrue(SharingConsent(defaults: defaults).showsBanner(onHome: true))
-        SharingConsent(defaults: defaults).dismissBanner()
-        XCTAssertFalse(SharingConsent(defaults: defaults).showsBanner(onHome: true))
-    }
-
-    func testBannerNeverShowsOffHome() {
-        XCTAssertFalse(SharingConsent(defaults: defaults).showsBanner(onHome: false))
+    func testNoticePendingUntilAcknowledgedThenNeverAgain() {
+        XCTAssertTrue(SharingConsent(defaults: defaults).noticePending)
+        SharingConsent(defaults: defaults).acknowledgeNotice()
+        XCTAssertFalse(SharingConsent(defaults: defaults).noticePending)
     }
 
     func testGamesFinishedWhileOptedOutViaSettingsNeverUploadEvenAfterOptingBackIn() async throws {

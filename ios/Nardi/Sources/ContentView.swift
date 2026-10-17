@@ -4,35 +4,44 @@ import SwiftUI
 /// separate overlay (@State review) that wins over `route`, reproducing v1's
 /// `if let review { … }` precedence so review open/close behaves identically.
 enum Route: Equatable {
-    case home, settings, playSetup, game, analyze, history, tutorialChooser, tutorial
+    case consent, home, settings, playSetup, game, analyze, history, tutorialChooser, tutorial
 
     /// Navigation depth: moving deeper pushes in, moving shallower pulls back.
     var depth: Int {
         switch self {
-        case .home: return 0
+        case .consent, .home: return 0
         case .settings, .playSetup, .analyze, .history, .tutorialChooser: return 1
         case .game, .tutorial: return 2
         }
     }
 }
 
-/// One-shot "tutorial seen" flag. Users upgrading from a build without it are
-/// recognised by any saved setting or match history and never redirected.
+/// First-launch Quick Tour flag. It is set only when the player leaves the tour,
+/// so a tour quit half-way (app closed) comes back next launch. Users upgrading
+/// from a build without it are recognised by any saved setting or match history
+/// and never redirected.
 enum FirstLaunch {
     static let storageKey = "nardi.tutorialSeen"
+    /// Set once this install is judged new, so the tour stays owed even if the
+    /// player changes a setting before finishing it.
+    static let pendingKey = "nardi.tutorialPending"
 
-    /// True exactly once per install: marks the tutorial seen and reports whether
-    /// this launch should open it. UI tests / dev runs skip it unless `forced`.
-    static func claim(hasHistory: Bool, forced: Bool) -> Bool {
+    static func tourPending(hasHistory: Bool) -> Bool {
         let d = UserDefaults.standard
         guard !d.bool(forKey: storageKey) else { return false }
-        d.set(true, forKey: storageKey)
-        let settingKeys = [BoardTheme.storageKey, AnimationSpeed.storageKey, BoardFlip.storageKey,
-                           PipDisplay.storageKey, Opponent.storageKey, FirstMove.storageKey]
-        let existingUser = hasHistory || settingKeys.contains { d.object(forKey: $0) != nil }
-        if existingUser { return false }
-        return forced || ProcessInfo.processInfo.arguments.count <= 1
+        if !d.bool(forKey: pendingKey) {
+            let settingKeys = [BoardTheme.storageKey, AnimationSpeed.storageKey, BoardFlip.storageKey,
+                               PipDisplay.storageKey, Opponent.storageKey, FirstMove.storageKey]
+            if hasHistory || settingKeys.contains(where: { d.object(forKey: $0) != nil }) {
+                d.set(true, forKey: storageKey)
+                return false
+            }
+            d.set(true, forKey: pendingKey)
+        }
+        return true
     }
+
+    static func markSeen() { UserDefaults.standard.set(true, forKey: storageKey) }
 }
 
 struct ContentView: View {
@@ -52,6 +61,7 @@ struct ContentView: View {
     @State private var forward = true                    // direction of the last navigation
     @State private var reviewReturn: Route = .history   // where "Done" lands after review
     @State private var tourStart = 0                    // dev hook: tour step to open at
+    @State private var tourPending = false              // first-launch Quick Tour still owed
 
     /// Screens slide in 16pt from the right going deeper (from the left going back).
     /// The outgoing screen is removed un-animated: screens are full-bleed, so any
@@ -84,6 +94,11 @@ struct ContentView: View {
                     .environmentObject(analyze)
             } else {
                 switch route {
+                case .consent:
+                    ConsentNoticeView(onAcknowledge: {
+                        SharingConsent().acknowledgeNotice()
+                        route = tourPending ? .tutorial : .home
+                    })
                 case .home:
                     HomeView(store: store,
                              onPlay:     { route = .playSetup },
@@ -97,8 +112,8 @@ struct ContentView: View {
                     TutorialChooserView(onQuickTour: { route = .tutorial },
                                         onBack:      { route = .home })
                 case .tutorial:
-                    TutorialView(onSkip:         { route = .home },
-                                 onStartPlaying: { route = .playSetup },
+                    TutorialView(onSkip:         { FirstLaunch.markSeen(); route = .home },
+                                 onStartPlaying: { FirstLaunch.markSeen(); route = .playSetup },
                                  startStep:      tourStart)
                 case .playSetup:
                     PlaySetupView(onStart: startGame, onBack: { route = .home })
@@ -158,10 +173,19 @@ struct ContentView: View {
         analyze.onLogSaved = { [weak store] in store?.add($0) }
         let args = ProcessInfo.processInfo.arguments
 
-        // First-ever open lands in the Quick Tour, once. Dev hooks below still win.
-        if args.contains("--first-launch") { UserDefaults.standard.removeObject(forKey: FirstLaunch.storageKey) }
-        if FirstLaunch.claim(hasHistory: !store.matches.isEmpty, forced: args.contains("--first-launch")) {
-            route = .tutorial
+        // First launch: sharing notice, then the Quick Tour, each until completed.
+        // Dev runs (any launch arg) skip both unless --first-launch, which wipes
+        // their stored flags to replay a fresh install. Dev hooks below still win.
+        if args.contains("--first-launch") {
+            for key in [FirstLaunch.storageKey, FirstLaunch.pendingKey, SharingConsent.bannerDismissedKey] {
+                UserDefaults.standard.removeObject(forKey: key)
+            }
+        }
+        let firstRunFlow = args.count <= 1 || args.contains("--first-launch") || args.contains("--reset-consent-banner")
+        if firstRunFlow {
+            tourPending = FirstLaunch.tourPending(hasHistory: !store.matches.isEmpty)
+            if SharingConsent().noticePending { route = .consent }
+            else if tourPending { route = .tutorial }
         }
 
         // dev: open the in-game Settings popover (verify the sharing toggle).

@@ -10,9 +10,6 @@ struct HomeView: View {
     let onHistory: () -> Void
     let onTutorial: () -> Void
     let onSettings: () -> Void
-    /// One-time "we share anonymous game data" notice; Home is the only screen
-    /// that ever shows it, so it can never sit over a game.
-    @State private var showConsentNotice = SharingConsent().showsBanner(onHome: true)
 
     var body: some View {
         ZStack {
@@ -41,10 +38,6 @@ struct HomeView: View {
                     ribbonRow
                         .padding(.leading, sidePad).padding(.bottom, 18)
                 }
-            }
-
-            if showConsentNotice {
-                consentNotice.transition(.opacity)
             }
         }
     }
@@ -78,33 +71,6 @@ struct HomeView: View {
             ActionCard(title: "History", subtitle: "Review any past game",
                        systemImage: "list.bullet", kind: .secondary, action: onHistory)
         }
-    }
-
-    // One-time sharing notice: covers Home until acknowledged, then never again.
-    private var consentNotice: some View {
-        ZStack {
-            Color.black.opacity(0.6).ignoresSafeArea()
-            VStack(spacing: 22) {
-                Image(systemName: "chart.bar.doc.horizontal")
-                    .font(.system(size: 30, weight: .semibold))
-                    .foregroundStyle(Palette.accentSoft)
-                Text(SharingConsent.bannerCopy)
-                    .font(ThemeFont.bodyText).foregroundStyle(Palette.cream)
-                    .multilineTextAlignment(.center)
-                    .fixedSize(horizontal: false, vertical: true)
-                Button("Got it") {
-                    SharingConsent().dismissBanner()
-                    withMotion(Motion.out(Motion.Duration.enter)) { showConsentNotice = false }
-                }
-                .buttonStyle(PrimaryCTAButtonStyle())
-            }
-            .padding(28)
-            .frame(maxWidth: 420)
-            .background(RoundedRectangle(cornerRadius: 18).fill(Grad.homeNavCard)
-                .overlay(RoundedRectangle(cornerRadius: 18).stroke(Palette.strokeWarm.opacity(0.18), lineWidth: 1)))
-            .padding(24)
-        }
-        .accessibilityAddTraits(.isModal)
     }
 
     // The original "New to Nardi? Take the tutorial ›" ribbon's footprint, split in
@@ -254,6 +220,31 @@ private struct ActionCard: View {
         case .secondary:
             RoundedRectangle(cornerRadius: 18).fill(Grad.homeNavCard)
                 .overlay(RoundedRectangle(cornerRadius: 18).stroke(Palette.strokeWarm.opacity(0.18), lineWidth: 1))
+        }
+    }
+}
+
+/// First-launch page, shown before the Quick Tour until the player acknowledges
+/// it once: finished games are shared anonymously; Settings turns it off.
+struct ConsentNoticeView: View {
+    let onAcknowledge: () -> Void
+
+    var body: some View {
+        ZStack {
+            RadialBackground(surface: .home)
+            VStack(spacing: 22) {
+                Image(systemName: "chart.bar.doc.horizontal")
+                    .font(.system(size: 34, weight: .semibold))
+                    .foregroundStyle(Palette.accentSoft)
+                Text(SharingConsent.bannerCopy)
+                    .font(ThemeFont.bodyText).foregroundStyle(Palette.cream)
+                    .multilineTextAlignment(.center)
+                    .fixedSize(horizontal: false, vertical: true)
+                Button("Got it", action: onAcknowledge)
+                    .buttonStyle(PrimaryCTAButtonStyle())
+            }
+            .frame(maxWidth: 420)
+            .padding(24)
         }
     }
 }
