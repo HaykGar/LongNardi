@@ -26,13 +26,15 @@ enum FirstLaunch {
     /// player changes a setting before finishing it.
     static let pendingKey = "nardi.tutorialPending"
 
-    static func tourPending(hasHistory: Bool) -> Bool {
+    /// `forced` (--first-launch) treats this install as brand new, skipping the
+    /// existing-user check so the tour always replays.
+    static func tourPending(hasHistory: Bool, forced: Bool = false) -> Bool {
         let d = UserDefaults.standard
         guard !d.bool(forKey: storageKey) else { return false }
         if !d.bool(forKey: pendingKey) {
             let settingKeys = [BoardTheme.storageKey, AnimationSpeed.storageKey, BoardFlip.storageKey,
                                PipDisplay.storageKey, Opponent.storageKey, FirstMove.storageKey]
-            if hasHistory || settingKeys.contains(where: { d.object(forKey: $0) != nil }) {
+            if !forced, hasHistory || settingKeys.contains(where: { d.object(forKey: $0) != nil }) {
                 d.set(true, forKey: storageKey)
                 return false
             }
@@ -183,7 +185,8 @@ struct ContentView: View {
         }
         let firstRunFlow = args.count <= 1 || args.contains("--first-launch") || args.contains("--reset-consent-banner")
         if firstRunFlow {
-            tourPending = FirstLaunch.tourPending(hasHistory: !store.matches.isEmpty)
+            tourPending = FirstLaunch.tourPending(hasHistory: !store.matches.isEmpty,
+                                                  forced: args.contains("--first-launch"))
             if SharingConsent().noticePending { route = .consent }
             else if tourPending { route = .tutorial }
         }
