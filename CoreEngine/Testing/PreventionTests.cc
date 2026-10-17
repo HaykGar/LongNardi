@@ -17,14 +17,14 @@ TEST_F(TestBuilder, Legality_MovePreventsCompletion)
     std::cout << "starting board... \n\n";
     DisplayBoard(brd);
 
-    auto rc = StartOfTurn(white, brd, 5, 6);
+    auto rc = StartOfTurn(white, brd, 6, 5);
     PrintBoard();
     DispErrorCode(rc);
 
     ASSERT_EQ(rc, status_codes::SUCCESS);
     ASSERT_EQ(ReceiveCommand(Command(0,0)), status_codes::SUCCESS) << "couldn't select head";
 
-    rc = ReceiveCommand(Command(second));
+    rc = ReceiveCommand(Command(first));
     DispErrorCode(rc);
     ASSERT_NE(rc, status_codes::SUCCESS) << "move 6 from head prevents completion";
     ASSERT_EQ( static_cast<int>(GetBoardAt(0, 6)), 0);
@@ -32,10 +32,10 @@ TEST_F(TestBuilder, Legality_MovePreventsCompletion)
     StatusReport();
 
     ASSERT_EQ(ReceiveCommand(Command(0,3)), status_codes::SUCCESS) << "couldn't select 0, 3";
-    ASSERT_EQ(ReceiveCommand(Command(second)), status_codes::SUCCESS) << "couldn't perform valid move";
+    ASSERT_EQ(ReceiveCommand(Command(first)), status_codes::SUCCESS) << "couldn't perform valid move";
 
     ASSERT_EQ(ReceiveCommand(Command(0,0)), status_codes::SUCCESS);
-    rc = ReceiveCommand(Command(first));
+    rc = ReceiveCommand(Command(second));
     EXPECT_EQ(rc, status_codes::NO_LEGAL_MOVES_LEFT) << "couldn't move from head";
 
     brd = ZeroWhite1BlackBoard();
@@ -51,7 +51,7 @@ TEST_F(TestBuilder, Legality_MovePreventsCompletion)
     std::cout << "pre roll: \n";
     DisplayBoard(brd);
 
-    ASSERT_EQ(StartOfTurn(white, brd, 1, 2), status_codes::SUCCESS);
+    ASSERT_EQ(StartOfTurn(white, brd, 2, 1), status_codes::SUCCESS);
 
     StatusReport();
 
@@ -62,7 +62,7 @@ TEST_F(TestBuilder, Legality_MovePreventsCompletion)
 TEST_F(TestBuilder, PreventsCompletion)
 {
   auto brd = preventions1;
-  status_codes outcome = StartOfTurn(white, brd, 1, 2);
+  status_codes outcome = StartOfTurn(white, brd, 2, 1);
   ASSERT_EQ(outcome, status_codes::SUCCESS) << "forced all on roll - preventions1";
 
   outcome = ReceiveCommand(Command(0, 0));
@@ -72,7 +72,7 @@ TEST_F(TestBuilder, PreventsCompletion)
   EXPECT_EQ(outcome, status_codes::PREVENTS_COMPLETION);
 
   DisplayBoard(preventions2);
-  outcome = StartOfTurn(white, preventions2, 1, 2);
+  outcome = StartOfTurn(white, preventions2, 2, 1);
   ASSERT_EQ(outcome, status_codes::SUCCESS);
 
   outcome = ReceiveCommand(Command(0, 3));

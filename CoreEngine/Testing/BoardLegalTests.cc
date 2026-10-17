@@ -8,7 +8,7 @@ TEST_F(TestBuilder, StartSelect_InvalidStarts)
 
     DisplayBoard(brd);
 
-    auto rc = StartOfTurn(white, brd, /*d1*/2, /*d2*/3);
+    auto rc = StartOfTurn(white, brd, /*d1*/3, /*d2*/2);
     PrintBoard();
 
     DispErrorCode(rc);
@@ -48,7 +48,7 @@ TEST_F(TestBuilder, StartSelect_MultipleLegalStarts)
 
     DisplayBoard(brd);
 
-    ASSERT_EQ(StartOfTurn(white, brd, 2, 4),
+    ASSERT_EQ(StartOfTurn(white, brd, 4, 2),
               status_codes::SUCCESS)
               << "No forced moves expected on (2,4) roll";
 
@@ -79,14 +79,14 @@ TEST_F(TestBuilder, HeadReuse_NormalRoll)
     auto brd = HeadScenarioBoard();
 
     // dice 1 and 2 → both moves possible without ending turn
-    ASSERT_EQ(StartOfTurn(white, brd, /*d1=*/1, /*d2=*/2), status_codes::SUCCESS)
+    ASSERT_EQ(StartOfTurn(white, brd, /*d1=*/2, /*d2=*/1), status_codes::SUCCESS)
         << "StartOfTurn should succeed (no forced moves)";
 
     // --- Move #1: from head using die index 0 (value 1) ---------------------
     auto rc = ReceiveCommand(Command(0,0));
     ASSERT_EQ(rc, status_codes::SUCCESS) << "Unable to select head for first move";
 
-    rc = ReceiveCommand(Command(first));   // use die 0 (=1)
+    rc = ReceiveCommand(Command(second));   // use die 0 (=1)
     ASSERT_EQ(rc, status_codes::SUCCESS) << "Head move failed with die 1";
 
     // --- Attempt to select head again (should be blocked) -------------------
@@ -150,10 +150,10 @@ TEST_F(TestBuilder, MoveOntoEnemyPiece)
     brd[0][0] = 1;    // white
     brd[0][4] = -1;   // enemy pile
 
-    ASSERT_EQ(StartOfTurn(white, brd, 4, 5), status_codes::SUCCESS);
+    ASSERT_EQ(StartOfTurn(white, brd, 5, 4), status_codes::SUCCESS);
 
     ASSERT_EQ(ReceiveCommand(Command(0,0)), status_codes::SUCCESS);
-    EXPECT_EQ(ReceiveCommand(Command(first)),     status_codes::DEST_ENEMY)
+    EXPECT_EQ(ReceiveCommand(Command(second)),     status_codes::DEST_ENEMY)
         << "landing on enemy pile must be DEST_ENEMY";
 
     Board brd2(board_legal);
@@ -171,10 +171,10 @@ TEST_F(TestBuilder, OutOfBounds)
     brd[1][10] = 1;   // piece near end
     brd[0][5]  = 1;   // second piece ensures no forced moves
 
-    ASSERT_EQ(StartOfTurn(white, brd, 3, 5), status_codes::SUCCESS);
+    ASSERT_EQ(StartOfTurn(white, brd, 5, 3), status_codes::SUCCESS);
 
     ASSERT_EQ(ReceiveCommand(Command(1,10)), status_codes::SUCCESS);
-    auto rc = ReceiveCommand(Command(first));
+    auto rc = ReceiveCommand(Command(second));
 
     DispErrorCode(rc);
     EXPECT_NE(rc, status_codes::SUCCESS) << "move that crosses board end should be OUT_OF_BOUNDS";
