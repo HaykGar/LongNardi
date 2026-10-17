@@ -123,8 +123,6 @@ struct HomeView: View {
 /// in-game Settings popover, so both stay in sync.
 struct SettingsView: View {
     let onBack: () -> Void
-    @AppStorage(AnimationSpeed.storageKey) private var speed: AnimationSpeed = .high
-    @AppStorage(SharingConsent.sharingKey) private var shareGameData = true
 
     var body: some View {
         ZStack {
@@ -152,21 +150,10 @@ struct SettingsView: View {
 
                     VStack(alignment: .leading, spacing: 18) {
                         VStack(alignment: .leading, spacing: 10) {
-                            SectionLabel(text: "Animation speed", color: Palette.creamDim)
-                            SegmentedChips(options: AnimationSpeed.allCases, selection: $speed,
-                                           context: .onDark) { $0.rawValue }
+                            AnimationSpeedSetting(context: .onDark)
                         }
                         Divider().background(Palette.strokeWarm.opacity(0.2))
-                        Toggle(isOn: $shareGameData) {
-                            VStack(alignment: .leading, spacing: 2) {
-                                Text("Share anonymous game data").font(ThemeFont.bodyStrong)
-                                    .foregroundStyle(Palette.cream)
-                                Text("Finished games help improve Nardi.")
-                                    .font(ThemeFont.caption).foregroundStyle(Palette.creamDim)
-                                    .fixedSize(horizontal: false, vertical: true)
-                            }
-                        }
-                        .toggleStyle(.flip)
+                        ShareGameDataSetting(context: .onDark)
                     }
                     .padding(22)
                     .frame(width: rightW, alignment: .leading)
@@ -249,3 +236,38 @@ struct ConsentNoticeView: View {
         }
     }
 }
+
+// MARK: - Settings shared by the Home Settings page and the in-game popover
+
+/// Animation speed chips, bound to the one stored setting.
+struct AnimationSpeedSetting: View {
+    let context: ChipContext
+    @AppStorage(AnimationSpeed.storageKey) private var speed: AnimationSpeed = .high
+
+    var body: some View {
+        SectionLabel(text: "Animation speed",
+                     color: context == .parchment ? Palette.parchmentInk.opacity(0.6) : Palette.creamDim)
+        SegmentedChips(options: AnimationSpeed.allCases, selection: $speed, context: context) { $0.rawValue }
+    }
+}
+
+/// "Share anonymous game data" toggle (default on), bound to the one stored setting.
+struct ShareGameDataSetting: View {
+    let context: ChipContext
+    @AppStorage(SharingConsent.sharingKey) private var shareGameData = true
+
+    var body: some View {
+        Toggle(isOn: $shareGameData) {
+            VStack(alignment: .leading, spacing: 2) {
+                Text("Share anonymous game data").font(ThemeFont.bodyStrong)
+                    .foregroundStyle(context == .parchment ? Palette.parchmentInk : Palette.cream)
+                Text("Finished games help improve Nardi.")
+                    .font(ThemeFont.caption)
+                    .foregroundStyle(context == .parchment ? Palette.parchmentInk.opacity(0.7) : Palette.creamDim)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+        }
+        .toggleStyle(.flip)
+    }
+}
+

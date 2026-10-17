@@ -178,11 +178,13 @@ struct ContentView: View {
         // First launch: sharing notice, then the Quick Tour, each until completed.
         // Dev runs (any launch arg) skip both unless --first-launch, which wipes
         // their stored flags to replay a fresh install. Dev hooks below still win.
+        #if DEBUG
         if args.contains("--first-launch") {
             for key in [FirstLaunch.storageKey, FirstLaunch.pendingKey, SharingConsent.noticeAcknowledgedKey] {
                 UserDefaults.standard.removeObject(forKey: key)
             }
         }
+        #endif
         let firstRunFlow = args.count <= 1 || args.contains("--first-launch") || args.contains("--reset-consent-notice")
         if firstRunFlow {
             tourPending = FirstLaunch.tourPending(hasHistory: !store.matches.isEmpty,
@@ -191,6 +193,8 @@ struct ContentView: View {
             else if tourPending { route = .tutorial }
         }
 
+        // Dev hooks are compiled into Debug builds only.
+        #if DEBUG
         // dev: open the in-game Settings popover (verify the sharing toggle).
         if args.contains("--game-settings") {
             game.newGame(mode: .vsComputer, opponent: .medium, first: .first)
@@ -318,5 +322,6 @@ struct ContentView: View {
                 openReviewFromCurrentGame()
             }
         }
+        #endif
     }
 }

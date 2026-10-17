@@ -9,10 +9,8 @@ struct GameView: View {
     let onNewGame: () -> Void
     let onReview: () -> Void
 
-    @AppStorage(AnimationSpeed.storageKey) private var speed: AnimationSpeed = .high
     @AppStorage(BoardFlip.storageKey) private var autoFlip = true
     @AppStorage(PipDisplay.storageKey) private var showPips = true
-    @AppStorage(SharingConsent.sharingKey) private var shareGameData = true
 
     @State private var menuSettings = false
     @State private var menuResign = false
@@ -39,9 +37,11 @@ struct GameView: View {
         .animation(Motion.anim(Motion.gentle), value: game.pendingResign != nil)
         .onChange(of: autoFlip) { _, _ in game.refreshFlip() }
         .onAppear {   // dev: open Settings to verify its toggles
+            #if DEBUG
             if ProcessInfo.processInfo.arguments.contains("--game-settings") {
                 DispatchQueue.main.asyncAfter(deadline: .now() + 1) { menuSettings = true }
             }
+            #endif
         }
     }
 
@@ -51,24 +51,14 @@ struct GameView: View {
 
     private var settingsPopover: some View {
         VStack(alignment: .leading, spacing: 10) {
-            SectionLabel(text: "Animation speed", color: Palette.parchmentInk.opacity(0.6))
-            SegmentedChips(options: AnimationSpeed.allCases, selection: $speed,
-                           context: .parchment) { $0.rawValue }
+            AnimationSpeedSetting(context: .parchment)
             if game.isPassAndPlay {
                 Toggle(isOn: $autoFlip) { Text("Flip board each turn").font(ThemeFont.bodyStrong) }
                     .toggleStyle(.flip)
             }
             Toggle(isOn: $showPips) { Text("Show pip counts").font(ThemeFont.bodyStrong) }
                 .toggleStyle(.flip)
-            Toggle(isOn: $shareGameData) {
-                VStack(alignment: .leading, spacing: 2) {
-                    Text("Share anonymous game data").font(ThemeFont.bodyStrong)
-                    Text("Finished games help improve Nardi.")
-                        .font(ThemeFont.caption).opacity(0.7)
-                        .fixedSize(horizontal: false, vertical: true)
-                }
-            }
-            .toggleStyle(.flip)
+            ShareGameDataSetting(context: .parchment)
             Divider().background(Palette.parchmentEdge.opacity(0.25))
             Button { menuSettings = false; onQuit() } label: {
                 Label("Quit to main menu", systemImage: "house")
