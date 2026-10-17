@@ -245,6 +245,7 @@ struct ConsentNoticeView: View {
             }
             .frame(maxWidth: 420)
             .padding(24)
+            .offset(x: -20)   // optical nudge left, per the developer
         }
     }
 }
