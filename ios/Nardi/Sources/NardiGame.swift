@@ -608,6 +608,7 @@ final class NardiGame: ObservableObject {
                     await animateMoves()
                     if Task.isCancelled { return }   // resigned / quit while the move slid
                     try? await Task.sleep(nanoseconds: 200_000_000)
+                    if devMovePause > 0 { try? await Task.sleep(nanoseconds: UInt64(devMovePause * 1_000_000_000)) }
                 }
             }
         }
@@ -915,6 +916,23 @@ final class NardiGame: ObservableObject {
         refreshMeta()
         board = engineBoard()
         phase = .gameOver(message: outcomeMessage())
+    }
+
+    /// Dev/screenshots only: extra seconds the loop holds after each move.
+    private var devMovePause: Double = 0
+
+    /// Dev/screenshots only: Hard vs Hard through the normal animated loop, holding
+    /// `pause` seconds after each move so frames can be grabbed. Never uploaded.
+    func devWatchGame(pause: Double) {
+        newGame(mode: .vsComputer, opponent: .hard, first: .first)
+        loopTask?.cancel()                       // newGame's loop hasn't run yet
+        uploadEligible = false
+        devMovePause = pause
+        nardi_configure_players(handle, Opponent.hard.strategy, Opponent.hard.strategy)
+        nardi_reset(handle)
+        board = engineBoard()
+        refreshMeta()
+        advanceLoop()
     }
 
     /// Dev/screenshots only: a realistic board `plies` turns into a self-played

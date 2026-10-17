@@ -286,6 +286,12 @@ struct ContentView: View {
             game.devMidGame(plies: n)
             route = .game
         }
+        // dev (screenshots): watch Hard vs Hard, holding N seconds after each move (default 4).
+        if let i = args.firstIndex(of: "--watch") {
+            let pause = i + 1 < args.count ? Double(args[i + 1]) ?? 4 : 4
+            game.devWatchGame(pause: pause)
+            route = .game
+        }
         if let i = args.firstIndex(of: "--analyze-game"), i + 1 < args.count, let n = Int(args[i + 1]) {
             analyze.devSetup(board: game.devSelfPlayBoard(plies: n), side: false, d1: 6, d2: 4)
             route = .analyze
