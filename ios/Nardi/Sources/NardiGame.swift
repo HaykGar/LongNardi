@@ -67,6 +67,14 @@ struct Flight: Identifiable {
     let white: Bool
 }
 
+/// One confirmed turn from the engine's turn record, in its upload shape:
+/// `d` = dice (larger first), `m` = [start, dieIdx] sub-moves with
+/// start = row*12 + col and dieIdx indexing `d`. A pass has an empty `m`.
+struct RecordedTurn: Codable, Equatable {
+    let d: [Int]
+    let m: [[Int]]
+}
+
 /// One completed turn, recorded during play to drive post-game review. `moved`
 /// is false for a forced pass (no legal move). `preSide` is who moved this turn;
 /// the position after it (postBoard) has `!preSide` to move.
@@ -667,6 +675,19 @@ final class NardiGame: ObservableObject {
             }
         }
         return out
+    }
+
+    /// The engine's confirmed-turn record for the current game, in play order
+    /// (undone sub-moves never appear). Read it once the game has finished.
+    func turnRecord() -> [RecordedTurn] {
+        (0..<max(0, nardi_turn_record_count(handle))).compactMap { i in
+            var d = [Int32](repeating: 0, count: 2)
+            var m = [Int32](repeating: -1, count: 2 * Int(NARDI_MAX_TURN_MOVES))
+            var n: Int32 = 0
+            guard nardi_turn_record_get(handle, i, &d, &m, &n) == NARDI_OK else { return nil }
+            return RecordedTurn(d: d.map(Int.init),
+                                m: (0..<Int(n)).map { [Int(m[2 * $0]), Int(m[2 * $0 + 1])] })
+        }
     }
 
     /// Animate the last command's sub-moves (pure display). Replay recording is done

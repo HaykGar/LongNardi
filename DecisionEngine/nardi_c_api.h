@@ -128,6 +128,17 @@ NardiStatus nardi_confirm_turn(NardiHandle* h);
 int nardi_move_count(NardiHandle* h);                       /* >=0; -1 on error */
 NardiStatus nardi_get_move(NardiHandle* h, int idx, int out_move[4]);
 
+/* Confirmed-turn record of the current game, in play order (undone sub-moves
+ * never appear). nardi_turn_record_count returns the number of turns;
+ * nardi_turn_record_get writes turn `idx`'s dice (larger first) into out_dice and
+ * its sub-moves into out_moves as {start, die_idx} pairs, start = row*12 + col
+ * (0..23), die_idx 0/1 indexing out_dice; *out_n_moves gets the pair count
+ * (0 = pass, at most NARDI_MAX_TURN_MOVES). */
+#define NARDI_MAX_TURN_MOVES 4
+int nardi_turn_record_count(NardiHandle* h);                /* >=0; -1 on error */
+NardiStatus nardi_turn_record_get(NardiHandle* h, int idx, int out_dice[2],
+                                  int out_moves[2 * NARDI_MAX_TURN_MOVES], int* out_n_moves);
+
 /* --- Analysis mode (board editor + learned-evaluator analysis) ---
  * These drive the sandbox "Analyze" screen, independent of the match loop.
  *

@@ -180,6 +180,9 @@ public:
     // Lets the UI animate each sub-move separately (a forced/bot turn can be many).
     std::vector<std::array<int, 4>> recent_moves() const;
 
+    // Confirmed turns of the current game (Game::TurnRecord), in play order.
+    const std::vector<Nardi::Game::RecordedTurn>& turn_record() const;
+
     void human_turn(bool dice_rolled = false);
     void restart_or_quit();
     bool is_terminal() const;
