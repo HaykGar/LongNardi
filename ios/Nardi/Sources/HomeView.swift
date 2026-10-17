@@ -9,6 +9,7 @@ struct HomeView: View {
     let onAnalyze: () -> Void
     let onHistory: () -> Void
     let onTutorial: () -> Void
+    let onSettings: () -> Void
     /// One-time "we share anonymous game data" notice; Home is the only screen
     /// that ever shows it, so it can never sit over a game.
     @State private var showConsentBanner = SharingConsent().showsBanner(onHome: true)
@@ -38,13 +39,18 @@ struct HomeView: View {
                     .frame(maxWidth: .infinity, maxHeight: .infinity)   // centres the pair
                     .padding(.horizontal, sidePad)
 
+                    // Banner (left, while shown) · Settings + Tutorial (right-aligned).
                     HStack(alignment: .bottom, spacing: gap) {
-                        tutorialRibbon
-                        Spacer(minLength: 0)
                         if showConsentBanner {
-                            consentBanner.frame(maxWidth: rightW)
+                            consentBanner.frame(maxWidth: leftW + gap)
                                 .transition(.opacity)
                         }
+                        Spacer(minLength: 0)
+                        HStack(spacing: 10) {
+                            settingsRibbon
+                            tutorialRibbon
+                        }
+                        .fixedSize()
                     }
                     .padding(.horizontal, sidePad).padding(.bottom, 18)
                 }
@@ -112,12 +118,83 @@ struct HomeView: View {
         Button(action: onTutorial) {
             HStack(spacing: 8) {
                 Image(systemName: "sparkles")
-                Text("New to Nardi?").font(ThemeFont.caption)
                 Text("Take the tutorial ›").font(.system(size: 12, weight: .heavy))
                     .foregroundStyle(Palette.accentSoft)
             }
         }
         .buttonStyle(RibbonButtonStyle())
+    }
+
+    // Global Settings (sharing opt-out + animation speed), same ribbon family.
+    private var settingsRibbon: some View {
+        Button(action: onSettings) {
+            HStack(spacing: 8) {
+                Image(systemName: "gearshape")
+                Text("Settings").font(.system(size: 12, weight: .heavy))
+            }
+        }
+        .buttonStyle(RibbonButtonStyle())
+    }
+}
+
+/// Global Settings, reached from Home. Binds to the SAME UserDefaults keys as the
+/// in-game Settings popover, so both stay in sync.
+struct SettingsView: View {
+    let onBack: () -> Void
+    @AppStorage(AnimationSpeed.storageKey) private var speed: AnimationSpeed = .high
+    @AppStorage(GameUploader.sharingDefaultsKey) private var shareGameData = true
+
+    var body: some View {
+        ZStack {
+            RadialBackground(surface: .home)
+            GeometryReader { geo in
+                let w = geo.size.width
+                let sidePad = max(28, w * 0.05)
+                let gap = max(20, w * 0.03)
+                let avail = max(0, w - sidePad * 2 - gap)
+                let leftW = min(340, avail * 0.44)
+                let rightW = min(420, avail * 0.56)
+
+                HStack(alignment: .center, spacing: gap) {
+                    VStack(alignment: .leading, spacing: 14) {
+                        Text("Settings").font(ThemeFont.serif(40, .bold)).foregroundStyle(Palette.cream)
+                            .minimumScaleFactor(0.7).lineLimit(1)
+                        Text("These apply everywhere. You can also change them from Settings during a game.")
+                            .font(ThemeFont.bodyText).foregroundStyle(Palette.creamDim)
+                            .fixedSize(horizontal: false, vertical: true)
+                        Button(action: onBack) { Label("Back to Home", systemImage: "chevron.left") }
+                            .font(ThemeFont.caption).foregroundStyle(Palette.muted).buttonStyle(.plain)
+                            .padding(.top, 4)
+                    }
+                    .frame(width: leftW, alignment: .leading)
+
+                    VStack(alignment: .leading, spacing: 18) {
+                        VStack(alignment: .leading, spacing: 10) {
+                            SectionLabel(text: "Animation speed", color: Palette.creamDim)
+                            SegmentedChips(options: AnimationSpeed.allCases, selection: $speed,
+                                           context: .onDark) { $0.rawValue }
+                        }
+                        Divider().background(Palette.strokeWarm.opacity(0.2))
+                        Toggle(isOn: $shareGameData) {
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text("Share anonymous game data").font(ThemeFont.bodyStrong)
+                                    .foregroundStyle(Palette.cream)
+                                Text("Finished games help improve Nardi.")
+                                    .font(ThemeFont.caption).foregroundStyle(Palette.creamDim)
+                                    .fixedSize(horizontal: false, vertical: true)
+                            }
+                        }
+                        .toggleStyle(.flip)
+                    }
+                    .padding(22)
+                    .frame(width: rightW, alignment: .leading)
+                    .background(RoundedRectangle(cornerRadius: 18).fill(Grad.homeNavCard)
+                        .overlay(RoundedRectangle(cornerRadius: 18).stroke(Palette.strokeWarm.opacity(0.18), lineWidth: 1)))
+                }
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                .padding(.horizontal, sidePad)
+            }
+        }
     }
 }
 

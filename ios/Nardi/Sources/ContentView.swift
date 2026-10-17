@@ -4,13 +4,13 @@ import SwiftUI
 /// separate overlay (@State review) that wins over `route`, reproducing v1's
 /// `if let review { … }` precedence so review open/close behaves identically.
 enum Route: Equatable {
-    case home, playSetup, game, analyze, history, tutorialChooser, tutorial
+    case home, settings, playSetup, game, analyze, history, tutorialChooser, tutorial
 
     /// Navigation depth: moving deeper pushes in, moving shallower pulls back.
     var depth: Int {
         switch self {
         case .home: return 0
-        case .playSetup, .analyze, .history, .tutorialChooser: return 1
+        case .settings, .playSetup, .analyze, .history, .tutorialChooser: return 1
         case .game, .tutorial: return 2
         }
     }
@@ -70,7 +70,10 @@ struct ContentView: View {
                              onPlay:     { route = .playSetup },
                              onAnalyze:  { analyze.backToEditor(); route = .analyze },
                              onHistory:  { route = .history },
-                             onTutorial: { route = .tutorialChooser })
+                             onTutorial: { route = .tutorialChooser },
+                             onSettings: { route = .settings })
+                case .settings:
+                    SettingsView(onBack: { route = .home })
                 case .tutorialChooser:
                     TutorialChooserView(onQuickTour: { route = .tutorial },
                                         onBack:      { route = .home })
@@ -149,6 +152,7 @@ struct ContentView: View {
             openReview(m)
         }
         if args.contains("--history") || args.contains("--seed-history") { route = .history }
+        if args.contains("--settings") { route = .settings }   // dev: global Settings
         if args.contains("--tutorial") { route = .tutorialChooser }
         if args.contains("--tour") { route = .tutorial }
         if args.contains("--tour-undo") { tourStart = 3; route = .tutorial }      // dev: chrome glow
