@@ -12,7 +12,7 @@ extension GameUploader {
 struct SharingConsent {
     static let bannerDismissedKey = "nardi.shareBannerDismissed"
 
-    static let bannerCopy = "Games are shared anonymously to help improve Nardi. You can change this anytime in Settings."
+    static let bannerCopy = "Your finished games are shared anonymously to help improve Nardi. If you'd rather not share them, you can turn this off anytime in Settings."
 
     let defaults: UserDefaults
 

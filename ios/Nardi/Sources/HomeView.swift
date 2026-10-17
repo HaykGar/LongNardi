@@ -12,7 +12,7 @@ struct HomeView: View {
     let onSettings: () -> Void
     /// One-time "we share anonymous game data" notice; Home is the only screen
     /// that ever shows it, so it can never sit over a game.
-    @State private var showConsentBanner = SharingConsent().showsBanner(onHome: true)
+    @State private var showConsentNotice = SharingConsent().showsBanner(onHome: true)
 
     var body: some View {
         ZStack {
@@ -29,9 +29,8 @@ struct HomeView: View {
                 let leftW = min(330, avail * 0.44)
                 let rightW = min(420, avail * 0.56)
 
-                // Hero above, bottom bar (ribbon + consent banner) below, in one
-                // VStack so the banner takes its own row and never covers a card.
-                VStack(spacing: 0) {
+                ZStack(alignment: .bottomLeading) {
+                    Color.clear
                     HStack(alignment: .center, spacing: gap) {
                         leftBlock.frame(width: leftW, alignment: .leading)
                         rightCards.frame(width: rightW)
@@ -39,21 +38,13 @@ struct HomeView: View {
                     .frame(maxWidth: .infinity, maxHeight: .infinity)   // centres the pair
                     .padding(.horizontal, sidePad)
 
-                    // Settings + Tutorial (left) · Banner (right, while shown).
-                    HStack(alignment: .bottom, spacing: gap) {
-                        HStack(spacing: 10) {
-                            settingsRibbon
-                            tutorialRibbon
-                        }
-                        .fixedSize()
-                        Spacer(minLength: 0)
-                        if showConsentBanner {
-                            consentBanner.frame(maxWidth: leftW + gap)
-                                .transition(.opacity)
-                        }
-                    }
-                    .padding(.horizontal, sidePad).padding(.bottom, 18)
+                    ribbonRow
+                        .padding(.leading, sidePad).padding(.bottom, 18)
                 }
+            }
+
+            if showConsentNotice {
+                consentNotice.transition(.opacity)
             }
         }
     }
@@ -89,28 +80,52 @@ struct HomeView: View {
         }
     }
 
-    // One-time sharing notice; ✕ dismisses it for good.
-    private var consentBanner: some View {
-        HStack(alignment: .center, spacing: 10) {
-            Image(systemName: "chart.bar.doc.horizontal")
-                .foregroundStyle(Palette.accentSoft)
-            Text(SharingConsent.bannerCopy)
-                .font(ThemeFont.caption).foregroundStyle(Palette.creamDim)
-                .fixedSize(horizontal: false, vertical: true)
-            Button {
-                SharingConsent().dismissBanner()
-                withMotion(Motion.out(Motion.Duration.enter)) { showConsentBanner = false }
-            } label: {
-                Image(systemName: "xmark").font(.system(size: 12, weight: .heavy))
-                    .foregroundStyle(Palette.cream)
-                    .frame(width: 44, height: 44).contentShape(Rectangle())
+    // One-time sharing notice: covers Home until acknowledged, then never again.
+    private var consentNotice: some View {
+        ZStack {
+            Color.black.opacity(0.6).ignoresSafeArea()
+            VStack(spacing: 22) {
+                Image(systemName: "chart.bar.doc.horizontal")
+                    .font(.system(size: 30, weight: .semibold))
+                    .foregroundStyle(Palette.accentSoft)
+                Text(SharingConsent.bannerCopy)
+                    .font(ThemeFont.bodyText).foregroundStyle(Palette.cream)
+                    .multilineTextAlignment(.center)
+                    .fixedSize(horizontal: false, vertical: true)
+                Button("Got it") {
+                    SharingConsent().dismissBanner()
+                    withMotion(Motion.out(Motion.Duration.enter)) { showConsentNotice = false }
+                }
+                .buttonStyle(PrimaryCTAButtonStyle())
             }
-            .buttonStyle(.plain)
-            .accessibilityLabel("Dismiss data sharing notice")
+            .padding(28)
+            .frame(maxWidth: 420)
+            .background(RoundedRectangle(cornerRadius: 18).fill(Grad.homeNavCard)
+                .overlay(RoundedRectangle(cornerRadius: 18).stroke(Palette.strokeWarm.opacity(0.18), lineWidth: 1)))
+            .padding(24)
         }
-        .padding(.leading, 14).padding(.trailing, 0).padding(.vertical, 0)
-        .background(RoundedRectangle(cornerRadius: 14).fill(Grad.homeNavCard)
-            .overlay(RoundedRectangle(cornerRadius: 14).stroke(Palette.strokeWarm.opacity(0.18), lineWidth: 1)))
+        .accessibilityAddTraits(.isModal)
+    }
+
+    // The original "New to Nardi? Take the tutorial ›" ribbon's footprint, split in
+    // two: Settings on the left, Tutorial on the right. The invisible original sizes
+    // the row so both buttons sit exactly inside where it used to be.
+    private var ribbonRow: some View {
+        Button {} label: {
+            HStack(spacing: 8) {
+                Image(systemName: "sparkles")
+                Text("New to Nardi?").font(ThemeFont.caption)
+                Text("Take the tutorial ›").font(.system(size: 12, weight: .heavy))
+            }
+        }
+        .buttonStyle(RibbonButtonStyle())
+        .hidden()
+        .overlay {
+            HStack(spacing: 8) {
+                settingsRibbon
+                tutorialRibbon
+            }
+        }
     }
 
     // Quiet tutorial ribbon → the tutorial chooser.
@@ -121,6 +136,7 @@ struct HomeView: View {
                 Text("Take the tutorial ›").font(.system(size: 12, weight: .heavy))
                     .foregroundStyle(Palette.accentSoft)
             }
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
         .buttonStyle(RibbonButtonStyle())
     }
@@ -128,12 +144,12 @@ struct HomeView: View {
     // Global Settings (sharing opt-out + animation speed), same ribbon family.
     private var settingsRibbon: some View {
         Button(action: onSettings) {
-            HStack(spacing: 8) {
-                Image(systemName: "gearshape")
-                Text("Settings").font(.system(size: 12, weight: .heavy))
-            }
+            Image(systemName: "gearshape")
+                .frame(maxHeight: .infinity)
+                .fixedSize(horizontal: true, vertical: false)
         }
         .buttonStyle(RibbonButtonStyle())
+        .accessibilityLabel("Settings")
     }
 }
 
