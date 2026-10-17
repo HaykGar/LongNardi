@@ -67,6 +67,42 @@ struct Flight: Identifiable {
     let white: Bool
 }
 
+/// One confirmed turn from the engine's turn record. Encodes to the upload shape
+/// {"d":[die0,die1],"m":[[start,dieIdx],...]}: dice larger first, a pass has no moves.
+struct RecordedTurn: Codable, Equatable {
+    /// One sub-move: `start` = row*12 + col (0..23), `dieIdx` indexes `dice`.
+    /// Encodes as the pair [start, dieIdx].
+    struct Move: Codable, Equatable {
+        let start: Int
+        let dieIdx: Int
+
+        init(start: Int, dieIdx: Int) {
+            self.start = start
+            self.dieIdx = dieIdx
+        }
+
+        init(from decoder: Decoder) throws {
+            var c = try decoder.unkeyedContainer()
+            start = try c.decode(Int.self)
+            dieIdx = try c.decode(Int.self)
+        }
+
+        func encode(to encoder: Encoder) throws {
+            var c = encoder.unkeyedContainer()
+            try c.encode(start)
+            try c.encode(dieIdx)
+        }
+    }
+
+    let dice: [Int]
+    let moves: [Move]
+
+    private enum CodingKeys: String, CodingKey {
+        case dice = "d"
+        case moves = "m"
+    }
+}
+
 /// One completed turn, recorded during play to drive post-game review. `moved`
 /// is false for a forced pass (no legal move). `preSide` is who moved this turn;
 /// the position after it (postBoard) has `!preSide` to move.
@@ -667,6 +703,25 @@ final class NardiGame: ObservableObject {
             }
         }
         return out
+    }
+
+    /// The engine's confirmed-turn record for the current game, in play order
+    /// (undone sub-moves never appear). Read it once the game has finished.
+    /// Returns nil if any turn can't be read: a record with a gap can't be replayed.
+    func turnRecord() -> [RecordedTurn]? {
+        let count = nardi_turn_record_count(handle)
+        guard count >= 0 else { return nil }
+        var turns: [RecordedTurn] = []
+        for i in 0..<count {
+            var d = [Int32](repeating: 0, count: 2)
+            var m = [Int32](repeating: -1, count: 2 * Int(NARDI_MAX_TURN_MOVES))
+            var n: Int32 = 0
+            guard nardi_turn_record_get(handle, i, &d, &m, &n) == NARDI_OK else { return nil }
+            turns.append(RecordedTurn(
+                dice: d.map(Int.init),
+                moves: (0..<Int(n)).map { RecordedTurn.Move(start: Int(m[2 * $0]), dieIdx: Int(m[2 * $0 + 1])) }))
+        }
+        return turns
     }
 
     /// Animate the last command's sub-moves (pure display). Replay recording is done

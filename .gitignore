@@ -54,3 +54,5 @@ DecisionEngine/weights/Checkpoints
 ios/NardiLandscapeUI_Sample.jpeg
 ios/UI_DESIGN_PLAN.md
 ios/UI_DESIGN_PLAN.pdf
+# CI workflows (otherwise caught by the `.*` rule above).
+!.github/

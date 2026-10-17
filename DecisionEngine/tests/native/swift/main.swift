@@ -57,6 +57,47 @@ check(play(NARDI_HUMAN, NARDI_LOOKAHEAD) > 0, "human vs lookahead finishes")
 nardi_set_mcts_params(game, 20, 1.0, 0, 0.1, 0.25, 0.3, 0)
 check(play(NARDI_MCTS, NARDI_HEURISTIC) > 0, "mcts vs heuristic finishes")
 
+// Turn record: read every confirmed turn of the finished game, then replay it
+// incrementally on a fresh pass & play handle and expect the same final board.
+func readTurnRecord(_ h: OpaquePointer) -> [(dice: [Int32], moves: [(Int32, Int32)])] {
+    var turns: [(dice: [Int32], moves: [(Int32, Int32)])] = []
+    for i in 0..<max(0, nardi_turn_record_count(h)) {
+        var d = [Int32](repeating: 0, count: 2)
+        var m = [Int32](repeating: -1, count: 2 * Int(NARDI_MAX_TURN_MOVES))
+        var n: Int32 = 0
+        guard nardi_turn_record_get(h, i, &d, &m, &n) == NARDI_OK else { return [] }
+        turns.append((d, (0..<Int(n)).map { (m[2 * $0], m[2 * $0 + 1]) }))
+    }
+    return turns
+}
+
+func replayMatchesRecord(_ white: NardiStrategy, _ black: NardiStrategy) -> Bool {
+    guard play(white, black) > 0 else { return false }
+    var played = [Int8](repeating: 0, count: Int(NARDI_BOARD_CELLS))
+    _ = nardi_board(game, &played)
+    let turns = readTurnRecord(game)
+    guard !turns.isEmpty, let replay = nardi_create() else { return false }
+    defer { nardi_destroy(replay) }
+    nardi_configure_players(replay, NARDI_HUMAN, NARDI_HUMAN)
+    nardi_reset(replay)
+    for t in turns {
+        guard t.dice[0] >= t.dice[1] else { return false }
+        _ = nardi_set_dice(replay, t.dice[0], t.dice[1])
+        for (start, die) in t.moves {
+            guard (0..<24).contains(start), die == 0 || die == 1 else { return false }
+            _ = nardi_human_select(replay, start / 12, start % 12)
+            guard nardi_human_move_die(replay, die) == NARDI_OK else { return false }
+        }
+        if nardi_is_terminal(replay) != 1 { _ = nardi_confirm_turn(replay) }
+    }
+    var replayed = [Int8](repeating: 0, count: Int(NARDI_BOARD_CELLS))
+    _ = nardi_board(replay, &replayed)
+    return replayed == played && nardi_is_terminal(replay) == 1
+}
+
+check(replayMatchesRecord(NARDI_HUMAN, NARDI_GREEDY), "turn record replays (vs bot)")
+check(replayMatchesRecord(NARDI_HUMAN, NARDI_HUMAN), "turn record replays (pass & play)")
+
 var modelWins = 0
 let games = 10
 for _ in 0..<games {

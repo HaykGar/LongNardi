@@ -736,6 +736,11 @@ std::vector<std::array<int, 4>> NardiEngine::recent_moves() const
     return out;
 }
 
+const std::vector<Nardi::Game::RecordedTurn>& NardiEngine::turn_record() const
+{
+    return _builder.GetGame().TurnRecord();
+}
+
 bool NardiEngine::can_use_die(int die_idx)
 {
     if(_builder.GetCtrl().AwaitingRoll())

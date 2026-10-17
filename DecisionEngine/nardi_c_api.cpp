@@ -283,6 +283,45 @@ NardiStatus nardi_get_move(NardiHandle* h, int idx, int out_move[4])
     });
 }
 
+int nardi_turn_record_count(NardiHandle* h)
+{
+    NARDI_GUARD(h, -1, { return static_cast<int>(h->engine.turn_record().size()); });
+}
+
+NardiStatus nardi_turn_record_get(NardiHandle* h, int idx, int out_dice[2],
+                                  int out_moves[2 * NARDI_MAX_TURN_MOVES], int* out_n_moves)
+{
+    NARDI_GUARD(h, NARDI_ERR, {
+        if(out_dice == nullptr || out_moves == nullptr || out_n_moves == nullptr)
+        {
+            h->last_error = "nardi_turn_record_get: null out";
+            return NARDI_ERR;
+        }
+        const auto& rec = h->engine.turn_record();
+        if(idx < 0 || static_cast<size_t>(idx) >= rec.size())
+        {
+            h->last_error = "nardi_turn_record_get: index out of range";
+            return NARDI_ERR;
+        }
+        const auto& turn = rec[static_cast<size_t>(idx)];
+        if(turn.moves.size() > NARDI_MAX_TURN_MOVES)
+        {
+            h->last_error = "nardi_turn_record_get: too many moves in turn";
+            return NARDI_ERR;
+        }
+        out_dice[0] = turn.dice[0];
+        out_dice[1] = turn.dice[1];
+        for(size_t k = 0; k < turn.moves.size(); ++k)
+        {
+            const auto& sd = turn.moves[k];
+            out_moves[2 * k] = sd._from.row * Nardi::COLS + sd._from.col;
+            out_moves[2 * k + 1] = sd._diceIdx ? 1 : 0;
+        }
+        *out_n_moves = static_cast<int>(turn.moves.size());
+        return NARDI_OK;
+    });
+}
+
 NardiStatus nardi_set_position(NardiHandle* h, const signed char* board, int side)
 {
     NARDI_GUARD(h, NARDI_ERR, {
