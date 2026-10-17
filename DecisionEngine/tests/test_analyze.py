@@ -124,6 +124,10 @@ def test_handson_move_after_analyze_lands_on_a_child():
                 for die in (0, 1):
                     if eng.can_use_die(die) and eng.human_move_die(die):
                         used += 1
+                        # A move clears the selection; reselect the checker where it landed.
+                        _, _, tr, tc = eng.recent_moves()[-1]
+                        if tr >= 0:
+                            eng.human_select(tr, tc)
                 if used == 2:
                     played = True
                 if eng.turn_is_complete():

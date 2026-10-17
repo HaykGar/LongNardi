@@ -40,6 +40,11 @@ ARCH_FOR_FILE = {
     "res2prime.pt": lambda: ResNardiNet(),
     "res_greedy.pt": lambda: ResNardiNet(),
     "res_lookahead.pt": lambda: ResNardiNet(),
+    "mlp.pt": lambda: NardiNet(64, 16),
+    "vzg0.pt": lambda: ResNardiNet(),
+    "vzg0mk2.pt": lambda: ResNardiNet(),
+    "lookahead_res2_final.pt": lambda: ResNardiNet(),
+    "polAvg20_lookahead.pt": lambda: ResNardiNet(),
 }
 
 ATOL = 1e-4

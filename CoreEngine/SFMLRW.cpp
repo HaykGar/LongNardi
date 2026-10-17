@@ -393,11 +393,12 @@ void SFMLRW::drawDice() const
     for (int i = 0; i < 2; ++i)
     {
         auto r = dieRect(i);
+        bool idx = (i == 1) != tryFirst;   // left slot shows the die played first
 
         sf::RectangleShape die(r.size);
         die.setPosition(r.position);
 
-        bool gray = !g.CanUseDice(i) || ctrl.AwaitingRoll();
+        bool gray = !g.CanUseDice(idx) || ctrl.AwaitingRoll();
 
         if (gray)
         {
@@ -413,7 +414,7 @@ void SFMLRW::drawDice() const
         die.setOutlineThickness(3.f);
         window.draw(die);
 
-        int val = g.GetDice(i);
+        int val = g.GetDice(idx);
 
         if (fontLoaded)
         {
@@ -430,7 +431,7 @@ void SFMLRW::drawDice() const
 
     if (fontLoaded)
     {
-        drawText("Dice (click one):", panel.position.x + 16.f, panel.position.y + 120.f, 18);
+        drawText("Dice (click to swap):", panel.position.x + 16.f, panel.position.y + 120.f, 18);
         drawText("Keys: R=roll, Q=quit", panel.position.x + 16.f, panel.position.y + 150.f, 16);
     }
 }
@@ -562,12 +563,6 @@ status_codes SFMLRW::PollInput()
 
             if (k->code == sf::Keyboard::Key::P)
                 return ctrl.ReceiveCommand(Command(Actions::RANDOM_AUTOPLAY));
-
-            if (k->code == sf::Keyboard::Key::Num0 || k->code == sf::Keyboard::Key::Numpad0)
-                return ctrl.ReceiveCommand(Command(false)); // die 0
-
-            if (k->code == sf::Keyboard::Key::Num1 || k->code == sf::Keyboard::Key::Numpad1)
-                return ctrl.ReceiveCommand(Command(true)); // die 1
         }
 
         if (const auto* m = event->getIf<sf::Event::MouseButtonPressed>())
@@ -577,15 +572,30 @@ status_codes SFMLRW::PollInput()
 
             sf::Vector2f p((float)m->position.x, (float)m->position.y);
 
-            if (auto die = hitTestDie(p))
+            if (hitTestDie(p))
             {
-                return ctrl.ReceiveCommand(Command(*die));
+                tryFirst = !tryFirst;   // swap which die a clicked checker uses first
+                Render();
+                continue;
             }
 
             if (auto c = hitTestCell(p))
             {
+                // Play the preferred die if a move starts here with it, else the other.
+                const auto& starts = g.GetStarts();
+                std::optional<bool> idx;
+                if (starts[tryFirst].contains(*c))
+                    idx = tryFirst;
+                else if (starts[!tryFirst].contains(*c))
+                    idx = !tryFirst;
+                if (!idx)
+                    continue;   // no move starts from here with either die
+
                 ctrl.ReceiveCommand(Actions::RELEASE_SELECTED);
-                return ctrl.ReceiveCommand(Command(c->row, c->col));
+                status_codes rc = ctrl.ReceiveCommand(Command(c->row, c->col));
+                if (rc != status_codes::SUCCESS)
+                    return rc;
+                return ctrl.ReceiveCommand(Command(*idx));
             }
         }
     }
@@ -610,8 +620,9 @@ void SFMLRW::ReceiveGameEvent(const Game::Event& e)
         case Game::EventCode::TURN_SWITCH: 
             InstructionMessage("New turn. Roll the dice."); 
             return; 
-        case Game::EventCode::DICE_ROLL: 
-            Render(); 
+        case Game::EventCode::DICE_ROLL:
+            tryFirst = false;   // default to the larger die each new roll
+            Render();
             return; 
         case Game::EventCode::MOVE: 
         { 

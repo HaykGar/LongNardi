@@ -44,7 +44,12 @@ private:
     float diceW  = 220.f;
 
     // UI state (for click source / click die UX)
-    mutable std::string statusLine = "Click a source point, then click a die.";
+    mutable std::string statusLine = "Click a checker to move it. Click the dice to swap order.";
+
+    // Click-to-move, same as the iOS app: a clicked checker is played with this
+    // die index first (false = dice[0], the larger die), falling back to the other.
+    // Clicking the dice flips it; it resets to the larger die on every roll.
+    bool tryFirst = false;
 
     // ---- Move Animation ----
 

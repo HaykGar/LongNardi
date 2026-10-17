@@ -27,6 +27,7 @@ TEST_F(TestBuilder, FirstMoveDouble4Or6)
 
     ASSERT_EQ(ReceiveCommand(Command(0, 4)), status_codes::SUCCESS);
     EXPECT_EQ(ReceiveCommand(Command(first)), status_codes::NO_LEGAL_MOVES_LEFT);
+    ASSERT_EQ(ReceiveCommand(Actions::CONFIRM_TURN_OVER), status_codes::SUCCESS);
 
     StatusReport();
 
@@ -50,7 +51,7 @@ TEST_F(TestBuilder, MaxDice)
     BoardConfig diceMaxExc = { {{1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,-1},
                                 {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}}  };
 
-    auto rc = StartOfTurn(white, diceMaxExc, 5, 6);
+    auto rc = StartOfTurn(white, diceMaxExc, 6, 5);
     StatusReport();
 
     DispErrorCode(rc);
@@ -61,16 +62,16 @@ TEST_F(TestBuilder, MaxDice)
     EXPECT_EQ(b2s.size(), 1);
     EXPECT_EQ(b2s.begin()->second.size(), 1);
 
-    EXPECT_EQ(b2s.begin()->second.at(0)._diceIdx, second);
+    EXPECT_EQ(b2s.begin()->second.at(0)._diceIdx, first);
 
     rc = ReceiveCommand(Command(0, 0));
     ASSERT_EQ(rc, status_codes::SUCCESS);
 
-    rc = ReceiveCommand(Command(first));
+    rc = ReceiveCommand(Command(second));
     EXPECT_EQ(rc, status_codes::MISC_FAILURE);
 
     rc = ReceiveCommand(Command(0, 0));
     ASSERT_EQ(rc, status_codes::SUCCESS);
-    rc = ReceiveCommand(Command(second));
+    rc = ReceiveCommand(Command(first));
     EXPECT_EQ(rc, status_codes::NO_LEGAL_MOVES_LEFT);
 }
