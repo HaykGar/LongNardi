@@ -67,6 +67,27 @@ App Store Connect → your app → **App Privacy** → Get Started / Edit.
 
 ### Before publishing
 
-- Published at https://haykgar.github.io/LongNardi/privacy/ (`gh-pages` branch, `privacy/index.html`); edit both copies together.
 - Settings toggle label above must match the shipped copy (issue #5).
 - Re-check the collected fields against the uploader once issue #4 lands.
+
+## Editing the published policy
+
+The live copy is https://haykgar.github.io/LongNardi/privacy/, served by GitHub
+Pages from `privacy/index.html` on the `gh-pages` branch. That branch has no shared
+history with `main` and holds only the policy page (plus `.nojekyll`).
+
+The text exists twice, so any change goes to both:
+
+1. Edit the draft above on `main`, and bump *Last updated*.
+2. Mirror the change into `privacy/index.html` on `gh-pages`, including the date:
+   ```sh
+   git worktree add ../nardi-pages gh-pages
+   # edit ../nardi-pages/privacy/index.html
+   git -C ../nardi-pages commit -am "Update privacy policy"
+   git -C ../nardi-pages push
+   git worktree remove ../nardi-pages
+   ```
+3. Wait about a minute, then check the live URL shows the new text.
+
+Keep the URL stable: App Store Connect points at it. If it ever has to move, update
+**App Privacy → Privacy Policy URL** at the same time.
