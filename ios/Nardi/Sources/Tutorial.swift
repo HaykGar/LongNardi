@@ -111,7 +111,8 @@ private struct TourStep {
 /// control lands and whatever its outline is, that is exactly what gets ringed.
 /// The player lands on their first turn able to tap checkers, reorder dice, undo,
 /// confirm, and replay exactly as in a normal game. Next / Back / Restart never
-/// gate play. Skip (→ chooser), Start playing (→ setup).
+/// gate play. Skip (→ home), Start playing (→ setup).
+/// A finished tutorial game flashes a notice, then resets to the tutorial position.
 struct TutorialView: View {
     let onSkip: () -> Void
     let onStartPlaying: () -> Void
@@ -124,6 +125,7 @@ struct TutorialView: View {
     @State private var started = false
     @State private var menuSettings = false
     @State private var menuResign = false
+    @State private var restarting = false
 
     private var theme: BoardTheme { BoardTheme(rawValue: boardThemeRaw) ?? .green }
 
@@ -186,6 +188,26 @@ struct TutorialView: View {
                         .allowsHitTesting(false)
                         .animation(.easeInOut(duration: 0.3), value: step)
                 }
+            }
+        }
+        .overlay {
+            if restarting {
+                Text("Game over — starting a fresh game")
+                    .font(ThemeFont.bodyStrong).foregroundStyle(Palette.cream)
+                    .padding(.horizontal, 18).padding(.vertical, 12)
+                    .background(Capsule().fill(Color.black.opacity(0.75)))
+                    .transition(.opacity)
+                    .allowsHitTesting(false)
+            }
+        }
+        .animation(.easeInOut(duration: 0.25), value: restarting)
+        .onChange(of: game.phase) { _, phase in
+            guard case .gameOver = phase, !restarting else { return }
+            restarting = true
+            Task { @MainActor in
+                try? await Task.sleep(nanoseconds: 1_500_000_000)
+                game.setupTutorial()
+                restarting = false
             }
         }
         .onAppear {
