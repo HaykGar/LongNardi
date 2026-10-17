@@ -205,6 +205,44 @@ TOTAL_STAGES=6
 # Run from the repo root so .env and the migration path resolve.
 cd "$(dirname "$0")/.."
 MIGRATION="supabase/migrations/20261016000000_games.sql"
+APP_CONFIG="ios/Config/Supabase.xcconfig"
+
+# Asks for the project URL + anon key and saves them to .env.
+ask_keys() {
+  say "These two ship inside the app; they are public by design."
+  warn "Never paste the service_role / secret key anywhere: it must not leave the dashboard."
+  open_url "https://supabase.com/dashboard/project/_/settings/api"
+  step "Project Settings → Data API: copy the Project URL (https://<ref>.supabase.co)."
+  ask SUPABASE_URL "Paste the project URL:"
+  SUPABASE_URL="${SUPABASE_URL%/}"
+  step "Project Settings → API Keys: copy the 'anon' public key (or the sb_publishable_ key)."
+  ask SUPABASE_ANON_KEY "Paste the anon / publishable key:"
+  write_env SUPABASE_URL "$SUPABASE_URL"
+  write_env SUPABASE_ANON_KEY "$SUPABASE_ANON_KEY"
+}
+
+# Writes the gitignored xcconfig the iOS app reads the URL + anon key from.
+# `//` starts an xcconfig comment, so the URL's slashes are split with $().
+write_app_config() {
+  (umask 077 && {
+    printf '// Written by scripts/supabase_setup_wizard.sh (gitignored).\n'
+    printf 'SUPABASE_URL = %s\n' "${SUPABASE_URL/:\/\//:/\$()/}"
+    printf 'SUPABASE_ANON_KEY = %s\n' "$SUPABASE_ANON_KEY"
+  } > "$APP_CONFIG")
+  printf '  %s✓ wrote%s app config → %s\n' "$GREEN" "$RESET" "$APP_CONFIG"
+}
+
+# --app-only: just the iOS app config, for a fresh checkout of an existing project.
+if [[ "${1:-}" == "--app-only" ]]; then
+  TOTAL_STAGES=1
+  banner "Nardi: Supabase config for the iOS app"
+  stage "Project URL and anon key"
+  ask_keys
+  write_app_config
+  pause
+  finish
+  return
+fi
 
 banner "Nardi cloud game history: Supabase setup"
 
@@ -224,16 +262,8 @@ step "Turn on 'Allow anonymous sign-ins' and click Save."
 pause "Press Enter once anonymous sign-ins are enabled."
 
 stage "Project URL and anon key"
-say "These two ship inside the app; they are public by design."
-warn "Never paste the service_role / secret key anywhere: it must not leave the dashboard."
-open_url "https://supabase.com/dashboard/project/_/settings/api"
-step "Project Settings → Data API: copy the Project URL (https://<ref>.supabase.co)."
-ask SUPABASE_URL "Paste the project URL:"
-SUPABASE_URL="${SUPABASE_URL%/}"
-step "Project Settings → API Keys: copy the 'anon' public key (or the sb_publishable_ key)."
-ask SUPABASE_ANON_KEY "Paste the anon / publishable key:"
-write_env SUPABASE_URL "$SUPABASE_URL"
-write_env SUPABASE_ANON_KEY "$SUPABASE_ANON_KEY"
+ask_keys
+write_app_config
 
 stage "Create the games table"
 say "Applies $MIGRATION (table, insert-only RLS, keepalive function)."
