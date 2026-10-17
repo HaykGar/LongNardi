@@ -53,7 +53,7 @@ TEST(TurnRecord, NormalMoveRecordedOnConfirm)
     b.Reset();
     b.withDice(5, 3);
     Play(b, 0, 0, 0);
-    b.ReceiveCommand(Command(true));   // destination (0,5) auto-selected
+    Play(b, 0, 5, 1);
     EXPECT_TRUE(b.GetGame().TurnRecord().empty());   // not confirmed yet
 
     Confirm(b);
@@ -68,7 +68,7 @@ TEST(TurnRecord, DiceStoredLargerFirst)
     b.Reset();
     b.withDice(3, 5);
     Play(b, 0, 0, 0);
-    b.ReceiveCommand(Command(true));
+    Play(b, 0, 5, 1);
     Confirm(b);
     ExpectTurn(b.GetGame().TurnRecord().at(0), {5, 3}, {{0, 0, 0}, {0, 5, 1}});
 }
@@ -80,8 +80,9 @@ TEST(TurnRecord, DoublesRecordFourSubMoves)
                          {-15, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0} }};
     b.withScenario(white, brd, 2, 2);
     Play(b, 0, 1, 0);
-    for(int i = 0; i < 3; ++i)
-        b.ReceiveCommand(Command(false));   // destination auto-selected each time
+    Play(b, 0, 3, 0);
+    Play(b, 0, 5, 0);
+    Play(b, 0, 7, 0);
     Confirm(b);
 
     const auto rec = b.GetGame().TurnRecord();
@@ -140,7 +141,7 @@ TEST(TurnRecord, UndoWithinTurnLeavesNoTrace)
     Play(b, 0, 0, 0);
     b.ReceiveCommand(Command(Actions::UNDO));
     Play(b, 0, 0, 1);                  // (0,0) -> (0,3)
-    b.ReceiveCommand(Command(false));  // (0,3) -> (0,8)
+    Play(b, 0, 3, 0);                  // (0,3) -> (0,8)
     Confirm(b);
 
     const auto rec = b.GetGame().TurnRecord();
@@ -154,11 +155,11 @@ TEST(TurnRecord, TurnsAccumulateAcrossPlayers)
     b.Reset();
     b.withDice(5, 3);
     Play(b, 0, 0, 0);
-    b.ReceiveCommand(Command(true));
+    Play(b, 0, 5, 1);
     Confirm(b);
     b.withDice(4, 2);
     Play(b, 1, 0, 0);
-    b.ReceiveCommand(Command(true));
+    Play(b, 1, 4, 1);
     Confirm(b);
 
     const auto rec = b.GetGame().TurnRecord();
@@ -172,7 +173,7 @@ TEST(TurnRecord, ResetClearsRecord)
     b.Reset();
     b.withDice(5, 3);
     Play(b, 0, 0, 0);
-    b.ReceiveCommand(Command(true));
+    Play(b, 0, 5, 1);
     Confirm(b);
     b.Reset();
     EXPECT_TRUE(b.GetGame().TurnRecord().empty());
