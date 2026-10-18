@@ -1,8 +1,32 @@
 #!/usr/bin/env bash
-# Builds Release and fails if dev launch-arg hooks leaked into it. Dev hooks in
-# ContentView/GameView/NardiApp must sit inside #if DEBUG.
+# Fails if dev launch-arg hooks leak into Release. Two passes:
+#   1. Source: every "--flag" string literal in Nardi/Sources must sit inside #if DEBUG.
+#   2. Binary: builds Release and greps it for the longer hook names.
+# --source-only skips the build.
 set -euo pipefail
 cd "$(dirname "$0")/.."
+
+# Pass 1. Tracks #if/#else/#endif nesting; a line is Debug-only when an enclosing
+# `#if DEBUG` branch is active. Comments are stripped before matching.
+leaked=$(awk '
+  FNR == 1 { depth = 0 }
+  /^[[:space:]]*#if[[:space:]]+DEBUG[[:space:]]*$/ { kind[++depth] = "D"; next }
+  /^[[:space:]]*#if/                               { kind[++depth] = "N"; next }
+  /^[[:space:]]*#elseif/                           { kind[depth] = "N"; next }
+  /^[[:space:]]*#else/                             { kind[depth] = (kind[depth] == "D") ? "N" : kind[depth]; next }
+  /^[[:space:]]*#endif/                            { depth--; next }
+  {
+    code = $0; sub(/\/\/.*/, "", code)
+    if (code !~ /"--[a-z]/) next
+    for (i = 1; i <= depth; i++) if (kind[i] == "D") next
+    printf "%s:%d: %s\n", FILENAME, FNR, $0
+  }
+' Nardi/Sources/*.swift)
+if [[ -n "$leaked" ]]; then
+  echo "Dev hook flags outside #if DEBUG:"; echo "$leaked"; exit 1
+fi
+echo "Sources: every dev hook flag is inside #if DEBUG."
+[[ "${1:-}" == "--source-only" ]] && exit 0
 
 if [[ -z "${DEVELOPER_DIR:-}" && "$(xcode-select -p)" != *Xcode*.app* && -d /Applications/Xcode.app ]]; then
   export DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer

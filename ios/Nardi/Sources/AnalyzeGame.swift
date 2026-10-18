@@ -646,6 +646,7 @@ final class AnalyzeGame: ObservableObject {
         guard gen == suggestGen, phase == .analyzing else { return }
         isThinking = false
         topMoves = tops
+        devReady("analyze")
         if !movedThisTurn && diceApplied && !noLegalMoves && !tops.isEmpty {
             status = "Top engine moves for \(currentSide ? "Black" : "White") shown — make your move."
         }

@@ -1,6 +1,14 @@
 import Foundation
 import SwiftUI
 
+/// Dev/screenshots: tells `ios/scripts/screenshots.sh` a screen has settled, via a
+/// `NARDI_READY <screen>` line on stderr (unbuffered). Debug builds only.
+func devReady(_ screen: String) {
+    #if DEBUG
+    FileHandle.standardError.write(Data("NARDI_READY \(screen)\n".utf8))
+    #endif
+}
+
 enum Opponent: String, CaseIterable, Identifiable {
     case easy = "Easy"      // hand-crafted heuristic, no network
     case medium = "Medium"  // greedy over the small MLP value net
@@ -640,6 +648,7 @@ final class NardiGame: ObservableObject {
         if !modelLoaded && mode == .vsComputer {
             status = "⚠️ model blob missing — rebuild with make_model.sh"
         }
+        devReady("game")
     }
 
     // MARK: - State refresh
@@ -856,20 +865,13 @@ final class NardiGame: ObservableObject {
     /// so the live counterfactual runner is created, fed turn by turn, and closed at
     /// game end — pacing the turns so the rollout really does wait on the game. Then
     /// re-runs the same log from scratch and logs both outcomes: they must agree.
-    func devLivePlayAndReview() async {
+    func devLivePlayAndReview(pace: Double) async {
         newGame(mode: .vsComputer, opponent: .easy, first: .first)   // creates the runner
         uploadEligible = false   // dev self-play: never upload
         loopTask?.cancel()
         nardi_configure_players(handle, NARDI_RANDOM, NARDI_GREEDY)  // both seats auto-play
         nardi_reset(handle)
         reviewLog = []
-
-        // Seconds per turn: how fast the game feeds the rollout. Real play is several
-        // seconds a turn; a tiny pace is the worst case (the rollout can't keep up).
-        let args = ProcessInfo.processInfo.arguments
-        let pace = args.firstIndex(of: "--pace").flatMap { i -> Double? in
-            i + 1 < args.count ? Double(args[i + 1]) : nil
-        } ?? 0.12
 
         var guardCount = 0
         while nardi_should_continue(handle) == 1 && guardCount < 600 {

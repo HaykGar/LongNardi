@@ -42,6 +42,7 @@ struct GameReviewView: View {
                 index = max(0, min(n, review.points.count - 1))
             }
             #endif
+            devReady("review")
             if autoOpen { openAnalyzer() }
         }
         .fullScreenCover(isPresented: $showAnalyzer) {

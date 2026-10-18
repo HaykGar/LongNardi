@@ -14,7 +14,11 @@ xcodegen spec.
 ```sh
 ios/scripts/test.sh                  # unit tests (NardiTests); SIM="iPhone 17 Pro" to pick
 ios/scripts/check_release_hooks.sh   # Release build has no dev launch-arg hooks
+ios/scripts/screenshots.sh game="--game-mid 28"   # App Store screenshots; see its header
 ```
+
+Dev launch-arg hooks (jump to a screen or state) live in the `#if DEBUG` blocks of
+`ContentView.swift` and `GameReviewView.swift`.
 
 Both scripts point at `/Applications/Xcode.app` when the active developer dir
 is Command Line Tools; for other `xcodebuild`/`simctl` calls prefix
@@ -47,16 +51,14 @@ free tier doesn't pause. App Store privacy answers and the policy draft live in
 
 ## Layout
 
-- `project.yml` — xcodegen spec; the app target compiles the pybind/SFML-free
-  subset of the C++ core directly (no separate library to manage).
+- `Nardi.xcodeproj` — the app target compiles the pybind/SFML-free subset of
+  the C++ core directly (no separate library to manage).
 - `Nardi/Sources/` — SwiftUI app (`NardiApp`, `ContentView`) and `NardiGame`,
   the `@MainActor` wrapper over the C engine.
 - `Nardi/Bridge/` — bridging header exposing `nardi_c_api.h` to Swift.
 - `Nardi/Resources/*.nardiw` — bundled value networks (generated; gitignored):
   `mlp.nardiw` (Medium / greedy) and `vzg0.nardiw` (Hard / 1-ply lookahead,
   and the network used for all analysis: game review + analyzer).
-
-`Nardi.xcodeproj` is generated and gitignored — regenerate with `xcodegen`.
 
 ## Opponents & models
 

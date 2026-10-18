@@ -346,9 +346,14 @@ struct ContentView: View {
         }
         // dev: play a real game (runner fed live), then open its review — it should
         // appear with no rollout wait.
+        // --pace S: seconds per turn, i.e. how fast the game feeds the rollout. Real play
+        // is several seconds a turn; a tiny pace is the worst case (it can't keep up).
         if args.contains("--live-review") {
+            let pace = args.firstIndex(of: "--pace").flatMap { i -> Double? in
+                i + 1 < args.count ? Double(args[i + 1]) : nil
+            } ?? 0.12
             Task { @MainActor in
-                await game.devLivePlayAndReview()
+                await game.devLivePlayAndReview(pace: pace)
                 route = .game
                 openReviewFromCurrentGame()
             }
