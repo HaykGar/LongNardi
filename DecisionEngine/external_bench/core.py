@@ -419,7 +419,7 @@ def play_steps(prof, win, start, steps, tag):
     return True
 
 
-def play_game(prof, win, eng, log, game_no, resume=None, only_opp_opens=False):
+def play_game(prof, win, eng, log, game_no, resume=None, only_opener=None):
     """Play one game to its result screen and return its result record.
 
     resume = (board, black_first, turn[, next]) picks a game up from its last logged board: with
@@ -474,9 +474,9 @@ def play_game(prof, win, eng, log, game_no, resume=None, only_opp_opens=False):
                     log({"game": game_no, "event": "adopted screen position", "board": board.tolist()})
             seat_me = 1 if black_first else 0
             log({"game": game_no, "event": "start", "we_open": not black_first})
-            if only_opp_opens and not black_first:              # we'd open: resign, not counted
+            if only_opener and (only_opener == "us") == black_first:   # the other side opens: resign, not counted
                 prof.resign(win)
-                return {"result": "skipped", "we_open": True}
+                return {"result": "skipped", "we_open": not black_first}
         if resume:
             for _ in range(4):                                  # a half-played turn: undo back to its start
                 if matches(obs, from_engine(board, black_first)):
@@ -566,12 +566,12 @@ def play_game(prof, win, eng, log, game_no, resume=None, only_opp_opens=False):
         prev_key = None
 
 
-def run(prof, games, resume=None, strict=False, weights=WEIGHTS, stop_at_match_end=False, only_opp_opens=False):
+def run(prof, games, resume=None, strict=False, weights=WEIGHTS, stop_at_match_end=False, only_opener=None):
     """Play `games` games against `prof`'s app, logging to runs/<app>_<time>/. strict: stop on
     anything not seen directly (only a single unambiguous history of unseen plies is accepted, a
     board is never taken from the screen as is) and save the screen before each of our moves.
-    stop_at_match_end: stop once the app's own match is decided. only_opp_opens: resign every game
-    we would open; those don't count towards `games`."""
+    stop_at_match_end: stop once the app's own match is decided. only_opener ("us" / "opp"): play
+    only games that side opens; resign the others, which don't count towards `games`."""
     global STRICT
     STRICT = strict
     build_tools()
@@ -583,7 +583,7 @@ def run(prof, games, resume=None, strict=False, weights=WEIGHTS, stop_at_match_e
     eng = nardi.Engine()
     eng.load_target_network(export_model(weights))
     log({"event": "config", "app": prof.name, "games": games, "strict": strict, "weights": os.path.basename(weights),
-         "only_opp_opens": only_opp_opens})
+         "only_opener": only_opener})
     win = Window(prof.owner, prof.size, logdir)
     results = []
     try:
@@ -594,7 +594,7 @@ def run(prof, games, resume=None, strict=False, weights=WEIGHTS, stop_at_match_e
                 break
             if not (g == 0 and resume) and (g or prof.read(win).over):
                 prof.new_game(win)
-            res = {"game": g, **play_game(prof, win, eng, log, g, resume if g == 0 else None, only_opp_opens)}
+            res = {"game": g, **play_game(prof, win, eng, log, g, resume if g == 0 else None, only_opener)}
             results.append(res)
             log({"event": "end", **res})
             g += 1

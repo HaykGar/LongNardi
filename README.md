@@ -545,7 +545,7 @@ The script is [`external_bench/bench.py`](DecisionEngine/external_bench/bench.py
 from `DecisionEngine/`:
 
 ```bash
-venv/bin/python external_bench/bench.py <app> --games N [--strict] [--only-opp-opens]
+venv/bin/python external_bench/bench.py <app> --games N [--strict] [--only-opener us|opp]
 ```
 
 See [`external_bench/README.md`](DecisionEngine/external_bench/README.md) for how it
