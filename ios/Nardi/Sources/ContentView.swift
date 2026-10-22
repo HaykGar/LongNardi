@@ -296,6 +296,15 @@ struct ContentView: View {
             analyze.devSetup(board: game.devSelfPlayBoard(plies: n), side: false, d1: 6, d2: 4)
             route = .analyze
         }
+        // dev: any position, `--analyze-pos <24 comma-separated cells> <side 0|1> <d1> <d2>`
+        // (cells row-major as nardi_set_position takes them) → the analyzer's top moves.
+        if let i = args.firstIndex(of: "--analyze-pos"), i + 4 < args.count {
+            let b = args[i + 1].split(separator: ",").compactMap { Int8($0) }
+            if b.count == 24, let d1 = Int(args[i + 3]), let d2 = Int(args[i + 4]) {
+                analyze.devSetup(board: b, side: args[i + 2] == "1", d1: d1, d2: d2)
+                route = .analyze
+            }
+        }
         // Die 6 has no legal start (blocked) but die 3 does — verify the no-start die greys.
         if args.contains("--analyze-block") {
             var b = [Int8](repeating: 0, count: 24)
