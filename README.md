@@ -22,7 +22,8 @@ If you are in the second camp, read this in order:
 6. [Model architectures](#model-architectures-nardi-net) — the shared `feature → tensor → value` contract
 7. [Environments](#environments-gameenv-and-lookaheadgameenv) — `GameEnv` and `LookaheadGameEnv`
 8. [The training script](#the-training-script) — `train.py`, the `-f` start file, and checkpointing
-9. [Benchmarking and evaluation](#benchmarking-and-evaluation)
+9. [Benchmarking and evaluation](#benchmarking-and-evaluation) and
+   [evaluation results](#evaluation-results) against other apps' AIs
 10. [The learning algorithm](#the-learning-algorithm-tdλ) and [results](#results)
 
 ---
@@ -528,6 +529,53 @@ convenience.
 4. Benchmark: add your model to `get_elos.py`'s `PLAYERS` and run it, or run
    `benchmark.py` / `mcts_benchmark.py` for head-to-heads. The pretrained `weights/*.pt`
    files are the references to beat.
+
+---
+
+## Evaluation results
+
+The engine was evaluated exactly as the iOS app's Hard bot plays: weights
+`DecisionEngine/weights/vzg0mk2.pt` (shipped in the app as `vzg0.nardiw`) with the
+engine's 1-ply lookahead move choice. The opponents are the AIs of other Nardi apps from
+the App Store, run natively on an Apple Silicon Mac. A bot reads the other app's screen,
+keeps a parallel engine game, and checks every board against the screen. In strict mode
+it stops on anything it can't verify rather than guessing.
+
+The script is [`external_bench/bench.py`](DecisionEngine/external_bench/bench.py), run
+from `DecisionEngine/`:
+
+```bash
+venv/bin/python external_bench/bench.py <app> --games N [--strict] [--only-opp-opens]
+```
+
+See [`external_bench/README.md`](DecisionEngine/external_bench/README.md) for how it
+works, the per-app profiles, and adding an app, and
+[`external_bench/RESULTS.md`](DecisionEngine/external_bench/RESULTS.md) for per-game
+detail. Scoring: oin (single game) = 1 point, mars = 2 points. W–L, points and mars are
+given as ours–theirs.
+
+### Narde Tournament: Svetlana (Expert, rating 5010)
+
+| Row             | Games | W–L | Points | Mars |
+| --------------- | ----- | --- | ------ | ---- |
+| Total           | 10    | 8–2 | 9–2    | 1–0  |
+| We opened       | 2     | 2–0 | 3–0    | 1–0  |
+| Opponent opened | 8     | 6–2 | 6–2    | 0–0  |
+
+Both losses (games 3 and 10) were single games with Svetlana opening.
+
+### Narde: Adikus (SOLO AI, AI level High)
+
+10 games, split 5/5 between openers (games we would have opened beyond our 5 were resigned and
+not counted).
+
+| Row             | Games | W–L | Points | Mars |
+| --------------- | ----- | --- | ------ | ---- |
+| Total           | 10    | 8–2 | 14–2   | 6–0  |
+| We opened       | 5     | 4–1 | 7–1    | 3–0  |
+| Opponent opened | 5     | 4–1 | 7–1    | 3–0  |
+
+Both losses were single games.
 
 ---
 
