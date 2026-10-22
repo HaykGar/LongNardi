@@ -558,11 +558,11 @@ given as ours–theirs.
 
 | Row             | Games | W–L | Points | Mars |
 | --------------- | ----- | --- | ------ | ---- |
-| Total           | 10    | 8–2 | 9–2    | 1–0  |
-| We opened       | 2     | 2–0 | 3–0    | 1–0  |
-| Opponent opened | 8     | 6–2 | 6–2    | 0–0  |
+| Total           | 16    | 13–3 | 15–3  | 2–0  |
+| We opened       | 8     | 7–1  | 9–1   | 2–0  |
+| Opponent opened | 8     | 6–2  | 6–2   | 0–0  |
 
-Both losses (games 3 and 10) were single games with Svetlana opening.
+All three losses were single games.
 
 ### Narde: Adikus (SOLO AI, AI level High)
 
