@@ -2,7 +2,17 @@
 
 A from-scratch C++ implementation of the board game **Long Nardi**, together with a
 research codebase for training neural-network position evaluators by self-play
-reinforcement learning (TD(λ), 1-ply lookahead, and MCTS).
+reinforcement learning (TD(λ), 1-ply lookahead, and MCTS). Against the AIs of two major
+App Store Nardi apps, the app's Hard bot scored **15 of 18 points** against Narde
+Tournament's Expert AI and **14 of 16 points** against Narde's AI, and was never marsed.
+
+| Opponent (App Store app)                    | Games | W–L  | Points          | Mars |
+| ------------------------------------------- | ----- | ---- | --------------- | ---- |
+| Svetlana, Expert (rating 5010) — Narde Tournament | 16    | 13–3 | **15–3** (15/18) | 2–0  |
+| Adikus, AI level High — Narde               | 10    | 8–2  | **14–2** (14/16) | 6–0  |
+
+Openers balanced in both (8/8 and 5/5); oin = 1 point, mars = 2. Method, per-opener
+breakdown and how to rerun: [Evaluation results](#evaluation-results).
 
 The repository has two halves that are useful to two different audiences:
 
@@ -24,7 +34,7 @@ If you are in the second camp, read this in order:
 8. [The training script](#the-training-script) — `train.py`, the `-f` start file, and checkpointing
 9. [Benchmarking and evaluation](#benchmarking-and-evaluation) and
    [evaluation results](#evaluation-results) against other apps' AIs
-10. [The learning algorithm](#the-learning-algorithm-tdλ) and [results](#results)
+10. [The learning algorithm](#the-learning-algorithm-tdλ) and [reproducing the results](#reproducing-the-results)
 
 ---
 
@@ -533,6 +543,9 @@ convenience.
 ---
 
 ## Evaluation results
+
+Summary: **15 of 18 points** (13–3 in games) against Narde Tournament's Svetlana and **14 of
+16 points** (8–2) against Narde's Adikus, with no game lost by mars.
 
 The engine was evaluated exactly as the iOS app's Hard bot plays: weights
 `DecisionEngine/weights/vzg0mk2.pt` (shipped in the app as `vzg0.nardiw`) with the
