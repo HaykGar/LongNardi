@@ -73,6 +73,8 @@ def count_range(P, extent, lag):
         score[n] = sc
     best = min(score.values())
     ok = [n for n, sc in score.items() if sc <= best + SLACK]
+    if max(ok) >= 6:                                 # tall stacks pack tighter than calibrated: a lower bound;
+        return min(ok), MANY                         # the other points and the pip counters fix the count
     return min(ok), max(ok)
 
 
