@@ -592,7 +592,7 @@ def run(prof, games, resume=None, strict=False, weights=WEIGHTS, stop_at_match_e
             if stop_at_match_end and (g or prof.read(win).over) and prof.match_over(win):
                 log({"event": "match over"})                # the app's match is decided: stop here
                 break
-            if not (g == 0 and resume) and (g or prof.read(win).over):
+            if not (g == 0 and resume) and prof.read(win).over:   # a resigned game may leave no result screen
                 prof.new_game(win)
             res = {"game": g, **play_game(prof, win, eng, log, g, resume if g == 0 else None, only_opener)}
             results.append(res)

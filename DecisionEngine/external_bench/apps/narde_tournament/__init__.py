@@ -3,7 +3,8 @@
 No accessibility tree (Unity), so everything is read from pixels: the board (reader.py), the 3D
 dice thrown anywhere on the board (dice.py) and the pip counters (pips.py). Our dice roll by
 themselves and come to rest, ringed, in two fixed slots; a Done button with a 5 s countdown ends
-the turn; Undo sits on the bar; the result screen has Rematch.
+the turn; Undo sits on the bar; the result screen has Rematch. Leaving a game (exit, Quit, then
+Restart on the opponent screen) stands in for resigning.
 """
 import time
 import cv2, numpy as np
@@ -21,6 +22,7 @@ tray_xy = (875, 600)                                 # we (white) bear off into 
 DONE_BOX = (600, 340, 880, 460)                      # region searched for the green Done button
 REMATCH = (592, 566)
 UNDO = (523, 405)                                    # undo button on the bar during our move
+EXIT, QUIT, RESTART = (1010, 84), (422, 569), (929, 628)   # leave a game: exit -> Quit -> Restart (no resign)
 
 
 def green_blob(im, box, min_area):
@@ -95,6 +97,13 @@ def after_turn(win, passed):
             return
         time.sleep(0.2)
     raise Abort("our dice never left the board after our turn")
+
+
+def resign(win):
+    """No resign button: leave via exit -> Quit, then Restart (not Continue) for a fresh game."""
+    for xy, wait in ((EXIT, 1.5), (QUIT, 2.5), (RESTART, 4.0)):
+        win.click(xy)
+        time.sleep(wait)
 
 
 def new_game(win):
